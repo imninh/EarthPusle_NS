@@ -8,7 +8,7 @@ the frontend mirror is web/src/data/contract.ts. Change all three together.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = "1.1"  # P08 bumps to "1.2" together with the 1.2 export (validator requires equality)
+SCHEMA_VERSION = "1.2"
 
 # --- Analysis grid -------------------------------------------------------------------
 # Global 1-degree grid, cell centres. Row 0 is the northernmost row (lat 89.5),

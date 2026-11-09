@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
 
 const STORAGE_KEY = 'earthpulse.coach.v1'
+
+/** Escape is the only key that dismisses the coach from anywhere on the page. */
+export function isCoachCloseKey(key: string): boolean {
+  return key === 'Escape'
+}
 
 /** Read the dismissal flag safely; a blocked localStorage must not break the app. */
 export function shouldShowCoach(): boolean {
@@ -35,12 +40,34 @@ const STEPS: { title: string; body: string }[] = [
 ]
 
 /** Dismissible three-step first-visit coach mark. */
-export function CoachMark({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CoachMark({
+  open,
+  onClose,
+  returnFocusRef,
+}: {
+  open: boolean
+  onClose: () => void
+  /** Element that should receive focus after the coach closes, usually the “?” button. */
+  returnFocusRef?: RefObject<HTMLElement | null>
+}) {
   const [step, setStep] = useState(0)
 
   useEffect(() => {
     if (open) setStep(0)
   }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isCoachCloseKey(event.key)) return
+      event.preventDefault()
+      rememberDismissed()
+      onClose()
+      returnFocusRef?.current?.focus()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [open, onClose, returnFocusRef])
 
   if (!open) return null
   const current = STEPS[step] ?? STEPS[0]!
@@ -49,6 +76,7 @@ export function CoachMark({ open, onClose }: { open: boolean; onClose: () => voi
   const close = () => {
     rememberDismissed()
     onClose()
+    returnFocusRef?.current?.focus()
   }
 
   return (

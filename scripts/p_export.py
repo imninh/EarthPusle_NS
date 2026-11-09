@@ -39,6 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=EXPORT_DIR)
     parser.add_argument("--registry", type=Path, default=REGISTRY_PATH)
     parser.add_argument("--regions-config", type=Path, default=REGIONS_PATH)
+    parser.add_argument("--country-geojson", type=Path, default=None)
     parser.add_argument("--interim-dir", type=Path, default=INTERIM_DIR)
     parser.add_argument("--anomaly-dir", type=Path, default=ANOMALY_DIR)
     parser.add_argument("--trends-dir", type=Path, default=TRENDS_DIR)
@@ -74,6 +75,11 @@ def main(argv: list[str] | None = None) -> int:
         help="copy the validated export into web/public/data (do not use blindly)",
     )
     parser.add_argument(
+        "--publish-only",
+        action="store_true",
+        help="validate an existing --out folder with --release and publish it; do not export",
+    )
+    parser.add_argument(
         "--no-validate",
         action="store_true",
         help="skip the post-export validator (the publish step still validates)",
@@ -81,11 +87,22 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     started = time.perf_counter()
+    if args.publish_only:
+        try:
+            publish_export(args.out, release=True)
+        except Exception as exc:  # noqa: BLE001 - CLI boundary
+            print(f"PUBLISH FAILED: {exc}", file=sys.stderr)
+            return 1
+        print(f"Published validated export from {args.out} to web/public/data")
+        print(f"Total wall time: {time.perf_counter() - started:.1f} s")
+        return 0
+
     try:
         summary = export_all(
             args.out,
             registry_path=args.registry,
             regions_path=args.regions_config,
+            country_geojson_path=args.country_geojson,
             interim_dir=args.interim_dir,
             anomaly_dir=args.anomaly_dir,
             trends_dir=args.trends_dir,
@@ -103,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Export written to {summary['out_dir']}")
     print(
         f"Variables: {len(summary['variables'])}, windows: {len(summary['windows'])}, "
-        f"regions: {len(summary['regions'])}, "
+        f"regions: {len(summary['regions'])}, countries: {len(summary['countries'])}, "
         f"correlation pairs: {len(summary['correlation_pairs'])}, "
         f"tiles: {summary['tiles']}, mask cells: {summary['mask_cells']}"
     )

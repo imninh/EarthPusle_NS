@@ -69,6 +69,10 @@ def _mask() -> np.ndarray:
 
 def _registry() -> dict:
     return {
+        "products": {
+            "GPM_3IMERGM": {"doi": "10.5067/GPM/IMERG/3B-MONTH/07"},
+            "GLDAS_NOAH10_M": {"doi": "10.5067/LWTYSMP3VM5Z"},
+        },
         "variables": [
             {
                 "id": "precipitation",
@@ -283,6 +287,8 @@ def test_case_numbers_are_traceable_to_the_input_arrays() -> None:
     assert evidence["q_value"] == round(float(expected_q), 8)
     assert evidence["coverage_fraction"] == 0.9
     assert evidence["product"] == "GPM_3IMERGM"
+    assert evidence["doi"] == "10.5067/GPM/IMERG/3B-MONTH/07"
+    assert evidence["slope_unit"] == "mm/month per decade"
 
 
 def test_output_is_deterministic_even_when_candidate_order_changes() -> None:

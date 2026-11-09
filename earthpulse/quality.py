@@ -151,7 +151,9 @@ def quality_grid(
     p_map = np.full(shape, np.nan, dtype=float)
     delta_map = np.full(shape, np.nan, dtype=float)
     break_map = np.full(shape, np.nan, dtype=float)
-    flags = np.full(shape, contract.OUTSIDE_DOMAIN, dtype=np.int8)
+    flags = np.where(domain, contract.QUALITY_NONE, contract.OUTSIDE_DOMAIN).astype(
+        np.int8
+    )
 
     rows, cols = np.nonzero(domain)
     for row, col in zip(rows, cols):

@@ -45,6 +45,16 @@ RAW_SUBDIRS = {"GLDAS_NOAH10_M": "gldas", "GPM_3IMERGM": "gpm"}
 # this fraction of the 288 months (P02 spec T4).
 COMMON_MASK_MIN_MONTH_FRACTION = 0.8
 
+# GLDAS-2 README §1.6: no glacier/ice-sheet model; SWE accumulates forever over
+# Greenland and permanent snow/ice. P08 excludes a cell when its minimum monthly
+# SWE over 2001-2024 exceeds this threshold (kg m-2 = mm water equivalent).
+# The 2026-11-09 real-data histogram has a clear gap between 1 and 10 kg m-2;
+# 10 removes 909 of 15,159 cells (615/626 Greenland cells) and no mid-latitude
+# seasonal-snow cell.
+PERMANENT_SNOW_MIN_SWE = 10.0
+SWE_PRODUCT = "GLDAS_NOAH10_M"
+SWE_CACHE_NAME = "swe_min.nc"
+
 
 def load_registry(path: Path | str | None = None) -> dict:
     """Load ``config/variables.yaml`` (the architect-owned variable registry)."""
@@ -322,26 +332,145 @@ def harmonize_variable(
 # ---------------------------------------------------------------------------
 
 
+def swe_exclusion_mask(
+    swe_min: np.ndarray, threshold: float = PERMANENT_SNOW_MIN_SWE
+) -> np.ndarray:
+    """Boolean mask of cells whose minimum monthly SWE exceeds ``threshold``.
+
+    A finite minimum above the threshold means snow/ice persists in every month
+    of 2001-2024 (the GLDAS permanent-snow/ice signature). NaN/invalid cells are
+    not excluded here; the GLDAS coverage criterion handles them.
+    """
+
+    values = np.asarray(swe_min, dtype=float)
+    if values.shape != (contract.N_ROWS, contract.N_COLS):
+        raise ValueError(
+            f"swe_min must have shape {(contract.N_ROWS, contract.N_COLS)}, "
+            f"got {values.shape}"
+        )
+    return np.isfinite(values) & (values > float(threshold))
+
+
+def compute_min_swe(
+    raw_root: Path,
+    cache_path: Path | None = None,
+    product: str = SWE_PRODUCT,
+) -> np.ndarray:
+    """Minimum monthly ``SWE_inst`` for every 1° cell, 2001-2024.
+
+    Reads the 288 raw GLDAS monthly files, masks the fill value, computes the
+    per-cell minimum, flips the native 150-row latitude order to the contract's
+    north-first 180-row grid, and caches the result as ``swe_min.nc``. The
+    cache is independent of the mask threshold and is reused by later mask
+    rebuilds.
+    """
+
+    if cache_path is not None and Path(cache_path).is_file():
+        with xr.open_dataset(Path(cache_path), engine="netcdf4") as cached:
+            values = np.asarray(cached["swe_min"].values, dtype=float)
+        if values.shape == (contract.N_ROWS, contract.N_COLS):
+            return values
+
+    if product not in RAW_SUBDIRS:
+        raise ValueError(f"no raw sub-directory for product {product!r}")
+
+    native_min = np.full((150, contract.N_COLS), np.inf, dtype=np.float64)
+    months = expected_months()
+    missing: list[str] = []
+    for year, month in months:
+        try:
+            path = find_raw_file(Path(raw_root), product, year, month)
+        except FileNotFoundError:
+            missing.append(f"{year:04d}-{month:02d}")
+            continue
+        with xr.open_dataset(
+            path, engine="netcdf4", decode_times=False, mask_and_scale=False
+        ) as ds:
+            variable = ds["SWE_inst"]
+            fill = variable.attrs.get("_FillValue", -9999.0)
+            values = np.asarray(variable.values, dtype=np.float64)
+            if values.ndim == 3:
+                values = values[0]
+            if values.shape != native_min.shape:
+                raise ValueError(
+                    f"{path.name}: SWE_inst has shape {values.shape}, expected "
+                    f"{native_min.shape}"
+                )
+            values[values == float(fill)] = np.nan
+            np.fmin(native_min, values, out=native_min)
+
+    if missing:
+        raise FileNotFoundError(
+            f"cannot compute SWE mask: {len(missing)} monthly files missing "
+            f"(first: {missing[:5]})"
+        )
+
+    lat, lon = target_grid()
+    grid = np.full((contract.N_ROWS, contract.N_COLS), np.nan, dtype=float)
+    # Native GLDAS rows are ascending (-59.5..89.5); contract row 0 is 89.5.
+    grid[: native_min.shape[0]] = native_min[::-1]
+    grid[~np.isfinite(grid)] = np.nan
+
+    if cache_path is not None:
+        cache = xr.Dataset(
+            {
+                "swe_min": xr.DataArray(
+                    grid.astype(np.float32),
+                    dims=("lat", "lon"),
+                    coords={"lat": lat, "lon": lon},
+                    attrs={
+                        "units": "kg m-2",
+                        "long_name": "Minimum monthly snow water equivalent, 2001-2024",
+                    },
+                )
+            },
+            attrs={
+                "source_product": product,
+                "source_variable": "SWE_inst",
+                "period": f"{contract.FIRST_MONTH}..{contract.LAST_MONTH}",
+                "rule": "per-cell minimum of monthly values; fill masked to NaN",
+            },
+        )
+        cache_path = Path(cache_path)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache.to_netcdf(
+            cache_path,
+            engine="netcdf4",
+            encoding={"swe_min": {"dtype": "float32", "zlib": True, "complevel": 4}},
+        )
+        cache.close()
+
+    return grid
+
+
 def build_common_mask(
-    registry: dict, interim_dir: Path, out_path: Path
+    registry: dict,
+    interim_dir: Path,
+    out_path: Path,
+    raw_root: Path | None = None,
+    swe_threshold: float = PERMANENT_SNOW_MIN_SWE,
 ) -> xr.Dataset:
-    """Common land mask = GLDAS core coverage AND IMERG 1° coverage.
+    """Common land mask = GLDAS coverage AND IMERG coverage AND no permanent ice.
 
     A cell is inside the domain when
 
     - every **GLDAS** core registry variable has a valid value in >= 80 % of
       the 288 months (GLDAS is land-only, 60°S–90°N, so this excludes ocean
-      and Antarctica), and
+      and Antarctica);
     - IMERG has valid 1° coverage in >= 80 % of the months, where a month
       counts as covered when ``valid_fraction >= COARSE_VALID_AREA_FRACTION``
-      (the same rule that made the harmonized value valid).
+      (the same rule that made the harmonized value valid); and
+    - the cell's minimum monthly SWE over 2001-2024 does not exceed
+      ``swe_threshold`` (P08 T1: GLDAS has no glacier/ice-sheet model, so
+      permanent snow/ice accumulates indefinitely).
 
-    Records how many cells each criterion removes. Outside this mask,
-    downstream layers are NaN / -99 (contract §1).
+    Records how many cells each criterion removes. Outside this mask, downstream
+    layers are NaN / -99 (contract §1).
     """
     lat, lon = target_grid()
     n_months = contract.N_MONTHS
     min_months = int(COMMON_MASK_MIN_MONTH_FRACTION * n_months)
+    raw_root = Path(raw_root) if raw_root is not None else PROJECT_ROOT / "data" / "raw"
 
     gldas_ok = xr.DataArray(
         np.ones((contract.N_ROWS, contract.N_COLS), dtype=bool),
@@ -371,10 +500,16 @@ def build_common_mask(
     finally:
         precip_cube.close()
 
-    common = gldas_ok & imerg_ok
+    # P08 T1: permanent snow/ice (Greenland, high Arctic, some glaciers).
+    swe_min = compute_min_swe(raw_root, interim_dir / SWE_CACHE_NAME)
+    swe_excluded = swe_exclusion_mask(swe_min, swe_threshold)
+
+    base_domain = gldas_ok & imerg_ok
+    common = base_domain & ~swe_excluded
 
     n_gldas_removed = int((~gldas_ok).sum())
     n_imerg_removed = int((~imerg_ok).sum())
+    n_swe_removed = int((base_domain & swe_excluded).sum())
     n_common = int(common.sum())
     mask = xr.Dataset(
         {
@@ -387,34 +522,54 @@ def build_common_mask(
                     "flag_values": [0, 1],
                     "flag_meanings": "outside_domain inside_domain",
                 },
-            )
+            ),
+            "swe_min": xr.DataArray(
+                swe_min.astype(np.float32),
+                dims=("lat", "lon"),
+                coords={"lat": lat, "lon": lon},
+                attrs={
+                    "units": "kg m-2",
+                    "long_name": "Minimum monthly SWE, 2001-2024 (diagnostic)",
+                },
+            ),
         },
         attrs={
             "title": "EarthPulse common land mask",
             "criteria": (
                 "GLDAS core variables valid in >= 80% of months AND IMERG "
                 "1° coverage (valid_fraction >= "
-                f"{COARSE_VALID_AREA_FRACTION}) in >= 80% of months"
+                f"{COARSE_VALID_AREA_FRACTION}) in >= 80% of months AND "
+                f"minimum monthly SWE <= {swe_threshold:g} kg m-2"
             ),
             "gldas_core_variables": ",".join(gldas_per_variable),
             "min_valid_months": min_months,
             "n_months": n_months,
             "n_cells_total": contract.N_ROWS * contract.N_COLS,
-            "n_cells_gldas_ok": n_common + n_imerg_removed,  # recomputed below
+            "n_cells_gldas_ok": n_common + n_imerg_removed + n_swe_removed,
             "n_cells_removed_by_gldas": n_gldas_removed,
             "n_cells_removed_by_imerg": n_imerg_removed,
+            "n_cells_removed_by_swe": n_swe_removed,
+            "n_cells_before_swe": int(base_domain.sum()),
             "n_cells_removed_total": int((~common).sum()),
             "n_cells_common": n_common,
-            "package": "P02",
+            "swe_min_threshold_kg_m2": float(swe_threshold),
+            "swe_rule": (
+                "exclude when the cell minimum of monthly SWE_inst over "
+                "2001-2024 exceeds the threshold (snow/ice never melts)"
+            ),
+            "package": "P02 + P08",
         },
     )
-    # n_cells passing GLDAS only (before the IMERG criterion):
+    # n_cells passing GLDAS only (before the IMERG/SWE criteria):
     mask.attrs["n_cells_gldas_ok"] = int(gldas_ok.sum())
     out_path.parent.mkdir(parents=True, exist_ok=True)
     mask.to_netcdf(
         out_path,
         engine="netcdf4",
-        encoding={"common_mask": {"dtype": "int8", "zlib": True, "complevel": 4}},
+        encoding={
+            "common_mask": {"dtype": "int8", "zlib": True, "complevel": 4},
+            "swe_min": {"dtype": "float32", "zlib": True, "complevel": 4},
+        },
     )
     return mask
 

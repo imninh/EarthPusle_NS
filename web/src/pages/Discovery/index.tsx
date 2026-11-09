@@ -51,7 +51,6 @@ import {
   MERCATOR_LAT_LIMIT,
   NOT_SIGNIFICANT_OPACITY,
   patternColour,
-  rateAlpha,
   sequentialColour,
   trendColour,
 } from '../../maps/gridImage'
@@ -182,7 +181,7 @@ export default function DiscoveryPage() {
   const [basemapError, setBasemapError] = useState<string | null>(null)
   const [mapEpoch, setMapEpoch] = useState(0)
   const [panelOpen, setPanelOpen] = useState(true)
-  const [legendOpen, setLegendOpen] = useState(true)
+  const [legendOpen, setLegendOpen] = useState(() => !window.matchMedia('(max-width: 900px)').matches)
   const [hover, setHover] = useState<HoverState | null>(null)
   const [pickedPlace, setPickedPlace] = useState<{ id: string; label: string; bbox: [number, number, number, number] } | null>(null)
   const [cell, setCell] = useState<CellPick | null>(() =>
@@ -249,6 +248,15 @@ export default function DiscoveryPage() {
     read()
     media.addEventListener('change', read)
     return () => media.removeEventListener('change', read)
+  }, [])
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 900px)')
+    const update = () => {
+      if (media.matches) setLegendOpen(false)
+    }
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
   }, [])
 
   useEffect(() => {
@@ -980,55 +988,84 @@ function buildLayerImage(
 ): ImageData {
   const trendPaint = (value: number, index: number): Rgba => {
     const colour = trendColour(value, palette, index)
-    if (value === TREND_NOT_SIGNIFICANT) return [colour[0], colour[1], colour[2], 108]
     if (value === INSUFFICIENT_DATA) return [colour[0], colour[1], colour[2], 220]
     return colour
   }
-  if (layer === 'trend') return renderClassImage(grids.trend, trendPaint)
-  if (layer === 'pattern') {
-    return renderClassImage(grids.pattern, (value, index) => {
-      const colour = patternColour(value, palette, index)
-      if (value === PATTERN_MIXED) return [colour[0], colour[1], colour[2], 132]
-      if (value === INSUFFICIENT_DATA) return [colour[0], colour[1], colour[2], 220]
-      return colour
+  const stippleTrend = (value: number) => value === TREND_NOT_SIGNIFICANT
+  if (layer === 'trend') {
+    return renderClassImage(grids.trend, trendPaint, undefined, {
+      coastalFill: true,
+      isStippled: stippleTrend,
     })
+  }
+  if (layer === 'pattern') {
+    return renderClassImage(
+      grids.pattern,
+      (value, index) => {
+        const colour = patternColour(value, palette, index)
+        if (value === INSUFFICIENT_DATA) return [colour[0], colour[1], colour[2], 220]
+        return colour
+      },
+      undefined,
+      { coastalFill: true, isStippled: (value) => value === PATTERN_MIXED },
+    )
   }
   if (layer === 'rate') {
     const limit = finiteAbsPercentile(grids.slope, 0.98)
-    return renderContinuousImage(grids.slope, (value, index) =>
-      divergingColour(
-        value,
-        limit,
-        palette.decrease,
-        palette.increase,
-        palette.divergingMid,
-        rateAlpha(grids.qValue[index], qThreshold),
-      ),
+    return renderContinuousImage(
+      grids.slope,
+      (value) =>
+        divergingColour(value, limit, palette.decrease, palette.increase, palette.divergingMid, 255),
+      undefined,
+      { opacity: significanceOpacity(grids.qValue, qThreshold), coastalFill: true },
     )
   }
   if (layer === 'std') {
-    return renderContinuousImage(grids.stdChange, (value, index) =>
-      divergingColour(
-        value,
-        2,
-        palette.decrease,
-        palette.increase,
-        palette.divergingMid,
-        rateAlpha(grids.qValue[index], qThreshold),
-      ),
+    return renderContinuousImage(
+      grids.stdChange,
+      (value) =>
+        divergingColour(value, 2, palette.decrease, palette.increase, palette.divergingMid, 255),
+      undefined,
+      { opacity: significanceOpacity(grids.qValue, qThreshold), coastalFill: true },
     )
   }
   if (layer === 'significance') {
-    return renderContinuousImage(grids.qValue, (value) =>
-      sequentialColour(value, palette.sequentialHigh, palette.sequentialLow),
+    return renderContinuousImage(
+      grids.qValue,
+      (value) => sequentialColour(value, palette.sequentialHigh, palette.sequentialLow),
+      undefined,
+      { coastalFill: true },
     )
   }
   if (layer === 'coverage') {
-    return renderContinuousImage(grids.coverage, (value) =>
-      sequentialColour(value, palette.sequentialLow, palette.sequentialHigh),
+    return renderContinuousImage(
+      grids.coverage,
+      (value) => sequentialColour(value, palette.sequentialLow, palette.sequentialHigh),
+      undefined,
+      { coastalFill: true },
     )
   }
-  return renderQualityImage(grids.trend, grids.quality ?? new Int8Array(N_ROWS * N_COLS), trendPaint)
+  return renderQualityImage(
+    grids.trend,
+    grids.quality ?? new Int8Array(N_ROWS * N_COLS),
+    trendPaint,
+    undefined,
+    {
+      coastalFill: true,
+      isStippled: stippleTrend,
+      isValid: (value) => value !== OUTSIDE_DOMAIN,
+    },
+  )
+}
+
+/** 1.0 for a significant cell, 0.35 otherwise; bilinearly blended by the renderer. */
+function significanceOpacity(qValues: Float32Array, threshold: number): Float32Array {
+  const opacity = new Float32Array(N_ROWS * N_COLS)
+  for (let index = 0; index < opacity.length; index++) {
+    const q = qValues[index]
+    opacity[index] = Number.isFinite(q) && q < threshold ? 1 : NOT_SIGNIFICANT_OPACITY
+  }
+  return opacity
 }
 
 function imageCanvas(image: ImageData): HTMLCanvasElement {

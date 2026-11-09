@@ -28,17 +28,23 @@ import yaml
 
 from earthpulse import contract
 from earthpulse.patterns import pattern_class
+from earthpulse.quality import annual_means, quality_grid
+from earthpulse.regions import build_country_grid, country_cells_in_mask
 from earthpulse.screener import domain_mask, screener_table
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = PROJECT_ROOT / "config" / "variables.yaml"
 REGIONS_PATH = PROJECT_ROOT / "config" / "regions.yaml"
+COUNTRIES_PATH = PROJECT_ROOT / "config" / "countries" / "countries-50m.geojson"
 INTERIM_DIR = PROJECT_ROOT / "data" / "interim" / "harmonized_monthly"
 ANOMALY_DIR = PROJECT_ROOT / "data" / "processed" / "anomalies"
 TRENDS_DIR = PROJECT_ROOT / "data" / "processed" / "trends"
 CORRELATIONS_DIR = PROJECT_ROOT / "data" / "processed" / "correlations"
 EXPORT_DIR = PROJECT_ROOT / "data" / "export" / "web_data"
 WEB_DATA_DIR = PROJECT_ROOT / "web" / "public" / "data"
+
+# Shared constant (architect bumped contract.py/contract.ts to 1.2 after P08).
+EXPORT_SCHEMA_VERSION = contract.SCHEMA_VERSION
 
 FLOAT_DTYPE = np.dtype("<f4")
 CLASS_DTYPE = np.dtype("i1")
@@ -72,6 +78,24 @@ PATTERN_PAIR = {
     "temperature": "surface_skin_temperature",
     "moisture": "root_zone_soil_moisture",
 }
+
+QUALITY_CLASS_CODES = frozenset(
+    {
+        contract.QUALITY_NONE,
+        contract.QUALITY_STEP,
+        contract.QUALITY_STEP_KNOWN_FORCING,
+        contract.INSUFFICIENT_DATA,
+        contract.OUTSIDE_DOMAIN,
+    }
+)
+COUNTRY_KEYS = {"id", "label", "iso_numeric", "index", "n_cells", "bbox"}
+REGIONS_FILE_KEYS = {"regions"}
+# Optional schema-1.2 fields. The validator accepts them when present.
+SCREENER_ROW_OPTIONAL_KEYS = {
+    "step_flag_area_fraction",
+    "sig_trend_flagged_fraction",
+}
+REGIONS_FILE_OPTIONAL_KEYS = {"countries", "country_grid", "synthetic"}
 
 TARGET_LAT = contract.LAT_NORTH_CENTER - np.arange(
     contract.N_ROWS, dtype=float
@@ -123,6 +147,7 @@ SCREENER_ROW_KEYS = {
     "regional_contrast",
     "n_cells_evaluated",
 }
+INDEX_OPTIONAL_KEYS = {"quality"}
 REGION_SERIES_KEYS = {
     "region",
     "variable",
@@ -451,6 +476,139 @@ def export_grids(
     return cache
 
 
+def export_quality(
+    cache: dict[tuple[str, str], dict[str, np.ndarray]],
+    anomaly_dir: Path,
+    out_dir: Path,
+    variables: Sequence[dict],
+    window_ids: Sequence[str],
+    mask: np.ndarray,
+) -> None:
+    """Write schema-1.2 ``quality_flag`` and ``breakpoint_year`` layers.
+
+    The step test uses annual means of the monthly anomalies inside each
+    window. The P03 ``trend_class`` supplies the same eligibility decision as
+    the trend layers (``-9`` cells are not quality-evaluated).
+    """
+
+    for variable in variables:
+        variable_id = variable["id"]
+        path = anomaly_dir / f"{variable_id}.nc"
+        if not path.is_file():
+            raise FileNotFoundError(f"P02 anomaly cube missing: {path}")
+        with xr.open_dataset(path, engine="netcdf4") as ds:
+            anomaly = np.asarray(ds["anomaly"].values, dtype=float)
+            labels = np.asarray([_month_label(value) for value in ds["time"].values])
+            years_all = np.asarray(ds["time"].dt.year.values, dtype=int)
+        for window_id in window_ids:
+            start, end = contract.WINDOWS[window_id]
+            selection = (labels >= start) & (labels <= end)
+            annual, years = annual_means(
+                anomaly[selection], years_all[selection]
+            )
+            layers = cache[(variable_id, window_id)]
+            result = quality_grid(
+                annual,
+                years,
+                layers["trend_class"],
+                mask,
+                product=variable["product"],
+            )
+            _write_binary(
+                out_dir / "grids" / variable_id / window_id / "quality_flag.i8",
+                result["quality_flag"],
+                CLASS_DTYPE,
+            )
+            _write_binary(
+                out_dir / "grids" / variable_id / window_id / "breakpoint_year.f32",
+                result["breakpoint_year"],
+                FLOAT_DTYPE,
+            )
+            layers["quality_flag"] = result["quality_flag"]
+            layers["breakpoint_year"] = result["breakpoint_year"]
+
+
+def export_countries(
+    country_geojson_path: str | Path,
+    out_dir: Path,
+    mask: np.ndarray,
+) -> tuple[list[dict], np.ndarray]:
+    """Write the schema-1.2 country grid and return exportable countries.
+
+    The grid contains every Natural Earth country index; the returned list is
+    filtered to ``n_cells >= contract.COUNTRY_MIN_CELLS`` inside the common
+    mask, as DATA_CONTRACT §11 requires.
+    """
+
+    grid, countries = build_country_grid(country_geojson_path)
+    counts = country_cells_in_mask(grid, mask)
+    exported = [
+        {**country, "n_cells": counts.get(int(country["index"]), 0)}
+        for country in countries
+        if counts.get(int(country["index"]), 0) >= contract.COUNTRY_MIN_CELLS
+    ]
+    # Only listed countries are valid domains; small islands dropped by the
+    # n_cells >= 3 rule become "no country" in the exported grid, so the UI and
+    # validator never see an index without metadata.
+    kept_indices = np.asarray([country["index"] for country in exported], dtype=np.int16)
+    if kept_indices.size:
+        exported_grid = np.where(np.isin(grid, kept_indices), grid, contract.COUNTRY_NONE)
+    else:
+        exported_grid = np.full_like(grid, contract.COUNTRY_NONE)
+    _write_binary(
+        out_dir / contract.COUNTRY_GRID_FILE,
+        exported_grid.astype(np.int16),
+        np.dtype("int16"),
+    )
+    return exported, exported_grid.astype(np.int16)
+
+
+def quality_screener_fields(
+    trend_class: np.ndarray,
+    quality_flag: np.ndarray,
+    domain: np.ndarray,
+) -> dict[str, float | None]:
+    """Optional schema-1.2 Screener fields for one variable/window/domain."""
+
+    classes = np.asarray(trend_class)
+    quality = np.asarray(quality_flag)
+    area = np.asarray(domain, dtype=bool)
+    if classes.shape != area.shape or quality.shape != area.shape:
+        raise ValueError("trend_class, quality_flag and domain shapes differ")
+
+    weights = LAT_WEIGHTS[:, None] * np.ones_like(area, dtype=float)
+    evaluated = area & np.isin(
+        classes,
+        (
+            contract.TREND_DECREASE,
+            contract.TREND_NOT_SIGNIFICANT,
+            contract.TREND_INCREASE,
+        ),
+    )
+    significant = area & np.isin(
+        classes, (contract.TREND_DECREASE, contract.TREND_INCREASE)
+    )
+    flagged = evaluated & (quality >= contract.QUALITY_STEP)
+    flagged_significant = significant & (quality >= contract.QUALITY_STEP)
+
+    evaluated_area = float(weights[evaluated].sum())
+    significant_area = float(weights[significant].sum())
+    step_fraction = (
+        float(weights[flagged].sum()) / evaluated_area
+        if evaluated_area > 0
+        else None
+    )
+    sig_fraction = (
+        float(weights[flagged_significant].sum()) / significant_area
+        if significant_area > 0
+        else None
+    )
+    return {
+        "step_flag_area_fraction": step_fraction,
+        "sig_trend_flagged_fraction": sig_fraction,
+    }
+
+
 def export_patterns(
     cache: dict[tuple[str, str], dict[str, np.ndarray]],
     out_dir: Path,
@@ -539,6 +697,8 @@ def export_screener(
     window_ids: Sequence[str],
     regions: Sequence[dict],
     mask: np.ndarray,
+    countries: Sequence[dict] = (),
+    country_grid: np.ndarray | None = None,
 ) -> None:
     # Compute each domain mask once and reuse it for every variable/window.
     domains: list[tuple[str, np.ndarray]] = [
@@ -548,6 +708,13 @@ def export_screener(
         (region["id"], domain_mask(tuple(region["bbox"]), mask))
         for region in regions
     )
+    if countries:
+        if country_grid is None:
+            raise ValueError("country_grid is required when countries are exported")
+        domains.extend(
+            (country["id"], mask & (country_grid == country["index"]))
+            for country in countries
+        )
 
     for window_id in window_ids:
         per_variable: dict[str, dict[str, np.ndarray]] = {}
@@ -560,6 +727,18 @@ def export_screener(
             }
         for domain_id, region_mask in domains:
             rows = screener_table(per_variable, region_mask)
+            for row, variable_id in zip(rows, variable_ids):
+                layers = cache[(variable_id, window_id)]
+                quality = layers.get("quality_flag")
+                if quality is not None:
+                    row.update(
+                        quality_screener_fields(
+                            layers["trend_class"], quality, region_mask
+                        )
+                    )
+                else:
+                    row["step_flag_area_fraction"] = None
+                    row["sig_trend_flagged_fraction"] = None
             _write_json(
                 out_dir / "screener" / window_id / f"{domain_id}.json",
                 {
@@ -600,11 +779,23 @@ def export_region_series(
     regions: Sequence[dict],
     mask: np.ndarray,
     months: Sequence[str],
+    countries: Sequence[dict] = (),
+    country_grid: np.ndarray | None = None,
 ) -> None:
     region_masks = {
         region["id"]: domain_mask(tuple(region["bbox"]), mask)
         for region in regions
     }
+    if countries:
+        if country_grid is None:
+            raise ValueError("country_grid is required when countries are exported")
+        region_masks.update(
+            {
+                country["id"]: mask & (country_grid == country["index"])
+                for country in countries
+            }
+        )
+    domain_entries = [*regions, *countries]
     for variable in variables:
         variable_id = variable["id"]
         values_path = interim_dir / f"{variable_id}.nc"
@@ -639,7 +830,7 @@ def export_region_series(
                     f"registry display unit {expected_unit!r}"
                 )
 
-        for region in regions:
+        for region in domain_entries:
             region_mask = region_masks[region["id"]]
             mean_values, fractions = _weighted_region_series(values, region_mask)
             mean_anomalies, _ = _weighted_region_series(anomalies, region_mask)
@@ -756,11 +947,12 @@ def build_index(
     correlation_pairs: Sequence[str],
     tile_ids: Sequence[str],
     generated_at: str | None = None,
+    quality_info: dict | None = None,
 ) -> dict:
     products = registry.get("products", {})
     variables = verified_variables(registry, variable_ids)
-    return {
-        "schema_version": contract.SCHEMA_VERSION,
+    index = {
+        "schema_version": EXPORT_SCHEMA_VERSION,
         "generated_at": generated_at or _timestamp(),
         "synthetic": False,
         "grid": {
@@ -795,6 +987,9 @@ def build_index(
             "ids": sorted(tile_ids),
         },
     }
+    if quality_info is not None:
+        index["quality"] = quality_info
+    return index
 
 
 def _guard_output_dir(out_dir: Path) -> None:
@@ -839,6 +1034,7 @@ def export_all(
     *,
     registry_path: str | Path | None = None,
     regions_path: str | Path | None = None,
+    country_geojson_path: str | Path | None = None,
     interim_dir: str | Path | None = None,
     anomaly_dir: str | Path | None = None,
     trends_dir: str | Path | None = None,
@@ -907,19 +1103,59 @@ def export_all(
         shutil.rmtree(output)
     output.mkdir(parents=True, exist_ok=True)
 
+    countries_path = (
+        Path(country_geojson_path)
+        if country_geojson_path is not None
+        else COUNTRIES_PATH
+    )
+    if not countries_path.is_file():
+        raise FileNotFoundError(
+            f"country GeoJSON missing: {countries_path}; run the P10 builder"
+        )
+    countries, country_grid = export_countries(countries_path, output, mask)
+
     cache = export_grids(trends, output, variable_ids, windows, mask)
+    export_quality(cache, anomalies, output, variables, windows, mask)
     export_patterns(cache, output, windows, mask)
     export_correlations(correlations, output, pair_ids, windows, mask)
-    export_screener(cache, output, variable_ids, windows, regions, mask)
+    export_screener(
+        cache,
+        output,
+        variable_ids,
+        windows,
+        regions,
+        mask,
+        countries=countries,
+        country_grid=country_grid,
+    )
     months = month_labels()
     export_region_series(
-        interim, anomalies, output, variables, regions, mask, months
+        interim,
+        anomalies,
+        output,
+        variables,
+        regions,
+        mask,
+        months,
+        countries=countries,
+        country_grid=country_grid,
     )
     export_climatology(anomalies, output, variable_ids, mask)
     tile_ids = export_tiles(
         anomalies, output, variable_ids, mask, months
     )
 
+    quality_info = {
+        "method": (
+            "Pettitt test (BH-FDR q < 0.05) on annual-mean anomalies + "
+            "step-vs-linear delta BIC >= 2"
+        ),
+        "layers": list(contract.QUALITY_LAYERS),
+        "known_forcing_changes": {
+            product: list(range_values)
+            for product, range_values in contract.KNOWN_FORCING_CHANGES.items()
+        },
+    }
     _write_json(
         output / "index.json",
         build_index(
@@ -929,9 +1165,17 @@ def export_all(
             pair_ids,
             tile_ids,
             generated_at=generated_at,
+            quality_info=quality_info,
         ),
     )
-    _write_json(output / "regions.json", {"regions": regions})
+    _write_json(
+        output / "regions.json",
+        {
+            "regions": [{**region, "kind": "box"} for region in regions],
+            "countries": countries,
+            "country_grid": contract.COUNTRY_GRID_FILE,
+        },
+    )
     _write_json(
         output / "cases.json",
         {
@@ -947,6 +1191,7 @@ def export_all(
         "variables": variable_ids,
         "windows": windows,
         "regions": [region["id"] for region in regions],
+        "countries": [country["id"] for country in countries],
         "correlation_pairs": pair_ids,
         "tiles": len(tile_ids),
         "files": len(files),
@@ -1090,14 +1335,16 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
             "schema_version": None,
         }
 
-    if not _check_keys(index, INDEX_KEYS, "index.json", errors):
+    if not _check_keys(
+        index, INDEX_KEYS, "index.json", errors, optional=INDEX_OPTIONAL_KEYS
+    ):
         # Continue with whatever is present; missing references are reported below.
         pass
 
-    if index.get("schema_version") != contract.SCHEMA_VERSION:
+    if index.get("schema_version") != EXPORT_SCHEMA_VERSION:
         errors.append(
             f"index.json: schema_version {index.get('schema_version')!r} "
-            f"!= {contract.SCHEMA_VERSION!r}"
+            f"!= {EXPORT_SCHEMA_VERSION!r}"
         )
     expected_grid = {
         "resolution_deg": contract.RESOLUTION_DEG,
@@ -1175,6 +1422,25 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
     if class_layers != list(contract.CLASS_LAYERS):
         errors.append("index.json: layers.class does not match the contract")
 
+    quality_obj = index.get("quality")
+    quality_present = quality_obj is not None
+    if quality_present:
+        if _check_keys(
+            quality_obj,
+            {"method", "layers", "known_forcing_changes"},
+            "index.json quality",
+            errors,
+        ):
+            if quality_obj["layers"] != list(contract.QUALITY_LAYERS):
+                errors.append("index.json: quality.layers do not match the contract")
+            method = quality_obj["method"]
+            if not isinstance(method, str) or "Pettitt" not in method:
+                errors.append("index.json: quality.method must describe Pettitt/BIC")
+            if not isinstance(quality_obj["known_forcing_changes"], dict):
+                errors.append(
+                    "index.json: quality.known_forcing_changes must be an object"
+                )
+
     correlation_pairs = index.get("correlation_pairs", [])
     if not isinstance(correlation_pairs, list) or not all(
         isinstance(pair, str) for pair in correlation_pairs
@@ -1207,11 +1473,18 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
     # regions.json
     regions_path = root / "regions.json"
     region_ids: list[str] = []
+    country_ids: list[str] = []
+    country_entries: list[dict] = []
+    country_grid_rel: str | None = None
     regions_obj = _read_json(regions_path, errors)
     if regions_obj is None:
         errors.append("missing file: regions.json")
     elif _check_keys(
-        regions_obj, {"regions"}, "regions.json", errors, optional={"synthetic"}
+        regions_obj,
+        REGIONS_FILE_KEYS,
+        "regions.json",
+        errors,
+        optional=REGIONS_FILE_OPTIONAL_KEYS,
     ):
         regions = regions_obj["regions"]
         if not isinstance(regions, list):
@@ -1219,7 +1492,11 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
         else:
             for region in regions:
                 if not _check_keys(
-                    region, {"id", "label", "bbox"}, "regions.json region", errors
+                    region,
+                    {"id", "label", "bbox"},
+                    "regions.json region",
+                    errors,
+                    optional={"kind"},
                 ):
                     continue
                 bbox = region["bbox"]
@@ -1230,6 +1507,64 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                 region_ids.append(region["id"])
             if len(region_ids) != len(set(region_ids)):
                 errors.append("regions.json: duplicate region ids")
+
+        countries = regions_obj.get("countries", [])
+        if countries is not None and not isinstance(countries, list):
+            errors.append("regions.json: countries must be a list")
+            countries = []
+        for country in countries:
+            if not _check_keys(country, COUNTRY_KEYS, "regions.json country", errors):
+                continue
+            bbox = country["bbox"]
+            if not isinstance(bbox, list) or len(bbox) != 4:
+                errors.append(
+                    f"regions.json: country {country['id']!r} has an invalid bbox"
+                )
+            if not isinstance(country["index"], int):
+                errors.append(
+                    f"regions.json: country {country['id']!r} index must be an int"
+                )
+            if not isinstance(country["n_cells"], int) or country["n_cells"] < contract.COUNTRY_MIN_CELLS:
+                errors.append(
+                    f"regions.json: country {country['id']!r} has n_cells below "
+                    f"{contract.COUNTRY_MIN_CELLS}"
+                )
+            country_ids.append(country["id"])
+            country_entries.append(country)
+        if countries:
+            if not isinstance(regions_obj.get("country_grid"), str):
+                errors.append("regions.json: country_grid is required with countries")
+            else:
+                country_grid_rel = regions_obj["country_grid"]
+        if len(country_ids) != len(set(country_ids)):
+            errors.append("regions.json: duplicate country ids")
+        all_domain_ids = [*region_ids, *country_ids]
+        if len(all_domain_ids) != len(set(all_domain_ids)):
+            errors.append("regions.json: region/country ids are not unique")
+
+    if country_grid_rel is not None:
+        grid_path = _check_file(
+            root,
+            country_grid_rel,
+            GRID_VALUE_COUNT * 2,
+            errors,
+        )
+        if grid_path is not None:
+            grid_values = np.fromfile(grid_path, dtype="<i2")
+            if grid_values.size != GRID_VALUE_COUNT:
+                errors.append(
+                    f"{country_grid_rel}: {grid_values.size} int16 values, "
+                    f"expected {GRID_VALUE_COUNT}"
+                )
+            else:
+                allowed = {-1, *[country["index"] for country in country_entries]}
+                bad = sorted(
+                    set(int(value) for value in np.unique(grid_values)) - allowed
+                )
+                if bad:
+                    errors.append(
+                        f"{country_grid_rel}: unknown country indices {bad}"
+                    )
 
     # Referenced grid files.
     grid_float_bytes = GRID_VALUE_COUNT * 4
@@ -1249,6 +1584,27 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                 grid_class_bytes,
                 errors,
             )
+
+    if quality_present:
+        for variable_id in variable_ids:
+            for window_id in window_ids:
+                flag_rel = f"grids/{variable_id}/{window_id}/quality_flag.i8"
+                flag_path = _check_file(root, flag_rel, grid_class_bytes, errors)
+                _check_file(
+                    root,
+                    f"grids/{variable_id}/{window_id}/breakpoint_year.f32",
+                    grid_float_bytes,
+                    errors,
+                )
+                if flag_path is not None:
+                    flags = _read_class(flag_path, GRID_VALUE_COUNT, errors)
+                    if flags is not None:
+                        bad = sorted(
+                            set(int(code) for code in np.unique(flags))
+                            - QUALITY_CLASS_CODES
+                        )
+                        if bad:
+                            errors.append(f"{flag_rel}: illegal quality codes {bad}")
 
     for window_id in window_ids:
         pattern_path = _check_file(
@@ -1277,7 +1633,7 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                 )
 
     # Screener files.
-    domains = ["global", *region_ids]
+    domains = ["global", *region_ids, *country_ids]
     for window_id in window_ids:
         for domain_id in domains:
             relative = f"screener/{window_id}/{domain_id}.json"
@@ -1296,9 +1652,27 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                 continue
             seen: list[str] = []
             for row in rows:
-                if not _check_keys(row, SCREENER_ROW_KEYS, f"{relative} row", errors):
+                if not _check_keys(
+                    row,
+                    SCREENER_ROW_KEYS,
+                    f"{relative} row",
+                    errors,
+                    optional=SCREENER_ROW_OPTIONAL_KEYS,
+                ):
                     continue
                 seen.append(row["variable"])
+                if "step_flag_area_fraction" in row:
+                    value = row["step_flag_area_fraction"]
+                    if value is not None and not isinstance(value, (int, float)):
+                        errors.append(
+                            f"{relative}: step_flag_area_fraction must be numeric or null"
+                        )
+                if "sig_trend_flagged_fraction" in row:
+                    value = row["sig_trend_flagged_fraction"]
+                    if value is not None and not isinstance(value, (int, float)):
+                        errors.append(
+                            f"{relative}: sig_trend_flagged_fraction must be numeric or null"
+                        )
             if len(seen) != len(set(seen)):
                 errors.append(f"{relative}: duplicate variable rows")
             if set(seen) != set(variable_ids):
@@ -1308,7 +1682,7 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                 )
 
     # Region series.
-    for region_id in region_ids:
+    for region_id in [*region_ids, *country_ids]:
         for variable_id in variable_ids:
             relative = f"series/regions/{region_id}/{variable_id}.json"
             path = root / relative
@@ -1424,6 +1798,11 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
         errors.append(
             f"release check failed: {len(synthetic_files)} JSON file(s) have "
             "synthetic=true"
+        )
+
+    if total_bytes > 400 * 1024 * 1024:
+        errors.append(
+            f"export is {total_bytes / (1024 * 1024):.1f} MB, above the 400 MB budget"
         )
 
     return {

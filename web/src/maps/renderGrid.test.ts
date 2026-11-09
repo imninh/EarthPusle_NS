@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import type { FeatureCollection } from 'geojson'
-import { N_COLS, N_ROWS, QUALITY_STEP, QUALITY_STEP_KNOWN_FORCING } from '../data/contract'
+import {
+  N_COLS,
+  N_ROWS,
+  OUTSIDE_DOMAIN,
+  QUALITY_STEP,
+  QUALITY_STEP_KNOWN_FORCING,
+  TREND_NOT_SIGNIFICANT,
+} from '../data/contract'
 import {
   applyQualityHatch,
   bilinearValue,
   gridCanvasSize,
   landPixelPolygons,
   lonLatToPixel,
+  nearestValidIndex,
   projectEquirectToMercator,
   renderClassImage,
   renderContinuousImage,
@@ -88,6 +96,81 @@ describe('high-resolution rendering', () => {
     expect(pixel(image, 12, 12)).toEqual([0, 0, 0, 255])
   })
 
+  it('stipples non-significant class cells instead of drawing a flat square', () => {
+    const values = new Int8Array(N_ROWS * N_COLS)
+    values.fill(TREND_NOT_SIGNIFICANT)
+    const image = renderClassImage(
+      values,
+      () => [200, 200, 200, 255],
+      1,
+      { isStippled: (value) => value === TREND_NOT_SIGNIFICANT },
+    )
+    expect(pixel(image, 0, 0)[3]).toBe(150)
+    expect(pixel(image, 1, 0)[3]).toBe(0)
+    expect(pixel(image, 4, 0)[3]).toBe(150)
+  })
+
+  it('blends the significance opacity like the colour', () => {
+    // 1.0 significant + 0.35 not significant at the four-cell centre.
+    expect(bilinearValue([1, 0.35, 1, 0.35], 0.5, 0.5, 2, 2)).toBeCloseTo(0.675, 10)
+
+    const values = new Float32Array(N_ROWS * N_COLS).fill(1)
+    const opacity = new Float32Array(N_ROWS * N_COLS).fill(1)
+    opacity[0] = 1
+    opacity[1] = 0.35
+    opacity[N_COLS] = 1
+    opacity[N_COLS + 1] = 0.35
+    const image = renderContinuousImage(values, () => [10, 20, 30, 255], 8, { opacity })
+    const expected = bilinearValue(opacity, (7 + 0.5) / 8 - 0.5, (7 + 0.5) / 8 - 0.5)
+    expect(pixel(image, 7, 7)[3]).toBe(Math.round(255 * expected))
+    expect(pixel(image, 0, 0)[3]).toBe(255)
+  })
+})
+
+describe('coastal display fill', () => {
+  it('finds the nearest valid cell only within 1.5 cell units', () => {
+    const values = new Int8Array(N_ROWS * N_COLS).fill(OUTSIDE_DOMAIN)
+    values[0] = 1
+    const valid = (value: number) => value !== OUTSIDE_DOMAIN
+    expect(nearestValidIndex(values, 0, 0, valid)).toBe(0)
+    expect(nearestValidIndex(values, 1, 0, valid)).toBe(0) // distance 1
+    expect(nearestValidIndex(values, 1, 1, valid)).toBe(0) // distance sqrt(2)
+    expect(nearestValidIndex(values, 2, 0, valid)).toBe(-1) // distance 2 > 1.5
+  })
+
+  it('fills coastal class pixels from a valid neighbour without changing the source grid', () => {
+    const values = new Int8Array(N_ROWS * N_COLS).fill(OUTSIDE_DOMAIN)
+    values[0] = 1
+    const image = renderClassImage(
+      values,
+      (value) => (value === 1 ? [255, 0, 0, 255] : [0, 0, 0, 0]),
+      1,
+      { coastalFill: true },
+    )
+    expect(pixel(image, 0, 0)).toEqual([255, 0, 0, 255])
+    expect(pixel(image, 1, 0)).toEqual([255, 0, 0, 255])
+    expect(pixel(image, 1, 1)).toEqual([255, 0, 0, 255])
+    expect(pixel(image, 2, 0)).toEqual([0, 0, 0, 0])
+    // The fill is display-only: the source cell is still outside domain.
+    expect(values[1]).toBe(OUTSIDE_DOMAIN)
+  })
+
+  it('fills coastal continuous pixels within 1.5 cells', () => {
+    const values = new Float32Array(N_ROWS * N_COLS).fill(Number.NaN)
+    values[0] = 5
+    const image = renderContinuousImage(
+      values,
+      (value) => [Math.round(value * 10), 0, 0, 255],
+      1,
+      { coastalFill: true },
+    )
+    expect(pixel(image, 0, 0)).toEqual([50, 0, 0, 255])
+    expect(pixel(image, 1, 0)).toEqual([50, 0, 0, 255])
+    expect(pixel(image, 2, 0)[3]).toBe(0)
+  })
+})
+
+describe('quality layer', () => {
   it('renders the quality layer over the trend colours', () => {
     const trend = new Int8Array(N_ROWS * N_COLS)
     const quality = new Int8Array(N_ROWS * N_COLS)

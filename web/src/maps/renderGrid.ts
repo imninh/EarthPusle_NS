@@ -5,7 +5,7 @@
 // clip the result to the Natural Earth land polygons. Continuous layers use
 // bilinear interpolation between valid neighbours; class layers stay crisp.
 import type { FeatureCollection, Geometry, Position } from 'geojson'
-import { N_COLS, N_ROWS, QUALITY_STEP, QUALITY_STEP_KNOWN_FORCING } from '../data/contract'
+import { N_COLS, N_ROWS, OUTSIDE_DOMAIN, QUALITY_STEP, QUALITY_STEP_KNOWN_FORCING } from '../data/contract'
 import { MERCATOR_LAT_LIMIT, type Rgba } from './gridImage'
 
 /** 8 px per 1° cell: 2880 x 1440 for the global grid. */
@@ -71,16 +71,75 @@ function bilinearCore(
   return total / weight
 }
 
+/** Options for continuous rendering (P09b). */
+export interface ContinuousRenderOptions {
+  /** Per-cell display opacity in 0..1; bilinearly blended with the colour. */
+  opacity?: ArrayLike<number>
+  /** Fill land pixels whose own cell is invalid from the nearest valid cell. */
+  coastalFill?: boolean
+  /** A cell is valid for coastal fill; default finite value. */
+  isValid?: (value: number, index: number) => boolean
+}
+
+export interface ClassRenderOptions {
+  coastalFill?: boolean
+  isValid?: (value: number, index: number) => boolean
+  /** Fine diagonal stipple for non-significant / mixed class cells. */
+  isStippled?: (value: number, index: number) => boolean
+}
+
+/**
+ * Nearest valid cell centre within `maxDistance` cell units. Returns its flat
+ * index, or -1 when no valid cell is close enough. Used only for display fill.
+ */
+export function nearestValidIndex(
+  values: ArrayLike<number>,
+  cellX: number,
+  cellY: number,
+  isValid: (value: number, index: number) => boolean,
+  maxDistance = 1.5,
+  width: number = N_COLS,
+  height: number = N_ROWS,
+): number {
+  const cx = Math.max(0, Math.min(width - 1, cellX))
+  const cy = Math.max(0, Math.min(height - 1, cellY))
+  const minRow = Math.max(0, Math.floor(cy - maxDistance))
+  const maxRow = Math.min(height - 1, Math.ceil(cy + maxDistance))
+  const minCol = Math.max(0, Math.floor(cx - maxDistance))
+  const maxCol = Math.min(width - 1, Math.ceil(cx + maxDistance))
+  let best = -1
+  let bestDistance = Number.POSITIVE_INFINITY
+  for (let row = minRow; row <= maxRow; row++) {
+    for (let col = minCol; col <= maxCol; col++) {
+      const index = row * width + col
+      const value = values[index]
+      if (!isValid(value, index)) continue
+      const distance = Math.hypot(col - cx, row - cy)
+      if (distance > maxDistance) continue
+      if (distance < bestDistance - 1e-9) {
+        bestDistance = distance
+        best = index
+      }
+    }
+  }
+  return best
+}
+
 /** Bilinear continuous layer at canvas resolution. */
 export function renderContinuousImage(
   values: ArrayLike<number>,
   colour: (value: number, index: number) => Rgba,
   pixelsPerDegree: number = PIXELS_PER_DEG,
+  options: ContinuousRenderOptions = {},
 ): ImageData {
   const { width, height } = gridCanvasSize(pixelsPerDegree)
   if (values.length !== N_ROWS * N_COLS) {
     throw new Error(`renderContinuousImage: expected ${N_ROWS * N_COLS} values, got ${values.length}`)
   }
+  if (options.opacity && options.opacity.length !== N_ROWS * N_COLS) {
+    throw new Error(`renderContinuousImage: opacity needs ${N_ROWS * N_COLS} values`)
+  }
+  const isValid = options.isValid ?? ((value: number) => Number.isFinite(value))
   const data = new Uint8ClampedArray(width * height * 4)
   for (let y = 0; y < height; y++) {
     const cellY = (y + 0.5) / pixelsPerDegree - 0.5
@@ -88,38 +147,66 @@ export function renderContinuousImage(
     for (let x = 0; x < width; x++) {
       const cellX = (x + 0.5) / pixelsPerDegree - 0.5
       const col = Math.min(N_COLS - 1, Math.max(0, Math.floor(cellX + 0.5)))
-      const value = bilinearCore(values, cellX, cellY, N_COLS, N_ROWS)
+      let value = bilinearCore(values, cellX, cellY, N_COLS, N_ROWS)
+      let opacity = options.opacity
+        ? bilinearCore(options.opacity, cellX, cellY, N_COLS, N_ROWS)
+        : null
+      let index = row * N_COLS + col
+      if (
+        options.coastalFill &&
+        (!Number.isFinite(value) || (opacity != null && !Number.isFinite(opacity)))
+      ) {
+        const fillIndex = nearestValidIndex(values, cellX, cellY, isValid)
+        if (fillIndex < 0) continue
+        value = values[fillIndex]
+        index = fillIndex
+        if (options.opacity) opacity = options.opacity[fillIndex]
+      }
       if (!Number.isFinite(value)) continue
-      const [red, green, blue, alpha] = colour(value, row * N_COLS + col)
+      const [red, green, blue, alpha] = colour(value, index)
+      const blendedAlpha =
+        opacity == null ? alpha : Math.round(alpha * Math.max(0, Math.min(1, opacity)))
       const offset = (y * width + x) * 4
       data[offset] = red
       data[offset + 1] = green
       data[offset + 2] = blue
-      data[offset + 3] = alpha
+      data[offset + 3] = blendedAlpha
     }
   }
   return new ImageData(data, width, height)
 }
 
-/** Nearest-cell class layer: crisp edges, no interpolation. */
+/** Nearest-cell class layer: crisp edges, optional stipple and coastal fill. */
 export function renderClassImage(
   values: ArrayLike<number>,
   colour: (value: number, index: number) => Rgba,
   pixelsPerDegree: number = PIXELS_PER_DEG,
+  options: ClassRenderOptions = {},
 ): ImageData {
   if (values.length !== N_ROWS * N_COLS) {
     throw new Error(`renderClassImage: expected ${N_ROWS * N_COLS} values, got ${values.length}`)
   }
+  const isValid = options.isValid ?? ((value: number) => value !== OUTSIDE_DOMAIN)
   const { width, height } = gridCanvasSize(pixelsPerDegree)
   const data = new Uint8ClampedArray(width * height * 4)
   for (let y = 0; y < height; y++) {
     const row = Math.min(N_ROWS - 1, Math.floor(y / pixelsPerDegree))
+    const cellY = row
     for (let x = 0; x < width; x++) {
       const col = Math.min(N_COLS - 1, Math.floor(x / pixelsPerDegree))
-      const index = row * N_COLS + col
-      const value = values[index]
+      let value = values[row * N_COLS + col]
+      let index = row * N_COLS + col
+      if (options.coastalFill && !isValid(value, index)) {
+        const fillIndex = nearestValidIndex(values, col, cellY, isValid)
+        if (fillIndex < 0) continue
+        value = values[fillIndex]
+        index = fillIndex
+      }
       if (!Number.isFinite(value)) continue
-      const [red, green, blue, alpha] = colour(value, index)
+      let [red, green, blue, alpha] = colour(value, index)
+      if (options.isStippled?.(value, index)) {
+        alpha = (x + y) % 4 === 0 ? Math.min(alpha, 150) : 0
+      }
       const offset = (y * width + x) * 4
       data[offset] = red
       data[offset + 1] = green
@@ -172,8 +259,13 @@ export function renderQualityImage(
   quality: ArrayLike<number>,
   colour: (value: number, index: number) => Rgba,
   pixelsPerDegree: number = PIXELS_PER_DEG,
+  options: ClassRenderOptions = {},
 ): ImageData {
-  return applyQualityHatch(renderClassImage(trend, colour, pixelsPerDegree), quality, pixelsPerDegree)
+  return applyQualityHatch(
+    renderClassImage(trend, colour, pixelsPerDegree, options),
+    quality,
+    pixelsPerDegree,
+  )
 }
 
 /** Flatten Polygon / MultiPolygon / GeometryCollection features to polygon rings. */

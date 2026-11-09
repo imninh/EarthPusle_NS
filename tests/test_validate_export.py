@@ -13,6 +13,7 @@ from earthpulse.export import WEB_DATA_DIR
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "validate_export.py"
+EXPORT_SCRIPT = ROOT / "scripts" / "p_export.py"
 
 
 def _run(folder: Path, *extra: str) -> subprocess.CompletedProcess[str]:
@@ -54,6 +55,24 @@ def test_cli_release_reports_synthetic_flag(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert "release check failed" in result.stdout
     assert "Synthetic flag present: yes" in result.stdout
+
+
+def test_cli_publish_only_fails_for_missing_export(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(EXPORT_SCRIPT),
+            "--publish-only",
+            "--out",
+            str(tmp_path / "missing"),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "PUBLISH FAILED" in result.stderr
 
 
 @pytest.mark.skipif(

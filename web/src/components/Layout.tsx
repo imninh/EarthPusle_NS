@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { useApp } from '../data/AppState'
 import type { Page } from '../data/types'
 import { CoachMark, shouldShowCoach } from './ui'
@@ -14,6 +14,7 @@ const VIEWS: { id: Page; label: string; short: string }[] = [
 export function Layout({ children }: { children: ReactNode }) {
   const { index, page, setPage } = useApp()
   const [coachOpen, setCoachOpen] = useState(shouldShowCoach)
+  const helpButtonRef = useRef<HTMLButtonElement>(null)
   const showVariable = page === 'discovery' || page === 'region'
   const showPeriod = page === 'screener' || page === 'discovery' || page === 'region'
 
@@ -61,6 +62,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </div>
           ) : null}
           <button
+            ref={helpButtonRef}
             type="button"
             className="help-button"
             onClick={() => setCoachOpen(true)}
@@ -81,7 +83,11 @@ export function Layout({ children }: { children: ReactNode }) {
         </span>
         <span>Not a verdict: a significant trend is evidence to read, not proof of cause.</span>
       </footer>
-      <CoachMark open={coachOpen} onClose={() => setCoachOpen(false)} />
+      <CoachMark
+        open={coachOpen}
+        onClose={() => setCoachOpen(false)}
+        returnFocusRef={helpButtonRef}
+      />
     </div>
   )
 }

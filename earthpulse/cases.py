@@ -984,11 +984,19 @@ def select_cases(
 def _variable_meta(registry: Mapping | Sequence, variable_id: str) -> Mapping:
     if isinstance(registry, Mapping):
         variables = registry.get("variables", [])
+        products = registry.get("products", {}) or {}
     else:
         variables = registry
+        products = {}
     for variable in variables:
         if variable.get("id") == variable_id:
-            return variable
+            meta = dict(variable)
+            product = meta.get("product")
+            product_meta = products.get(product, {}) if product else {}
+            if product_meta:
+                meta.setdefault("doi", product_meta.get("doi", ""))
+                meta.setdefault("product_version", product_meta.get("version", ""))
+            return meta
     return {}
 
 
@@ -997,11 +1005,20 @@ def _direction_word(trend_class: int) -> str:
 
 
 def _slope_unit(variable_meta: Mapping) -> str:
+    """Evidence slope unit: the registry unit converted from per-year to per-decade."""
+
     unit = variable_meta.get("slope_unit")
-    if unit:
-        return str(unit)
-    display_unit = variable_meta.get("display_unit")
-    return f"{display_unit} per year" if display_unit else ""
+    if not unit:
+        display_unit = variable_meta.get("display_unit")
+        unit = f"{display_unit} per year" if display_unit else ""
+    unit = str(unit).strip()
+    if unit == "per year":
+        return "per decade"
+    if unit.endswith(" per year"):
+        return f"{unit[: -len(' per year')]} per decade"
+    if unit.endswith("per year"):
+        return f"{unit[: -len('per year')]}per decade"
+    return f"{unit} per decade" if unit else "per decade"
 
 
 def _evidence_json(stats: Mapping, variable_meta: Mapping) -> dict:
@@ -1009,6 +1026,7 @@ def _evidence_json(stats: Mapping, variable_meta: Mapping) -> dict:
     return {
         "variable": stats["variable"],
         "product": str(variable_meta.get("product", "")),
+        "doi": str(variable_meta.get("doi", "")),
         "method": EVIDENCE_METHOD,
         "sen_slope_decade": _round(stats.get("sen_slope_decade")),
         "slope_unit": _slope_unit(variable_meta),

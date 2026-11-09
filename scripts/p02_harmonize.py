@@ -35,9 +35,16 @@ INTERIM_DIR = PROJECT_ROOT / "data" / "interim" / "harmonized_monthly"
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--variable", help="harmonize a single variable id")
+    parser.add_argument(
+        "--mask-only",
+        action="store_true",
+        help="rebuild common_mask.nc from existing cubes (P08 T1), no re-harmonization",
+    )
     parser.add_argument("--skip-mask", action="store_true",
                         help="skip the common-mask step")
     args = parser.parse_args()
+    if args.mask_only and args.variable:
+        parser.error("--variable cannot be combined with --mask-only")
 
     registry = load_registry()
     variables = registry["variables"]
@@ -66,14 +73,17 @@ def main() -> int:
         return 1
 
     products = {name: cfg for name, cfg in registry["products"].items()}
-    for variable in variables:
-        product_cfg = products[variable["product"]]
-        out_path = INTERIM_DIR / f"{variable['id']}.nc"
-        start = time.perf_counter()
-        harmonize_variable(variable, product_cfg, RAW_ROOT, out_path)
-        elapsed = time.perf_counter() - start
-        print(f"  {variable['id']}: harmonized in {elapsed:.1f}s -> {out_path.name}",
-              flush=True)
+    if args.mask_only:
+        print("Mask-only rebuild: using existing harmonized cubes.", flush=True)
+    else:
+        for variable in variables:
+            product_cfg = products[variable["product"]]
+            out_path = INTERIM_DIR / f"{variable['id']}.nc"
+            start = time.perf_counter()
+            harmonize_variable(variable, product_cfg, RAW_ROOT, out_path)
+            elapsed = time.perf_counter() - start
+            print(f"  {variable['id']}: harmonized in {elapsed:.1f}s -> {out_path.name}",
+                  flush=True)
 
     if not args.skip_mask:
         start = time.perf_counter()

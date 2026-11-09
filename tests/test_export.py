@@ -19,6 +19,7 @@ import yaml
 
 from earthpulse import contract
 from earthpulse.export import (
+    EXPORT_SCHEMA_VERSION,
     TARGET_LAT,
     TARGET_LON,
     WEB_DATA_DIR,
@@ -33,6 +34,7 @@ TEMPERATURE = "surface_skin_temperature"
 MOISTURE = "root_zone_soil_moisture"
 WINDOW = "2001-2024"
 PAIR = f"{MOISTURE}__{TEMPERATURE}"
+COUNTRY_ID = "country_001"
 
 # Synthetic land patch: rows 60..69 (29.5N..20.5N), cols 185..195
 # (5.5E..15.5E). The marker cell is row 66, col 192 = 23.5N, 12.5E.
@@ -270,6 +272,35 @@ def _build_fixture(root: Path) -> dict:
     }
     regions_path.write_text(yaml.safe_dump(regions), encoding="utf-8")
 
+    countries_path = root / "countries.geojson"
+    countries_path.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "id": "001",
+                        "properties": {"name": "Testland"},
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [
+                                [
+                                    [5.0, 20.0],
+                                    [16.0, 20.0],
+                                    [16.0, 30.0],
+                                    [5.0, 30.0],
+                                    [5.0, 20.0],
+                                ]
+                            ],
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
     return {
         "root": root,
         "mask": mask,
@@ -278,6 +309,7 @@ def _build_fixture(root: Path) -> dict:
         "trends": trends,
         "correlations": correlations,
         "regions_path": regions_path,
+        "countries_path": countries_path,
         "values": values_by_variable,
         "anomalies_values": anomalies_by_variable,
         "region_bbox": region_bbox,
@@ -296,6 +328,7 @@ def exported(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
         trends_dir=info["trends"],
         correlations_dir=info["correlations"],
         regions_path=info["regions_path"],
+        country_geojson_path=info["countries_path"],
         variable_ids=[TEMPERATURE, MOISTURE],
         window_ids=[WINDOW],
     )
@@ -314,8 +347,8 @@ def test_index_follows_contract(exported: SimpleNamespace) -> None:
     index = _read_json(exported.out / "index.json")
 
     assert index["synthetic"] is False
-    assert index["schema_version"] == "1.1"
-    assert index["schema_version"] == contract.SCHEMA_VERSION
+    assert index["schema_version"] == EXPORT_SCHEMA_VERSION
+    assert index["schema_version"] == "1.2"
     assert index["generated_at"].endswith("Z")
     assert index["months"] == month_labels()
     assert index["baseline"] == list(contract.BASELINE)
@@ -347,6 +380,9 @@ def test_index_follows_contract(exported: SimpleNamespace) -> None:
     assert index["tiles"]["size"] == contract.TILE_SIZE
     assert "r060_c190" in index["tiles"]["ids"]
     assert index["tiles"]["ids"] == sorted(index["tiles"]["ids"])
+    assert index["quality"]["layers"] == list(contract.QUALITY_LAYERS)
+    assert "Pettitt" in index["quality"]["method"]
+    assert index["quality"]["known_forcing_changes"]["GLDAS_NOAH10_M"] == [2008, 2012]
 
 
 def test_grid_roundtrip_marker_at_contract_row_col(
@@ -392,6 +428,60 @@ def test_correlation_layers_are_exported(exported: SimpleNamespace) -> None:
     assert q_values[MARKER] == pytest.approx(0.01)
     assert n_pairs[MARKER] == pytest.approx(288.0)
     assert np.isnan(r_values[0, 0])
+
+
+def test_quality_layers_are_exported(exported: SimpleNamespace) -> None:
+    folder = exported.out / "grids" / TEMPERATURE / WINDOW
+    flag_path = folder / "quality_flag.i8"
+    break_path = folder / "breakpoint_year.f32"
+    assert flag_path.stat().st_size == contract.N_ROWS * contract.N_COLS
+    assert break_path.stat().st_size == contract.N_ROWS * contract.N_COLS * 4
+
+    flags = np.fromfile(flag_path, dtype=np.int8).reshape(
+        contract.N_ROWS, contract.N_COLS
+    )
+    breakpoint = _read_grid(break_path)
+    assert flags[MARKER] == contract.QUALITY_NONE
+    assert flags[INSUFFICIENT] == contract.INSUFFICIENT_DATA
+    assert flags[0, 0] == contract.OUTSIDE_DOMAIN
+    assert np.isnan(breakpoint[MARKER])
+    assert np.isnan(breakpoint[INSUFFICIENT])
+
+
+def test_country_domains_are_exported(exported: SimpleNamespace) -> None:
+    regions = _read_json(exported.out / "regions.json")
+    assert regions["regions"][0]["kind"] == "box"
+    assert regions["country_grid"] == contract.COUNTRY_GRID_FILE
+    assert len(regions["countries"]) == 1
+    country = regions["countries"][0]
+    assert country["id"] == COUNTRY_ID
+    assert country["label"] == "Testland"
+    assert country["iso_numeric"] == "001"
+    assert country["n_cells"] == 110
+    assert country["index"] == 0
+
+    grid_path = exported.out / contract.COUNTRY_GRID_FILE
+    assert grid_path.stat().st_size == contract.N_ROWS * contract.N_COLS * 2
+    grid = np.fromfile(grid_path, dtype="<i2").reshape(
+        contract.N_ROWS, contract.N_COLS
+    )
+    assert grid[MARKER] == country["index"]
+    assert grid[0, 0] == contract.COUNTRY_NONE
+
+    screener = _read_json(
+        exported.out / "screener" / WINDOW / f"{COUNTRY_ID}.json"
+    )
+    assert screener["domain"] == COUNTRY_ID
+    assert len(screener["rows"]) == 2
+    series = _read_json(
+        exported.out
+        / "series"
+        / "regions"
+        / COUNTRY_ID
+        / f"{TEMPERATURE}.json"
+    )
+    assert series["region"] == COUNTRY_ID
+    assert len(series["values"]) == contract.N_MONTHS
 
 
 def test_region_series_matches_hand_computed_weighted_mean(
@@ -481,7 +571,7 @@ def test_climatology_file_is_exported(exported: SimpleNamespace) -> None:
 def test_screener_covers_every_variable_and_domain(
     exported: SimpleNamespace,
 ) -> None:
-    for domain_id in ("global", "sahara_box", "empty_ocean"):
+    for domain_id in ("global", "sahara_box", "empty_ocean", COUNTRY_ID):
         data = _read_json(exported.out / "screener" / WINDOW / f"{domain_id}.json")
         assert set(data) == {"window", "domain", "synthetic", "rows"}
         assert data["window"] == WINDOW
@@ -501,7 +591,15 @@ def test_screener_covers_every_variable_and_domain(
                 "median_sen_slope_decade_sig",
                 "regional_contrast",
                 "n_cells_evaluated",
+                "step_flag_area_fraction",
+                "sig_trend_flagged_fraction",
             }
+            if domain_id == "empty_ocean":
+                assert row["step_flag_area_fraction"] is None
+                assert row["sig_trend_flagged_fraction"] is None
+            else:
+                assert row["step_flag_area_fraction"] == 0.0
+                assert row["sig_trend_flagged_fraction"] == 0.0
 
     empty_rows = _read_json(
         exported.out / "screener" / WINDOW / "empty_ocean.json"
@@ -513,7 +611,7 @@ def test_screener_covers_every_variable_and_domain(
 def test_validator_passes_on_generated_export(exported: SimpleNamespace) -> None:
     result = validate_export(exported.out)
     assert result["ok"], result["errors"]
-    assert result["schema_version"] == "1.1"
+    assert result["schema_version"] == "1.2"
     assert result["synthetic"] is False
     assert result["files"] > 0
     assert result["bytes"] > 0
@@ -569,6 +667,33 @@ def test_validator_detects_missing_climatology(
     result = validate_export(folder)
     assert not result["ok"]
     assert any("climatology" in error for error in result["errors"])
+
+
+def test_validator_detects_missing_quality_layer(
+    exported: SimpleNamespace, tmp_path: Path
+) -> None:
+    folder = _copy_export(exported, tmp_path)
+    (
+        folder / "grids" / TEMPERATURE / WINDOW / "quality_flag.i8"
+    ).unlink()
+
+    result = validate_export(folder)
+    assert not result["ok"]
+    assert any("quality_flag" in error for error in result["errors"])
+
+
+def test_validator_detects_unknown_country_index(
+    exported: SimpleNamespace, tmp_path: Path
+) -> None:
+    folder = _copy_export(exported, tmp_path)
+    path = folder / contract.COUNTRY_GRID_FILE
+    values = np.fromfile(path, dtype="<i2")
+    values[0] = 99
+    values.tofile(path)
+
+    result = validate_export(folder)
+    assert not result["ok"]
+    assert any("country indices" in error for error in result["errors"])
 
 
 def test_validator_release_rejects_synthetic(
