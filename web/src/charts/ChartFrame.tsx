@@ -1,0 +1,169 @@
+import { useEffect, useRef, type ReactNode } from 'react'
+import Plotly from 'plotly.js-dist-min'
+import { Plot } from './plotly'
+import { monthAfterIso, monthIso, useChartColors, withAlpha } from './theme'
+import './charts.css'
+
+export interface ChartTrace {
+  x: readonly string[]
+  y: readonly (number | null)[]
+  name: string
+  color: 'accent' | 'secondary' | 'text'
+  dash?: 'solid' | 'dash'
+}
+
+interface ChartFrameProps {
+  title: string
+  yTitle: string
+  traces: readonly ChartTrace[]
+  band?: { start: string; end: string } | null
+  footer?: ReactNode
+}
+
+export function ChartFrame({ title, yTitle, traces, band, footer }: ChartFrameProps) {
+  const colors = useChartColors()
+  const frameRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const frame = frameRef.current
+    if (!frame || typeof ResizeObserver === 'undefined') return
+    const plots = (Plotly as { Plots?: { resize?: (node: HTMLElement) => void } }).Plots
+    const observer = new ResizeObserver(() => {
+      const plot = frame.querySelector('.js-plotly-plot')
+      if (!(plot instanceof HTMLElement) || plot.offsetWidth === 0) return
+      try {
+        plots?.resize?.(plot)
+      } catch {
+        // Plotly throws if resize runs before the first draw.
+      }
+    })
+    observer.observe(frame)
+    return () => observer.disconnect()
+  }, [])
+
+  const palette = { accent: colors.accent, secondary: colors.secondary, text: colors.text }
+  const data: PlotSegment[] = []
+  for (const trace of traces) data.push(...segmentTrace(trace, palette[trace.color]))
+  const layout = {
+    title: { text: title, font: { size: 14, color: colors.text }, x: 0, xanchor: 'left' },
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: colors.text, family: "system-ui, 'Segoe UI', Roboto, sans-serif", size: 12 },
+    autosize: true,
+    dragmode: false,
+    showlegend: false,
+    margin: { l: 52, r: 8, t: 36, b: 36 },
+    xaxis: {
+      type: 'date',
+      gridcolor: colors.border,
+      linecolor: colors.border,
+      tickfont: { color: colors.muted, size: 10 },
+      zeroline: false,
+    },
+    yaxis: {
+      title: { text: yTitle, font: { color: colors.muted, size: 11 }, standoff: 8 },
+      gridcolor: colors.border,
+      linecolor: colors.border,
+      tickfont: { color: colors.muted, size: 10 },
+      zerolinecolor: colors.muted,
+    },
+    hoverlabel: {
+      bgcolor: colors.surface,
+      bordercolor: colors.border,
+      font: { color: colors.text, size: 12 },
+    },
+    shapes: band
+      ? [
+          {
+            type: 'rect',
+            xref: 'x',
+            yref: 'paper',
+            x0: monthIso(band.start),
+            x1: monthAfterIso(band.end),
+            y0: 0,
+            y1: 1,
+            fillcolor: withAlpha(colors.accent, 0.16),
+            line: { width: 0 },
+            layer: 'below',
+          },
+        ]
+      : [],
+  }
+
+  return (
+    <figure className="chart-card">
+      <div className="chart-frame" ref={frameRef}>
+        <Plot
+          data={data}
+          layout={layout}
+          config={{ responsive: true, displayModeBar: false, displaylogo: false }}
+          useResizeHandler
+          style={{ width: '100%', height: '100%' }}
+        />
+      </div>
+      {footer}
+    </figure>
+  )
+}
+
+interface PlotSegment {
+  type: 'scatter'
+  mode: 'lines' | 'markers'
+  x: string[]
+  y: (number | null)[]
+  name: string
+  connectgaps: false
+  hoverinfo?: 'skip'
+  hovertemplate?: string
+  line?: { color: string; width: number; dash: 'solid' | 'dash' }
+  marker?: { color: string; size: number }
+}
+
+function segmentTrace(trace: ChartTrace, color: string): PlotSegment[] {
+  const segments: { start: number; end: number }[] = []
+  let start = -1
+  for (let i = 0; i < trace.y.length; i++) {
+    const value = trace.y[i]
+    const missing = value == null || !Number.isFinite(value)
+    if (missing) {
+      if (start >= 0) segments.push({ start, end: i - 1 })
+      start = -1
+    } else if (start < 0) {
+      start = i
+    }
+  }
+  if (start >= 0) segments.push({ start, end: trace.y.length - 1 })
+  if (segments.length === 0) {
+    return [
+      {
+        type: 'scatter',
+        mode: 'lines',
+        x: trace.x.map((month) => monthIso(month)),
+        y: trace.x.map(() => null),
+        name: trace.name,
+        connectgaps: false,
+        hoverinfo: 'skip',
+      },
+    ]
+  }
+  return segments.map((segment) => {
+    const single = segment.start === segment.end
+    const x: string[] = []
+    const y: number[] = []
+    for (let i = segment.start; i <= segment.end; i++) {
+      x.push(monthIso(trace.x[i]))
+      y.push(trace.y[i] as number)
+    }
+    return {
+      type: 'scatter',
+      mode: single ? 'markers' : 'lines',
+      x,
+      y,
+      name: trace.name,
+      connectgaps: false,
+      line: { color, width: 1.75, dash: trace.dash ?? 'solid' },
+      marker: { color, size: single ? 7 : 0 },
+      hovertemplate: `%{x|%Y-%m}: %{y:.4f}<extra>${trace.name}</extra>`,
+    }
+  })
+}

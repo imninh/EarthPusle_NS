@@ -1,0 +1,28 @@
+[project]
+name = "earthpulse"
+version = "0.1.0"
+description = "Evidence-first Earth system trend detection with NASA GLDAS and GPM IMERG data (NASA Space Apps 2026)."
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "numpy",
+    "pandas==3.1.0",  # 3.1.1 DLLs blocked by Windows Smart App Control on this machine
+    "xarray",
+    "netCDF4",
+    "scipy",
+    "statsmodels",
+    "pymannkendall",
+    "pyarrow==26.0.0",  # 26.0.1 DLLs blocked by Windows Smart App Control on this machine
+    "earthaccess",
+    "matplotlib",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "jupyterlab", "ipykernel"]
+
+[tool.setuptools]
+packages = ["earthpulse"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

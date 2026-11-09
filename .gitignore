@@ -1,0 +1,38 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Data: never commit raw/derived NetCDF or large outputs
+data/raw/**
+data/interim/**
+data/processed/**
+!data/**/.gitkeep
+*.nc
+*.nc4
+*.HDF5
+*.h5
+
+# Secrets (Earthdata credentials)
+.netrc
+_netrc
+.env
+.urs_cookies
+.dodsrc
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.egg-info/
+
+# Generated data served to the web app (mock or exported)
+web/public/data/
+data/export/

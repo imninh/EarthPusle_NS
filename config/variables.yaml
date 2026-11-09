@@ -1,0 +1,159 @@
+# EarthPulse variable registry (plan §3.7). Facts verified by P01 on 2026-11-09
+# (data/metadata/manifest.json, docs/DATA_DICTIONARY.md). Owned by the architect.
+#
+# Review decisions (2026-11-09):
+# - GLDAS source is GLDAS_NOAH10_M V2.1 (native 1°, cell centres -59.5..89.5 / -179.5..179.5),
+#   which matches the analysis grid exactly, so GLDAS needs no regridding.
+# - Qs_acc (surface runoff) is excluded until its monthly statistic is resolved (P01 open question 1).
+# - SWE_inst is excluded for now: extreme values over Greenland need a QC rule first (P01 surprise 12).
+# - Precipitation comes only from IMERG; GLDAS forcing precipitation is not exposed.
+#
+# conversion: how to go from the native monthly value to display_unit.
+#   identity | kelvin_to_celsius | per_second_to_per_month | per_hour_to_per_month | kg_per_kg_to_g_per_kg
+#   "per month" conversions use the exact number of seconds/hours in that calendar month.
+#   1 kg m-2 of water = 1 mm.
+
+products:
+  GLDAS_NOAH10_M:
+    version: "2.1"
+    concept_id: C1288937542-GES_DISC
+    doi: 10.5067/LWTYSMP3VM5Z
+    source_type: model
+    open_with: {engine: netcdf4, group: null}
+    dims: [time, lat, lon]
+    fill_value: -9999.0
+  GPM_3IMERGM:
+    version: "07"
+    concept_id: C2723754851-GES_DISC
+    doi: 10.5067/GPM/IMERG/3B-MONTH/07
+    source_type: mission_observation
+    open_with: {engine: netcdf4, group: Grid}
+    dims: [time, lon, lat]   # transposed relative to GLDAS
+    native_resolution_deg: 0.1
+    fill_value: -9999.9
+
+variables:
+  - id: surface_skin_temperature
+    label: Surface skin temperature
+    category: temperature
+    product: GLDAS_NOAH10_M
+    source_variable: AvgSurfT_inst
+    native_unit: K
+    display_unit: degC
+    conversion: kelvin_to_celsius
+    semantic_type: state
+    monthly_statistic: mean
+    increase_means: warmer
+    core: true
+    verified: true
+    description: Temperature of the land surface itself (skin), averaged over the month.
+    caveats:
+      - GLDAS Noah land-surface model output, not a direct measurement.
+      - Skin temperature, not the 2 m air temperature reported by weather stations.
+
+  - id: root_zone_soil_moisture
+    label: Root-zone soil moisture
+    category: water
+    product: GLDAS_NOAH10_M
+    source_variable: RootMoist_inst
+    native_unit: kg m-2
+    display_unit: kg m-2
+    conversion: identity
+    semantic_type: state
+    monthly_statistic: mean
+    increase_means: wetter
+    core: true
+    verified: true
+    description: Water held in the soil layers that plant roots draw from, averaged over the month.
+    caveats:
+      - Model diagnostic from GLDAS Noah, not an in-situ measurement.
+
+  - id: precipitation
+    label: Precipitation
+    category: water
+    product: GPM_3IMERGM
+    source_variable: precipitation
+    native_unit: mm/hr
+    display_unit: mm/month
+    conversion: per_hour_to_per_month
+    semantic_type: rate
+    monthly_statistic: mean
+    increase_means: wetter
+    core: true
+    verified: true
+    description: Monthly precipitation total from the GPM IMERG multi-satellite estimate.
+    caveats:
+      - Merged multi-satellite estimate calibrated with rain gauges, not a pure direct measurement.
+      - Native 0.1° grid aggregated to 1° with area weights.
+
+  - id: air_temperature
+    label: Near-surface air temperature
+    category: temperature
+    product: GLDAS_NOAH10_M
+    source_variable: Tair_f_inst
+    native_unit: K
+    display_unit: degC
+    conversion: kelvin_to_celsius
+    semantic_type: state
+    monthly_statistic: mean
+    increase_means: warmer
+    core: false
+    verified: true
+    description: Air temperature near the surface, averaged over the month.
+    caveats:
+      - Meteorological forcing field used to drive the GLDAS model, not a model prediction.
+
+  - id: surface_soil_moisture
+    label: Surface soil moisture (0-10 cm)
+    category: water
+    product: GLDAS_NOAH10_M
+    source_variable: SoilMoi0_10cm_inst
+    native_unit: kg m-2
+    display_unit: kg m-2
+    conversion: identity
+    semantic_type: state
+    monthly_statistic: mean
+    increase_means: wetter
+    core: false
+    verified: true
+    description: Water in the top 10 cm of soil, averaged over the month.
+    caveats:
+      - GLDAS Noah land-surface model output, not a direct measurement.
+
+  - id: evapotranspiration
+    label: Evapotranspiration
+    category: water
+    product: GLDAS_NOAH10_M
+    source_variable: Evap_tavg
+    native_unit: kg m-2 s-1
+    display_unit: mm/month
+    conversion: per_second_to_per_month
+    semantic_type: rate
+    monthly_statistic: mean
+    increase_means: more evaporation
+    core: false
+    verified: true
+    description: Water returned to the air from soil and plants, as a monthly total.
+    caveats:
+      - GLDAS Noah land-surface model output, not a direct measurement.
+
+  - id: specific_humidity
+    label: Specific humidity
+    category: atmosphere
+    product: GLDAS_NOAH10_M
+    source_variable: Qair_f_inst
+    native_unit: kg kg-1
+    display_unit: g kg-1
+    conversion: kg_per_kg_to_g_per_kg
+    semantic_type: state
+    monthly_statistic: mean
+    increase_means: more humid
+    core: false
+    verified: true
+    description: Mass of water vapour per mass of near-surface air, averaged over the month.
+    caveats:
+      - Meteorological forcing field used to drive the GLDAS model.
+
+excluded:
+  - {source_variable: Qs_acc, reason: "Monthly statistic of a 3-hour accumulation is undocumented (P01 open question 1)."}
+  - {source_variable: SWE_inst, reason: "Extreme values over Greenland; needs a snow/ice QC rule before use."}

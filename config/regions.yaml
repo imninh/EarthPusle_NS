@@ -1,0 +1,9 @@
+# Predefined regions (contract §5). Owned by the architect.
+# bbox = [west, south, east, north] in degrees. Boxes are approximate and are labelled as such in the UI.
+# west > east means the box crosses the antimeridian (supported by earthpulse.screener.domain_mask).
+regions:
+  - {id: southeast_asia, label: Southeast Asia (approx. box), bbox: [92, -11, 141, 29]}
+  - {id: mekong, label: Mekong basin (approx. box), bbox: [97, 8, 110, 34]}
+  - {id: europe, label: Europe (approx. box), bbox: [-11, 35, 40, 71]}
+  - {id: sahel, label: Sahel (approx. box), bbox: [-18, 10, 40, 20]}
+  - {id: amazon, label: Amazon (approx. box), bbox: [-80, -20, -45, 5]}

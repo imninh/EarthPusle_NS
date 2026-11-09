@@ -1,0 +1,1610 @@
+{
+  "generated_at": "2026-11-09T02:00:58+07:00",
+  "package": "P01",
+  "analysis_window": {
+    "start": "2001-01-01",
+    "end": "2024-12-31",
+    "expected_months": 288
+  },
+  "products": [
+    {
+      "short_name": "GLDAS_NOAH025_M",
+      "version": "2.1",
+      "label": "GLDAS Noah Land Surface Model L4 monthly 0.25 x 0.25 degree V2.1",
+      "concept_id": "C1342986036-GES_DISC",
+      "doi": "10.5067/SXAVCZFAQLNO",
+      "title": "GLDAS Noah Land Surface Model L4 monthly 0.25 x 0.25 degree V2.1 (GLDAS_NOAH025_M)",
+      "temporal_coverage": {
+        "start": "2000-01-01T00:00:00.000Z",
+        "end": null
+      },
+      "spatial_extent": {
+        "west": -180.0,
+        "south": -60.0,
+        "east": 180.0,
+        "north": 90.0
+      },
+      "resolution_deg": 0.25,
+      "documentation_url": "https://disc.gsfc.nasa.gov/datacollection/GLDAS_NOAH025_M_2.1.html",
+      "related_urls": [
+        {
+          "URL": "https://docserver.gesdisc.eosdis.nasa.gov/public/project/Images/GLDAS_NOAH025_M_2.1.png",
+          "Type": "GET RELATED VISUALIZATION",
+          "Subtype": null,
+          "Description": "GLDAS-2.1 Noah monthly 0.25 Degree 0-10 cm Soil Moisture [kg m-2] for Jan 2000."
+        },
+        {
+          "URL": "https://disc.gsfc.nasa.gov/datacollection/GLDAS_NOAH025_M_2.1.html",
+          "Type": "DATA SET LANDING PAGE",
+          "Subtype": null,
+          "Description": "Access the dataset landing page from the GES DISC website."
+        },
+        {
+          "URL": "https://cmr.earthdata.nasa.gov/virtual-directory/collections/C1342986036-GES_DISC",
+          "Type": "GET DATA",
+          "Subtype": "DATA TREE",
+          "Description": "Access the data via HTTPS."
+        },
+        {
+          "URL": "https://giovanni.gsfc.nasa.gov/giovanni/#dataKeyword=GLDAS_NOAH025_M_2_1",
+          "Type": "GET RELATED VISUALIZATION",
+          "Subtype": "GIOVANNI",
+          "Description": "The GES-DISC Interactive Online Visualization ANd aNalysis Interface (Giovanni) is a web-based tool that allows users to interactively visualize and analyze data."
+        },
+        {
+          "URL": "https://cmr.earthdata.nasa.gov/virtual-directory/collections/C1342986036-GES_DISC",
+          "Type": "USE SERVICE API",
+          "Subtype": "OPENDAP DATA",
+          "Description": "Access the data via the OPeNDAP protocol."
+        },
+        {
+          "URL": "https://docserver.gesdisc.eosdis.nasa.gov/public/project/hydrology/README_GLDAS2.pdf",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "READ-ME",
+          "Description": "README Document"
+        },
+        {
+          "URL": "https://ldas.gsfc.nasa.gov/gldas/",
+          "Type": "PROJECT HOME PAGE",
+          "Subtype": null,
+          "Description": "GLDAS Project Web Site"
+        },
+        {
+          "URL": "https://disc.gsfc.nasa.gov/information/howto?tags=hydrology",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "HOW-TO",
+          "Description": "How to read and plot the data."
+        },
+        {
+          "URL": "https://disc.gsfc.nasa.gov/information/documents?title=Hydrology%20Documentation",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "GENERAL DOCUMENTATION",
+          "Description": "GES DISC Hydrology Documentation"
+        },
+        {
+          "URL": "https://search.earthdata.nasa.gov/search/granules?p=C1342986036-GES_DISC",
+          "Type": "GET DATA",
+          "Subtype": "Earthdata Search",
+          "Description": "Earthdata Search allows users to search, discover, visualize, refine, and access NASA Earth Observation data."
+        },
+        {
+          "URL": "https://worldview.earthdata.nasa.gov/?l=Reference_Labels_15m(hidden),Reference_Features_15m(hidden),Coastlines_15m,GLDAS_Near_Surface_Air_Temperature_Monthly,GLDAS_Surface_Total_Precipitation_Rate_Monthly,GLDAS_Underground_Soil_Moisture_Monthly,OCI_PACE_True_Color(hidden),VIIRS_NOAA21_CorrectedReflectance_TrueColor(hidden),VIIRS_NOAA20_CorrectedReflectance_TrueColor(hidden),VIIRS_SNPP_CorrectedReflectance_TrueColor(hidden),MODIS_Aqua_CorrectedReflectance_TrueColor(hidden),MODIS_Terra_CorrectedReflectance_TrueColor&lg=true&t=2026-03-17-T12%3A21%3A36Z",
+          "Type": "GET RELATED VISUALIZATION",
+          "Subtype": "WORLDVIEW",
+          "Description": "Variable layers in Worldview for the dataset: Soil Moisture (Monthly, 0 - 10 cm, Noah LSM), Total Precipitation Rate (Monthly, Surface, Noah LSM), Air Temperature (Monthly, Near Surface, Noah LSM)"
+        },
+        {
+          "URL": "https://docserver.gesdisc.eosdis.nasa.gov/repository/Mission/GLDAS/GLDAS_CLM10SUBP_3H_Status_and_Related_Data_Collections.pdf",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "IMPORTANT NOTICE",
+          "Description": "GLDAS_CLM10SUBP_3H Status and Related Data Collections"
+        },
+        {
+          "URL": "https://docserver.gesdisc.eosdis.nasa.gov/repository/Mission/GLDAS/GLDAS_LSM_Description.pdf",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "GENERAL DOCUMENTATION",
+          "Description": "GLDAS LSM Description"
+        },
+        {
+          "URL": "http://journals.ametsoc.org/doi/10.1175/BAMS-85-3-381",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "PUBLICATIONS",
+          "Description": "M. Rodell, Houser, P. R., Jambor, U., Gottschalck, J., Mitchell, K., Meng, C.-J., Arsenault, K., Cosgrove, B., Radakovich, J., Bosilovich, M., Entin, J. K., Walker, J. P., Lohmann, D., Toll, D., \"The Global Land Data Assimilation System.\" <em>Bull. Amer. Meteor. Soc.</em> vol. 85, no. 3 (2004): 381-394. DOI: 10.1175/BAMS-85-3-381."
+        }
+      ],
+      "source_type": "model",
+      "check_only": false,
+      "access_date": "2026-11-09",
+      "granules_2001_2024": 288,
+      "file_format": "netCDF4",
+      "open_with": {
+        "engine": "netcdf4",
+        "group": null
+      },
+      "grid": {
+        "lat_name": "lat",
+        "lon_name": "lon",
+        "lat_units": "degrees_north",
+        "lon_units": "degrees_east",
+        "lat_long_name": "latitude",
+        "lon_long_name": "longitude",
+        "dimension_order": [
+          "time",
+          "lat",
+          "lon"
+        ],
+        "lat_order": "ascending",
+        "lon_order": "ascending",
+        "lon_range": "-180..180",
+        "resolution_deg": 0.25,
+        "lat_resolution_deg": 0.25,
+        "lon_resolution_deg": 0.25,
+        "resolution_source": "file attribute",
+        "measured_lat_spacing_deg": 0.25,
+        "measured_lon_spacing_deg": 0.25,
+        "lat_extent": [
+          -59.875,
+          89.875
+        ],
+        "lon_extent": [
+          -179.875,
+          179.875
+        ],
+        "cell_registration": "center (inferred; not explicitly stated in file)",
+        "grid_origin": null,
+        "registration_evidence": "MAP_PROJECTION=EQUIDISTANT CYLINDRICAL; DX=0.25; DY=0.25; SOUTH_WEST_CORNER_LAT=-59.875; SOUTH_WEST_CORNER_LON=-179.875; first coordinate value equals the named corner value while CMR gives the outer bounding box, so coordinate arrays are cell centres"
+      },
+      "time": {
+        "raw": 366.0,
+        "units": "days since 2000-01-01 00:00:00",
+        "calendar": "standard",
+        "decoded": "2001-01-01T00:00:00",
+        "represents": "start of month (timestamp equals the start of a one-month time_bnds interval)",
+        "bounds": {
+          "start_raw": 366.0,
+          "end_raw": 397.0,
+          "start": "2001-01-01T00:00:00",
+          "end": "2001-02-01T00:00:00"
+        }
+      },
+      "dimension_order": [
+        "time",
+        "lat",
+        "lon"
+      ],
+      "samples": [
+        {
+          "file": "GLDAS_NOAH025_M.A200101.021.nc4",
+          "path": "data/raw/gldas/GLDAS_NOAH025_M.A200101.021.nc4",
+          "granule_name": "GLDAS_NOAH025_M.A200101.021.nc4",
+          "granule_url": "https://data.gesdisc.earthdata.nasa.gov/data/GLDAS/GLDAS_NOAH025_M.2.1/2001/GLDAS_NOAH025_M.A200101.021.nc4",
+          "size_bytes": 24958295,
+          "sha256": "3a1ca80355b9726ef748449ff87bee1045171e9e34b632efe1f2eaad5fd5468f",
+          "checksum_verified": true,
+          "download_status": "reused",
+          "inspection": {
+            "file_format": "netCDF4",
+            "netcdf_data_model": "NETCDF4",
+            "disk_format": "HDF5",
+            "open_with": {
+              "engine": "netcdf4",
+              "group": null
+            },
+            "dimensions": {
+              "time": 1,
+              "bnds": 2,
+              "lat": 600,
+              "lon": 1440
+            },
+            "dimension_order": [
+              "time",
+              "lat",
+              "lon"
+            ],
+            "coordinates": {
+              "names": [
+                "lat",
+                "lon",
+                "time"
+              ],
+              "lat": {
+                "name": "lat",
+                "units": "degrees_north",
+                "long_name": "latitude",
+                "size": 600
+              },
+              "lon": {
+                "name": "lon",
+                "units": "degrees_east",
+                "long_name": "longitude",
+                "size": 1440
+              }
+            },
+            "grid": {
+              "lat_name": "lat",
+              "lon_name": "lon",
+              "lat_units": "degrees_north",
+              "lon_units": "degrees_east",
+              "lat_long_name": "latitude",
+              "lon_long_name": "longitude",
+              "dimension_order": [
+                "time",
+                "lat",
+                "lon"
+              ],
+              "lat_order": "ascending",
+              "lon_order": "ascending",
+              "lon_range": "-180..180",
+              "resolution_deg": 0.25,
+              "lat_resolution_deg": 0.25,
+              "lon_resolution_deg": 0.25,
+              "resolution_source": "file attribute",
+              "measured_lat_spacing_deg": 0.25,
+              "measured_lon_spacing_deg": 0.25,
+              "lat_extent": [
+                -59.875,
+                89.875
+              ],
+              "lon_extent": [
+                -179.875,
+                179.875
+              ],
+              "cell_registration": "center (inferred; not explicitly stated in file)",
+              "grid_origin": null,
+              "registration_evidence": "MAP_PROJECTION=EQUIDISTANT CYLINDRICAL; DX=0.25; DY=0.25; SOUTH_WEST_CORNER_LAT=-59.875; SOUTH_WEST_CORNER_LON=-179.875; first coordinate value equals the named corner value while CMR gives the outer bounding box, so coordinate arrays are cell centres"
+            },
+            "time": {
+              "raw": 366.0,
+              "units": "days since 2000-01-01 00:00:00",
+              "calendar": "standard",
+              "decoded": "2001-01-01T00:00:00",
+              "represents": "start of month (timestamp equals the start of a one-month time_bnds interval)",
+              "bounds": {
+                "start_raw": 366.0,
+                "end_raw": 397.0,
+                "start": "2001-01-01T00:00:00",
+                "end": "2001-02-01T00:00:00"
+              }
+            },
+            "global_attributes": {
+              "Conventions": "CF-1.6",
+              "title": "GLDAS2.1 LIS land surface model output monthly mean",
+              "source": "Noah_v3.6 forced with GDAS-AGRMET-GPCPv13rA1",
+              "institution": "NASA GSFC",
+              "references": "Rodell_etal_BAMS_2004, Kumar_etal_EMS_2006, Peters-Lidard_etal_ISSE_2007",
+              "comment": "website: https://ldas.gsfc.nasa.gov/gldas, https://lis.gsfc.nasa.gov/",
+              "history": "created on date: 2019-10-30T00:58:00.660",
+              "MAP_PROJECTION": "EQUIDISTANT CYLINDRICAL",
+              "DX": 0.25,
+              "DY": 0.25,
+              "SOUTH_WEST_CORNER_LAT": -59.875,
+              "SOUTH_WEST_CORNER_LON": -179.875,
+              "tavg definision:": "past 3-hour average",
+              "acc definision:": "past 3-hour accumulation",
+              "inst definision:": "instantaneous"
+            }
+          },
+          "year_month": "200101"
+        },
+        {
+          "file": "GLDAS_NOAH025_M.A202407.021.nc4",
+          "path": "data/raw/gldas/GLDAS_NOAH025_M.A202407.021.nc4",
+          "granule_name": "GLDAS_NOAH025_M.A202407.021.nc4",
+          "granule_url": "https://data.gesdisc.earthdata.nasa.gov/data/GLDAS/GLDAS_NOAH025_M.2.1/2024/GLDAS_NOAH025_M.A202407.021.nc4",
+          "size_bytes": 24532713,
+          "sha256": "730acb6d078d51004a221dd3c70313d1be468c8cb50228ccf74605eedd2c6c46",
+          "checksum_verified": true,
+          "download_status": "reused",
+          "inspection": {
+            "file_format": "netCDF4",
+            "netcdf_data_model": "NETCDF4",
+            "disk_format": "HDF5",
+            "open_with": {
+              "engine": "netcdf4",
+              "group": null
+            },
+            "dimensions": {
+              "time": 1,
+              "bnds": 2,
+              "lat": 600,
+              "lon": 1440
+            },
+            "dimension_order": [
+              "time",
+              "lat",
+              "lon"
+            ],
+            "coordinates": {
+              "names": [
+                "lat",
+                "lon",
+                "time"
+              ],
+              "lat": {
+                "name": "lat",
+                "units": "degrees_north",
+                "long_name": "latitude",
+                "size": 600
+              },
+              "lon": {
+                "name": "lon",
+                "units": "degrees_east",
+                "long_name": "longitude",
+                "size": 1440
+              }
+            },
+            "grid": {
+              "lat_name": "lat",
+              "lon_name": "lon",
+              "lat_units": "degrees_north",
+              "lon_units": "degrees_east",
+              "lat_long_name": "latitude",
+              "lon_long_name": "longitude",
+              "dimension_order": [
+                "time",
+                "lat",
+                "lon"
+              ],
+              "lat_order": "ascending",
+              "lon_order": "ascending",
+              "lon_range": "-180..180",
+              "resolution_deg": 0.25,
+              "lat_resolution_deg": 0.25,
+              "lon_resolution_deg": 0.25,
+              "resolution_source": "file attribute",
+              "measured_lat_spacing_deg": 0.25,
+              "measured_lon_spacing_deg": 0.25,
+              "lat_extent": [
+                -59.875,
+                89.875
+              ],
+              "lon_extent": [
+                -179.875,
+                179.875
+              ],
+              "cell_registration": "center (inferred; not explicitly stated in file)",
+              "grid_origin": null,
+              "registration_evidence": "MAP_PROJECTION=EQUIDISTANT CYLINDRICAL; DX=0.25; DY=0.25; SOUTH_WEST_CORNER_LAT=-59.875; SOUTH_WEST_CORNER_LON=-179.875; first coordinate value equals the named corner value while CMR gives the outer bounding box, so coordinate arrays are cell centres"
+            },
+            "time": {
+              "raw": 8948.0,
+              "units": "days since 2000-01-01 00:00:00",
+              "calendar": "standard",
+              "decoded": "2024-07-01T00:00:00",
+              "represents": "start of month (timestamp equals the start of a one-month time_bnds interval)",
+              "bounds": {
+                "start_raw": 8948.0,
+                "end_raw": 8979.0,
+                "start": "2024-07-01T00:00:00",
+                "end": "2024-08-01T00:00:00"
+              }
+            },
+            "global_attributes": {
+              "title": "GLDAS2.1 LIS land surface model output monthly mean",
+              "source": "Noah_v3.6 forced with GDAS-AGRMET-GPCPv13rA1_202407",
+              "institution": "NASA GSFC",
+              "references": "Rodell_etal_BAMS_2004, Kumar_etal_EMS_2006, Peters-Lidard_etal_ISSE_2007",
+              "comment": "website: https://ldas.gsfc.nasa.gov/gldas, https://lis.gsfc.nasa.gov/",
+              "history": "created on date: 2024-10-23T17:55:35.381",
+              "MAP_PROJECTION": "EQUIDISTANT CYLINDRICAL",
+              "DX": 0.25,
+              "DY": 0.25,
+              "SOUTH_WEST_CORNER_LAT": -59.875,
+              "SOUTH_WEST_CORNER_LON": -179.875
+            }
+          },
+          "year_month": "202407"
+        }
+      ]
+    },
+    {
+      "short_name": "GPM_3IMERGM",
+      "version": "07",
+      "label": "GPM IMERG Final Precipitation L3 1 month 0.1 x 0.1 degree V07",
+      "concept_id": "C2723754851-GES_DISC",
+      "doi": "10.5067/GPM/IMERG/3B-MONTH/07",
+      "title": "GPM IMERG Final Precipitation L3 1 month 0.1 degree x 0.1 degree V07 (GPM_3IMERGM)",
+      "temporal_coverage": {
+        "start": "1998-01-01T00:00:00.000Z",
+        "end": "2025-09-30T23:59:59.999Z"
+      },
+      "spatial_extent": {
+        "west": -180.0,
+        "south": -90.0,
+        "east": 180.0,
+        "north": 90.0
+      },
+      "resolution_deg": null,
+      "documentation_url": "https://disc.gsfc.nasa.gov/datacollection/GPM_3IMERGM_07.html",
+      "related_urls": [
+        {
+          "URL": "https://docserver.gesdisc.eosdis.nasa.gov/public/project/GPM/browse/GPM_3IMERGM_07.png",
+          "Type": "GET RELATED VISUALIZATION",
+          "Subtype": null,
+          "Description": "Surface Precipitation  (Final) from GPM IMERG (0.1 degree x 0.1 degree)  (GPM_3IMERGM)"
+        },
+        {
+          "URL": "https://disc.gsfc.nasa.gov/datacollection/GPM_3IMERGM_07.html",
+          "Type": "DATA SET LANDING PAGE",
+          "Subtype": null,
+          "Description": "Access the dataset landing page from the GES DISC website."
+        },
+        {
+          "URL": "https://cmr.earthdata.nasa.gov/virtual-directory/collections/C2723754851-GES_DISC/temporal",
+          "Type": "GET DATA",
+          "Subtype": "DATA TREE",
+          "Description": "Access the data via HTTPS."
+        },
+        {
+          "URL": "https://giovanni.gsfc.nasa.gov/#dataKeyword=IMERGM",
+          "Type": "GET RELATED VISUALIZATION",
+          "Subtype": "GIOVANNI",
+          "Description": "The GES-DISC Interactive Online Visualization ANd aNalysis Interface (Giovanni) is a web-based tool that allows users to analyze gridded data interactively online without having to download any data."
+        },
+        {
+          "URL": "https://search.earthdata.nasa.gov/search/granules?p=C2723754851-GES_DISC",
+          "Type": "GET DATA",
+          "Subtype": "Earthdata Search",
+          "Description": "Earthdata Search allows users to search, discover, visualize, refine, and access NASA Earth Observation data."
+        },
+        {
+          "URL": "https://cmr.earthdata.nasa.gov/virtual-directory/collections/C2723754851-GES_DISC/temporal",
+          "Type": "USE SERVICE API",
+          "Subtype": "OPENDAP DATA",
+          "Description": "Access the data via the OPeNDAP protocol."
+        },
+        {
+          "URL": "https://arthurhou.pps.eosdis.nasa.gov/Documents/IMERG_V07_ATBD_final.pdf",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "ALGORITHM THEORETICAL BASIS DOCUMENT (ATBD)",
+          "Description": "Algorithm Theoretical Basis Document"
+        },
+        {
+          "URL": "https://arthurhou.pps.eosdis.nasa.gov/Documents/IMERG_TechnicalDocumentation_final.pdf",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "PI DOCUMENTATION",
+          "Description": "IMERG Technical Documentation"
+        },
+        {
+          "URL": "https://docserver.gesdisc.eosdis.nasa.gov/public/project/GPM/IMERGV06_QI.pdf",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "PI DOCUMENTATION",
+          "Description": "IMERG Quality Index"
+        },
+        {
+          "URL": "https://docserver.gesdisc.eosdis.nasa.gov/public/project/GPM/IMERGV06_TRMMera-caveats.pdf",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "PI DOCUMENTATION",
+          "Description": "Caveats for IMERG extention into TRMM era"
+        },
+        {
+          "URL": "https://gpm1.gesdisc.eosdis.nasa.gov/data/GPM_L3/doc/README.GPM.pdf",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "READ-ME",
+          "Description": "README Document"
+        },
+        {
+          "URL": "https://gpm.nasa.gov/resources/documents/imerg-v07-release-notes",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "IMPORTANT NOTICE",
+          "Description": "IMERG Release Notes"
+        },
+        {
+          "URL": "https://gpmweb2https.pps.eosdis.nasa.gov/tsdis/AB/docs/gpm_anomalous.html",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "ANOMALIES",
+          "Description": "GPM and partner sensors anomalous events"
+        },
+        {
+          "URL": "https://gpm.nasa.gov",
+          "Type": "PROJECT HOME PAGE",
+          "Subtype": null,
+          "Description": "GPM Project Home Page"
+        },
+        {
+          "URL": "https://journals.ametsoc.org/doi/full/10.1175/JAM2173.1",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "PUBLICATIONS",
+          "Description": "Yang Hong, Hsu, Kuo-Lin, Sorooshian, Soroosh, Gao, Xiaogang, \"Precipitation Estimation from Remotely Sensed Imagery Using an Artificial Neural Network Cloud Classification System.\" <em>J. Appl. Meteor.</em> vol. 43, no. 12 (2004): 1834-1853. DOI: 10.1175/JAM2173.1."
+        },
+        {
+          "URL": "http://journals.ametsoc.org/doi/10.1175/JHM-D-11-022.1",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "PUBLICATIONS",
+          "Description": "Robert J. Joyce, Xie, Pingping, \"Kalman Filter–Based CMORPH.\" <em>J. Hydrometeor.</em> vol. 12, no. 6 (2011): 1547-1563. DOI: 10.1175/JHM-D-11-022.1."
+        },
+        {
+          "URL": "ftp://gpmweb2.pps.eosdis.nasa.gov/pub/GPMfilespec/filespec.GPM.pdf",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "PUBLICATIONS",
+          "Description": "<em>GLOBAL PRECIPITATION MEASUREMENT PRECIPITATION PROCESSING SYSTEM, File Specification</em> 2020."
+        }
+      ],
+      "source_type": "mission_observation",
+      "check_only": false,
+      "access_date": "2026-11-09",
+      "granules_2001_2024": 288,
+      "file_format": "HDF5",
+      "open_with": {
+        "engine": "netcdf4",
+        "group": "Grid"
+      },
+      "grid": {
+        "lat_name": "lat",
+        "lon_name": "lon",
+        "lat_units": "degrees_north",
+        "lon_units": "degrees_east",
+        "lat_long_name": "Latitude at the center of\n\t\t\t0.10 degree grid intervals of latitude\n\t\t\tfrom -90 to 90.",
+        "lon_long_name": "Longitude at the center of\n\t\t\t0.10 degree grid intervals of longitude \n\t\t\tfrom -180 to 180.",
+        "dimension_order": [
+          "time",
+          "lon",
+          "lat"
+        ],
+        "lat_order": "ascending",
+        "lon_order": "ascending",
+        "lon_range": "-180..180",
+        "resolution_deg": 0.1,
+        "lat_resolution_deg": 0.1,
+        "lon_resolution_deg": 0.1,
+        "resolution_source": "file attribute",
+        "measured_lat_spacing_deg": 0.099999,
+        "measured_lon_spacing_deg": 0.099998,
+        "lat_extent": [
+          -89.94999694824219,
+          89.94999694824219
+        ],
+        "lon_extent": [
+          -179.9499969482422,
+          179.9499969482422
+        ],
+        "cell_registration": "center",
+        "grid_origin": "southwest",
+        "registration_evidence": "GridHeader: Registration=center; LatitudeResolution=0.1; LongitudeResolution=0.1; Origin=southwest"
+      },
+      "time": {
+        "raw": 662342400.0,
+        "units": "seconds since 1980-01-06 00:00:00 UTC",
+        "calendar": "julian",
+        "decoded": "2001-01-01T00:00:00",
+        "represents": "start of month (timestamp equals the start of a one-month time_bnds interval)",
+        "bounds": {
+          "start_raw": 662342400.0,
+          "end_raw": 665020800.0,
+          "start": "2001-01-01T00:00:00",
+          "end": "2001-02-01T00:00:00"
+        }
+      },
+      "dimension_order": [
+        "time",
+        "lon",
+        "lat"
+      ],
+      "samples": [
+        {
+          "file": "3B-MO.MS.MRG.3IMERG.20010101-S000000-E235959.01.V07B.HDF5",
+          "path": "data/raw/gpm/3B-MO.MS.MRG.3IMERG.20010101-S000000-E235959.01.V07B.HDF5",
+          "granule_name": "3B-MO.MS.MRG.3IMERG.20010101-S000000-E235959.01.V07B.HDF5",
+          "granule_url": "https://data.gesdisc.earthdata.nasa.gov/data/GPM_L3/GPM_3IMERGM.07/2001/3B-MO.MS.MRG.3IMERG.20010101-S000000-E235959.01.V07B.HDF5",
+          "size_bytes": 17660059,
+          "sha256": "68d2f167e83c2c3a2df5386186e615dd42d214649feb5424805a25cf337e3a6b",
+          "checksum_verified": true,
+          "download_status": "reused",
+          "inspection": {
+            "file_format": "HDF5",
+            "netcdf_data_model": "NETCDF4",
+            "disk_format": "HDF5",
+            "open_with": {
+              "engine": "netcdf4",
+              "group": "Grid"
+            },
+            "dimensions": {
+              "time": 1,
+              "nv": 2,
+              "lon": 3600,
+              "lonv": 2,
+              "lat": 1800,
+              "latv": 2
+            },
+            "dimension_order": [
+              "time",
+              "lon",
+              "lat"
+            ],
+            "coordinates": {
+              "names": [
+                "lat",
+                "lon",
+                "time"
+              ],
+              "lat": {
+                "name": "lat",
+                "units": "degrees_north",
+                "long_name": "Latitude at the center of\n\t\t\t0.10 degree grid intervals of latitude\n\t\t\tfrom -90 to 90.",
+                "size": 1800
+              },
+              "lon": {
+                "name": "lon",
+                "units": "degrees_east",
+                "long_name": "Longitude at the center of\n\t\t\t0.10 degree grid intervals of longitude \n\t\t\tfrom -180 to 180.",
+                "size": 3600
+              }
+            },
+            "grid": {
+              "lat_name": "lat",
+              "lon_name": "lon",
+              "lat_units": "degrees_north",
+              "lon_units": "degrees_east",
+              "lat_long_name": "Latitude at the center of\n\t\t\t0.10 degree grid intervals of latitude\n\t\t\tfrom -90 to 90.",
+              "lon_long_name": "Longitude at the center of\n\t\t\t0.10 degree grid intervals of longitude \n\t\t\tfrom -180 to 180.",
+              "dimension_order": [
+                "time",
+                "lon",
+                "lat"
+              ],
+              "lat_order": "ascending",
+              "lon_order": "ascending",
+              "lon_range": "-180..180",
+              "resolution_deg": 0.1,
+              "lat_resolution_deg": 0.1,
+              "lon_resolution_deg": 0.1,
+              "resolution_source": "file attribute",
+              "measured_lat_spacing_deg": 0.099999,
+              "measured_lon_spacing_deg": 0.099998,
+              "lat_extent": [
+                -89.94999694824219,
+                89.94999694824219
+              ],
+              "lon_extent": [
+                -179.9499969482422,
+                179.9499969482422
+              ],
+              "cell_registration": "center",
+              "grid_origin": "southwest",
+              "registration_evidence": "GridHeader: Registration=center; LatitudeResolution=0.1; LongitudeResolution=0.1; Origin=southwest"
+            },
+            "time": {
+              "raw": 662342400.0,
+              "units": "seconds since 1980-01-06 00:00:00 UTC",
+              "calendar": "julian",
+              "decoded": "2001-01-01T00:00:00",
+              "represents": "start of month (timestamp equals the start of a one-month time_bnds interval)",
+              "bounds": {
+                "start_raw": 662342400.0,
+                "end_raw": 665020800.0,
+                "start": "2001-01-01T00:00:00",
+                "end": "2001-02-01T00:00:00"
+              }
+            },
+            "global_attributes": {
+              "FileHeader": "DOI=10.5067/GPM/IMERG/3B-MONTH/07;\nDOIauthority=http://dx.doi.org/;\nDOIshortName=3IMERGM;\nAlgorithmID=3IMERGM;\nAlgorithmVersion=3IMERGM_7.0;\nFileName=3B-MO.MS.MRG.3IMERG.20010101-S000000-E235959.01.V07B.HDF5;\nSatelliteName=MULTI;\nInstrumentName=MERGED;\nGenerationDateTime=2023-12-15T15:01:55.000Z;\nStartGranuleDateTime=2001-01-01T00:00:00.000Z;\nStopGranuleDateTime=2001-01-31T23:59:59.999Z;\nGranuleNumber=;\nNumberOfSwaths=0;\nNumberOfGrids=1;\nGranuleStart=;\nTimeInterval=MONTH;\nProcessingSystem=PPS;\nProductVersion=V07B;\nEmptyGranule=NOT_EMPTY;\nMissingData=;\n",
+              "FileInfo": "DataFormatVersion=7e;\nTKCodeBuildVersion=0;\nMetadataVersion=7e;\nFormatPackage=HDF5-1.10.5;\nBlueprintFilename=GPM.V7.3IMERGM.blueprint.xml;\nBlueprintVersion=BV_69;\nTKIOVersion=3.100;\nMetadataStyle=PVL;\nEndianType=LITTLE_ENDIAN;\n",
+              "GridHeader": "BinMethod=ARITHMETIC_MEAN;\nRegistration=CENTER;\nLatitudeResolution=0.1;\nLongitudeResolution=0.1;\nNorthBoundingCoordinate=90;\nSouthBoundingCoordinate=-90;\nEastBoundingCoordinate=180;\nWestBoundingCoordinate=-180;\nOrigin=SOUTHWEST;\n"
+            }
+          },
+          "year_month": "200101"
+        },
+        {
+          "file": "3B-MO.MS.MRG.3IMERG.20240701-S000000-E235959.07.V07B.HDF5",
+          "path": "data/raw/gpm/3B-MO.MS.MRG.3IMERG.20240701-S000000-E235959.07.V07B.HDF5",
+          "granule_name": "3B-MO.MS.MRG.3IMERG.20240701-S000000-E235959.07.V07B.HDF5",
+          "granule_url": "https://data.gesdisc.earthdata.nasa.gov/data/GPM_L3/GPM_3IMERGM.07/2024/3B-MO.MS.MRG.3IMERG.20240701-S000000-E235959.07.V07B.HDF5",
+          "size_bytes": 18904753,
+          "sha256": "8dc6998983daf9c069449e72092419d4b0258ad834a33a538e8eac44c8673431",
+          "checksum_verified": true,
+          "download_status": "reused",
+          "inspection": {
+            "file_format": "HDF5",
+            "netcdf_data_model": "NETCDF4",
+            "disk_format": "HDF5",
+            "open_with": {
+              "engine": "netcdf4",
+              "group": "Grid"
+            },
+            "dimensions": {
+              "time": 1,
+              "nv": 2,
+              "lon": 3600,
+              "lonv": 2,
+              "lat": 1800,
+              "latv": 2
+            },
+            "dimension_order": [
+              "time",
+              "lon",
+              "lat"
+            ],
+            "coordinates": {
+              "names": [
+                "lat",
+                "lon",
+                "time"
+              ],
+              "lat": {
+                "name": "lat",
+                "units": "degrees_north",
+                "long_name": "Latitude at the center of\n\t\t\t0.10 degree grid intervals of latitude\n\t\t\tfrom -90 to 90.",
+                "size": 1800
+              },
+              "lon": {
+                "name": "lon",
+                "units": "degrees_east",
+                "long_name": "Longitude at the center of\n\t\t\t0.10 degree grid intervals of longitude \n\t\t\tfrom -180 to 180.",
+                "size": 3600
+              }
+            },
+            "grid": {
+              "lat_name": "lat",
+              "lon_name": "lon",
+              "lat_units": "degrees_north",
+              "lon_units": "degrees_east",
+              "lat_long_name": "Latitude at the center of\n\t\t\t0.10 degree grid intervals of latitude\n\t\t\tfrom -90 to 90.",
+              "lon_long_name": "Longitude at the center of\n\t\t\t0.10 degree grid intervals of longitude \n\t\t\tfrom -180 to 180.",
+              "dimension_order": [
+                "time",
+                "lon",
+                "lat"
+              ],
+              "lat_order": "ascending",
+              "lon_order": "ascending",
+              "lon_range": "-180..180",
+              "resolution_deg": 0.1,
+              "lat_resolution_deg": 0.1,
+              "lon_resolution_deg": 0.1,
+              "resolution_source": "file attribute",
+              "measured_lat_spacing_deg": 0.099999,
+              "measured_lon_spacing_deg": 0.099998,
+              "lat_extent": [
+                -89.94999694824219,
+                89.94999694824219
+              ],
+              "lon_extent": [
+                -179.9499969482422,
+                179.9499969482422
+              ],
+              "cell_registration": "center",
+              "grid_origin": "southwest",
+              "registration_evidence": "GridHeader: Registration=center; LatitudeResolution=0.1; LongitudeResolution=0.1; Origin=southwest"
+            },
+            "time": {
+              "raw": 1403827200.0,
+              "units": "seconds since 1980-01-06 00:00:00 UTC",
+              "calendar": "julian",
+              "decoded": "2024-07-01T00:00:00",
+              "represents": "start of month (timestamp equals the start of a one-month time_bnds interval)",
+              "bounds": {
+                "start_raw": 1403827200.0,
+                "end_raw": 1406505600.0,
+                "start": "2024-07-01T00:00:00",
+                "end": "2024-08-01T00:00:00"
+              }
+            },
+            "global_attributes": {
+              "FileHeader": "DOI=10.5067/GPM/IMERG/3B-MONTH/07;\nDOIauthority=http://dx.doi.org/;\nDOIshortName=3IMERGM;\nAlgorithmID=3IMERGM;\nAlgorithmVersion=3IMERGM_7.0;\nFileName=3B-MO.MS.MRG.3IMERG.20240701-S000000-E235959.07.V07B.HDF5;\nSatelliteName=MULTI;\nInstrumentName=MERGED;\nGenerationDateTime=2025-01-10T04:36:25.000Z;\nStartGranuleDateTime=2024-07-01T00:00:00.000Z;\nStopGranuleDateTime=2024-07-31T23:59:59.999Z;\nGranuleNumber=;\nNumberOfSwaths=0;\nNumberOfGrids=1;\nGranuleStart=;\nTimeInterval=MONTH;\nProcessingSystem=PPS;\nProductVersion=V07B;\nEmptyGranule=NOT_EMPTY;\nMissingData=;\n",
+              "FileInfo": "DataFormatVersion=7e;\nTKCodeBuildVersion=0;\nMetadataVersion=7e;\nFormatPackage=HDF5-1.10.9;\nBlueprintFilename=GPM.V7.3IMERGM.blueprint.xml;\nBlueprintVersion=BV_69;\nTKIOVersion=3.101;\nMetadataStyle=PVL;\nEndianType=LITTLE_ENDIAN;\n",
+              "GridHeader": "BinMethod=ARITHMETIC_MEAN;\nRegistration=CENTER;\nLatitudeResolution=0.1;\nLongitudeResolution=0.1;\nNorthBoundingCoordinate=90;\nSouthBoundingCoordinate=-90;\nEastBoundingCoordinate=180;\nWestBoundingCoordinate=-180;\nOrigin=SOUTHWEST;\n"
+            }
+          },
+          "year_month": "202407"
+        }
+      ]
+    },
+    {
+      "short_name": "GLDAS_NOAH10_M",
+      "version": "2.1",
+      "label": "GLDAS Noah Land Surface Model L4 monthly 1.0 x 1.0 degree V2.1",
+      "concept_id": "C1288937542-GES_DISC",
+      "doi": "10.5067/LWTYSMP3VM5Z",
+      "title": "GLDAS Noah Land Surface Model L4 monthly 1.0 x 1.0 degree V2.1 (GLDAS_NOAH10_M)",
+      "temporal_coverage": {
+        "start": "2000-01-01T00:00:00.000Z",
+        "end": null
+      },
+      "spatial_extent": {
+        "west": -180.0,
+        "south": -60.0,
+        "east": 180.0,
+        "north": 90.0
+      },
+      "resolution_deg": 1.0,
+      "documentation_url": "https://disc.gsfc.nasa.gov/datacollection/GLDAS_NOAH10_M_2.1.html",
+      "related_urls": [
+        {
+          "URL": "https://docserver.gesdisc.eosdis.nasa.gov/public/project/Images/GLDAS_NOAH10_M_2.1.png",
+          "Type": "GET RELATED VISUALIZATION",
+          "Subtype": null,
+          "Description": "GLDAS-2.1 Noah 3-ourly 1.0 Degree 0-10 cm Soil Moisture [kg m-2] for 00Z March 01, 2001."
+        },
+        {
+          "URL": "https://disc.gsfc.nasa.gov/datacollection/GLDAS_NOAH10_M_2.1.html",
+          "Type": "DATA SET LANDING PAGE",
+          "Subtype": null,
+          "Description": "Access the dataset landing page from the GES DISC website."
+        },
+        {
+          "URL": "https://cmr.earthdata.nasa.gov/virtual-directory/collections/C1288937542-GES_DISC",
+          "Type": "GET DATA",
+          "Subtype": "DATA TREE",
+          "Description": "Access the data via HTTPS."
+        },
+        {
+          "URL": "https://cmr.earthdata.nasa.gov/virtual-directory/collections/C1288937542-GES_DISC",
+          "Type": "USE SERVICE API",
+          "Subtype": "OPENDAP DATA",
+          "Description": "Access the data via the OPeNDAP protocol."
+        },
+        {
+          "URL": "https://docserver.gesdisc.eosdis.nasa.gov/public/project/hydrology/README_GLDAS2.pdf",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "READ-ME",
+          "Description": "README Document"
+        },
+        {
+          "URL": "https://ldas.gsfc.nasa.gov/gldas/",
+          "Type": "PROJECT HOME PAGE",
+          "Subtype": null,
+          "Description": "GLDAS Project Web Site"
+        },
+        {
+          "URL": "https://disc.gsfc.nasa.gov/information/howto?tags=hydrology",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "HOW-TO",
+          "Description": "How to read and plot the data."
+        },
+        {
+          "URL": "https://disc.gsfc.nasa.gov/information/documents?title=Hydrology%20Documentation",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "GENERAL DOCUMENTATION",
+          "Description": "GES DISC Hydrology Documentation"
+        },
+        {
+          "URL": "https://giovanni.gsfc.nasa.gov/giovanni/#dataKeyword=GLDAS_NOAH10_M_2.1",
+          "Type": "GET RELATED VISUALIZATION",
+          "Subtype": "GIOVANNI",
+          "Description": "The GES-DISC Interactive Online Visualization ANd aNalysis Interface (Giovanni) is a web-based tool that allows users to interactively visualize and analyze data. "
+        },
+        {
+          "URL": "https://search.earthdata.nasa.gov/search/granules?p=C1288937542-GES_DISC",
+          "Type": "GET DATA",
+          "Subtype": "Earthdata Search",
+          "Description": "Earthdata Search allows users to search, discover, visualize, refine, and access NASA Earth Observation data."
+        },
+        {
+          "URL": "https://docserver.gesdisc.eosdis.nasa.gov/repository/Mission/GLDAS/GLDAS_CLM10SUBP_3H_Status_and_Related_Data_Collections.pdf",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "IMPORTANT NOTICE",
+          "Description": "GLDAS_CLM10SUBP_3H Status and Related Data Collections"
+        },
+        {
+          "URL": "https://docserver.gesdisc.eosdis.nasa.gov/repository/Mission/GLDAS/GLDAS_LSM_Description.pdf",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "GENERAL DOCUMENTATION",
+          "Description": "GLDAS LSM Description"
+        },
+        {
+          "URL": "http://journals.ametsoc.org/doi/10.1175/BAMS-85-3-381",
+          "Type": "VIEW RELATED INFORMATION",
+          "Subtype": "PUBLICATIONS",
+          "Description": "M. Rodell, Houser, P. R., Jambor, U., Gottschalck, J., Mitchell, K., Meng, C.-J., Arsenault, K., Cosgrove, B., Radakovich, J., Bosilovich, M., Entin, J. K., Walker, J. P., Lohmann, D., Toll, D., \"The Global Land Data Assimilation System.\" <em>Bull. Amer. Meteor. Soc.</em> vol. 85, no. 3 (2004): 381-394. DOI: 10.1175/BAMS-85-3-381."
+        }
+      ],
+      "source_type": "model",
+      "check_only": true,
+      "access_date": "2026-11-09",
+      "granules_2001_2024": 288,
+      "file_format": "netCDF4",
+      "open_with": {
+        "engine": "netcdf4",
+        "group": null
+      },
+      "grid": {
+        "lat_name": "lat",
+        "lon_name": "lon",
+        "lat_units": "degrees_north",
+        "lon_units": "degrees_east",
+        "lat_long_name": "latitude",
+        "lon_long_name": "longitude",
+        "dimension_order": [
+          "time",
+          "lat",
+          "lon"
+        ],
+        "lat_order": "ascending",
+        "lon_order": "ascending",
+        "lon_range": "-180..180",
+        "resolution_deg": 1.0,
+        "lat_resolution_deg": 1.0,
+        "lon_resolution_deg": 1.0,
+        "resolution_source": "file attribute",
+        "measured_lat_spacing_deg": 1.0,
+        "measured_lon_spacing_deg": 1.0,
+        "lat_extent": [
+          -59.5,
+          89.5
+        ],
+        "lon_extent": [
+          -179.5,
+          179.5
+        ],
+        "cell_registration": "center (inferred; not explicitly stated in file)",
+        "grid_origin": null,
+        "registration_evidence": "MAP_PROJECTION=EQUIDISTANT CYLINDRICAL; DX=1.0; DY=1.0; SOUTH_WEST_CORNER_LAT=-59.5; SOUTH_WEST_CORNER_LON=-179.5; first coordinate value equals the named corner value while CMR gives the outer bounding box, so coordinate arrays are cell centres"
+      },
+      "time": {
+        "raw": 366.0,
+        "units": "days since 2000-01-01 00:00:00",
+        "calendar": "standard",
+        "decoded": "2001-01-01T00:00:00",
+        "represents": "start of month (timestamp equals the start of a one-month time_bnds interval)",
+        "bounds": {
+          "start_raw": 366.0,
+          "end_raw": 397.0,
+          "start": "2001-01-01T00:00:00",
+          "end": "2001-02-01T00:00:00"
+        }
+      },
+      "dimension_order": [
+        "time",
+        "lat",
+        "lon"
+      ],
+      "samples": [
+        {
+          "file": "GLDAS_NOAH10_M.A200101.021.nc4",
+          "path": "data/raw/gldas/GLDAS_NOAH10_M.A200101.021.nc4",
+          "granule_name": "GLDAS_NOAH10_M.A200101.021.nc4",
+          "granule_url": "https://data.gesdisc.earthdata.nasa.gov/data/GLDAS/GLDAS_NOAH10_M.2.1/2001/GLDAS_NOAH10_M.A200101.021.nc4",
+          "size_bytes": 2067014,
+          "sha256": "302d3167d071db077db836307080a8e065382b91ba3d8161b407e32a8c453729",
+          "checksum_verified": true,
+          "download_status": "reused",
+          "inspection": {
+            "file_format": "netCDF4",
+            "netcdf_data_model": "NETCDF4",
+            "disk_format": "HDF5",
+            "open_with": {
+              "engine": "netcdf4",
+              "group": null
+            },
+            "dimensions": {
+              "time": 1,
+              "bnds": 2,
+              "lat": 150,
+              "lon": 360
+            },
+            "dimension_order": [
+              "time",
+              "lat",
+              "lon"
+            ],
+            "coordinates": {
+              "names": [
+                "lat",
+                "lon",
+                "time"
+              ],
+              "lat": {
+                "name": "lat",
+                "units": "degrees_north",
+                "long_name": "latitude",
+                "size": 150
+              },
+              "lon": {
+                "name": "lon",
+                "units": "degrees_east",
+                "long_name": "longitude",
+                "size": 360
+              }
+            },
+            "grid": {
+              "lat_name": "lat",
+              "lon_name": "lon",
+              "lat_units": "degrees_north",
+              "lon_units": "degrees_east",
+              "lat_long_name": "latitude",
+              "lon_long_name": "longitude",
+              "dimension_order": [
+                "time",
+                "lat",
+                "lon"
+              ],
+              "lat_order": "ascending",
+              "lon_order": "ascending",
+              "lon_range": "-180..180",
+              "resolution_deg": 1.0,
+              "lat_resolution_deg": 1.0,
+              "lon_resolution_deg": 1.0,
+              "resolution_source": "file attribute",
+              "measured_lat_spacing_deg": 1.0,
+              "measured_lon_spacing_deg": 1.0,
+              "lat_extent": [
+                -59.5,
+                89.5
+              ],
+              "lon_extent": [
+                -179.5,
+                179.5
+              ],
+              "cell_registration": "center (inferred; not explicitly stated in file)",
+              "grid_origin": null,
+              "registration_evidence": "MAP_PROJECTION=EQUIDISTANT CYLINDRICAL; DX=1.0; DY=1.0; SOUTH_WEST_CORNER_LAT=-59.5; SOUTH_WEST_CORNER_LON=-179.5; first coordinate value equals the named corner value while CMR gives the outer bounding box, so coordinate arrays are cell centres"
+            },
+            "time": {
+              "raw": 366.0,
+              "units": "days since 2000-01-01 00:00:00",
+              "calendar": "standard",
+              "decoded": "2001-01-01T00:00:00",
+              "represents": "start of month (timestamp equals the start of a one-month time_bnds interval)",
+              "bounds": {
+                "start_raw": 366.0,
+                "end_raw": 397.0,
+                "start": "2001-01-01T00:00:00",
+                "end": "2001-02-01T00:00:00"
+              }
+            },
+            "global_attributes": {
+              "Conventions": "CF-1.6",
+              "title": "GLDAS2.1 LIS land surface model output monthly mean",
+              "source": "Noah_v3.6 forced with GDAS-AGRMET-GPCPv13rA1",
+              "institution": "NASA GSFC",
+              "references": "Rodell_etal_BAMS_2004, Kumar_etal_EMS_2006, Peters-Lidard_etal_ISSE_2007",
+              "comment": "website: https://ldas.gsfc.nasa.gov/gldas, https://lis.gsfc.nasa.gov/",
+              "history": "created on date: 2019-09-27T15:53:43.152",
+              "MAP_PROJECTION": "EQUIDISTANT CYLINDRICAL",
+              "DX": 1.0,
+              "DY": 1.0,
+              "SOUTH_WEST_CORNER_LAT": -59.5,
+              "SOUTH_WEST_CORNER_LON": -179.5,
+              "tavg definision:": "past 3-hour average",
+              "acc definision:": "past 3-hour accumulation",
+              "inst definision:": "instantaneous"
+            }
+          },
+          "year_month": "200101"
+        }
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "registry_concept": "surface_skin_temperature",
+      "product": "GLDAS_NOAH025_M",
+      "expected_name": "AvgSurfT_inst",
+      "found_name": "AvgSurfT_inst",
+      "status": "verified",
+      "units": "K",
+      "semantic_type": "state",
+      "evidence": "long_name='Average Surface Skin temperature'; standard_name='surface_temperature'; units='K'; name suffix '_inst'; global attribute 'inst definision: instantaneous'; cell_methods='time: mean'",
+      "fill_value": -9999.0,
+      "long_name": "Average Surface Skin temperature",
+      "standard_name": "surface_temperature",
+      "monthly_statistic": "mean over the month (cell_methods='time: mean')",
+      "sanity": {
+        "valid_cells": 485506,
+        "total_cells": 1728000,
+        "min": 224.79843139648438,
+        "max": 318.0889892578125,
+        "mean": 282.55979042185066,
+        "fill_fraction": 0.7190358796296297
+      },
+      "sanity_by_sample": [
+        {
+          "file": "GLDAS_NOAH025_M.A200101.021.nc4",
+          "valid_cells": 242753,
+          "total_cells": 864000,
+          "min": 224.79843139648438,
+          "max": 311.7892150878906,
+          "mean": 271.6411079134912,
+          "fill_fraction": 0.7190358796296297
+        },
+        {
+          "file": "GLDAS_NOAH025_M.A202407.021.nc4",
+          "valid_cells": 242753,
+          "total_cells": 864000,
+          "min": 256.22320556640625,
+          "max": 318.0889892578125,
+          "mean": 293.4784729302101,
+          "fill_fraction": 0.7190358796296297
+        }
+      ],
+      "sanity_checks": [
+        {
+          "check": "outside 180-350 K",
+          "count": 0,
+          "description": "temperature values outside roughly 180-350 K"
+        }
+      ],
+      "sanity_warnings": [],
+      "physically_impossible": [],
+      "companions": [],
+      "notes": "File name suffix is '_inst', but cell_methods='time: mean': the monthly field is a monthly mean of instantaneous skin temperature. This is surface skin temperature, not near-surface air temperature."
+    },
+    {
+      "registry_concept": "root_zone_soil_moisture",
+      "product": "GLDAS_NOAH025_M",
+      "expected_name": "RootMoist_inst",
+      "found_name": "RootMoist_inst",
+      "status": "verified",
+      "units": "kg m-2",
+      "semantic_type": "state",
+      "evidence": "long_name='Root zone soil moisture'; standard_name='root_zone_soil_moisture'; units='kg m-2'; name suffix '_inst'; global attribute 'inst definision: instantaneous'; cell_methods='time: mean'",
+      "fill_value": -9999.0,
+      "long_name": "Root zone soil moisture",
+      "standard_name": "root_zone_soil_moisture",
+      "monthly_statistic": "mean over the month (cell_methods='time: mean')",
+      "sanity": {
+        "valid_cells": 485506,
+        "total_cells": 1728000,
+        "min": 2.0,
+        "max": 900.239501953125,
+        "mean": 275.7282905262839,
+        "fill_fraction": 0.7190358796296297
+      },
+      "sanity_by_sample": [
+        {
+          "file": "GLDAS_NOAH025_M.A200101.021.nc4",
+          "valid_cells": 242753,
+          "total_cells": 864000,
+          "min": 2.0,
+          "max": 900.239501953125,
+          "mean": 289.236117118919,
+          "fill_fraction": 0.7190358796296297
+        },
+        {
+          "file": "GLDAS_NOAH025_M.A202407.021.nc4",
+          "valid_cells": 242753,
+          "total_cells": 864000,
+          "min": 2.0,
+          "max": 892.9192504882812,
+          "mean": 262.22046393364883,
+          "fill_fraction": 0.7190358796296297
+        }
+      ],
+      "sanity_checks": [
+        {
+          "check": "negative valid values",
+          "count": 0,
+          "description": "negative values in a physically non-negative quantity"
+        }
+      ],
+      "sanity_warnings": [],
+      "physically_impossible": [],
+      "companions": [],
+      "notes": "Root-zone soil moisture is a Noah model diagnostic, not a direct in-situ measurement. Units are kg m-2 (water equivalent)."
+    },
+    {
+      "registry_concept": "near_surface_air_temperature",
+      "product": "GLDAS_NOAH025_M",
+      "expected_name": "Tair_f_inst",
+      "found_name": "Tair_f_inst",
+      "status": "verified",
+      "units": "K",
+      "semantic_type": "state",
+      "evidence": "long_name='Temperature'; standard_name='air_temperature'; units='K'; name suffix '_inst'; global attribute 'inst definision: instantaneous'; cell_methods='time: mean'",
+      "fill_value": -9999.0,
+      "long_name": "Temperature",
+      "standard_name": "air_temperature",
+      "monthly_statistic": "mean over the month (cell_methods='time: mean')",
+      "sanity": {
+        "valid_cells": 491890,
+        "total_cells": 1728000,
+        "min": 229.37237548828125,
+        "max": 315.3154296875,
+        "mean": 282.312971700016,
+        "fill_fraction": 0.7153414351851852
+      },
+      "sanity_by_sample": [
+        {
+          "file": "GLDAS_NOAH025_M.A200101.021.nc4",
+          "valid_cells": 245945,
+          "total_cells": 864000,
+          "min": 229.37237548828125,
+          "max": 308.0077819824219,
+          "mean": 272.18596675807424,
+          "fill_fraction": 0.7153414351851852
+        },
+        {
+          "file": "GLDAS_NOAH025_M.A202407.021.nc4",
+          "valid_cells": 245945,
+          "total_cells": 864000,
+          "min": 259.6061706542969,
+          "max": 315.3154296875,
+          "mean": 292.43997664195774,
+          "fill_fraction": 0.7153414351851852
+        }
+      ],
+      "sanity_checks": [
+        {
+          "check": "outside 180-350 K",
+          "count": 0,
+          "description": "temperature values outside roughly 180-350 K"
+        }
+      ],
+      "sanity_warnings": [],
+      "physically_impossible": [],
+      "companions": [],
+      "notes": "Model forcing field (air temperature at the lowest model level). Label it as a forcing field in user-facing text."
+    },
+    {
+      "registry_concept": "surface_soil_moisture",
+      "product": "GLDAS_NOAH025_M",
+      "expected_name": "SoilMoi0_10cm_inst",
+      "found_name": "SoilMoi0_10cm_inst",
+      "status": "verified",
+      "units": "kg m-2",
+      "semantic_type": "state",
+      "evidence": "long_name='Soil moisture'; standard_name='soil_moisture_content'; units='kg m-2'; name suffix '_inst'; global attribute 'inst definision: instantaneous'; cell_methods='time: mean'",
+      "fill_value": -9999.0,
+      "long_name": "Soil moisture",
+      "standard_name": "soil_moisture_content",
+      "monthly_statistic": "mean over the month (cell_methods='time: mean')",
+      "sanity": {
+        "valid_cells": 485506,
+        "total_cells": 1728000,
+        "min": 2.0,
+        "max": 100.0,
+        "mean": 26.856187568390208,
+        "fill_fraction": 0.7190358796296297
+      },
+      "sanity_by_sample": [
+        {
+          "file": "GLDAS_NOAH025_M.A200101.021.nc4",
+          "valid_cells": 242753,
+          "total_cells": 864000,
+          "min": 2.0,
+          "max": 100.0,
+          "mean": 29.340461120151403,
+          "fill_fraction": 0.7190358796296297
+        },
+        {
+          "file": "GLDAS_NOAH025_M.A202407.021.nc4",
+          "valid_cells": 242753,
+          "total_cells": 864000,
+          "min": 2.0,
+          "max": 100.0,
+          "mean": 24.37191401662901,
+          "fill_fraction": 0.7190358796296297
+        }
+      ],
+      "sanity_checks": [
+        {
+          "check": "negative valid values",
+          "count": 0,
+          "description": "negative values in a physically non-negative quantity"
+        }
+      ],
+      "sanity_warnings": [],
+      "physically_impossible": [],
+      "companions": [],
+      "notes": "Top soil layer 0-10 cm. Units are kg m-2 (water equivalent)."
+    },
+    {
+      "registry_concept": "evapotranspiration",
+      "product": "GLDAS_NOAH025_M",
+      "expected_name": "Evap_tavg",
+      "found_name": "Evap_tavg",
+      "status": "verified",
+      "units": "kg m-2 s-1",
+      "semantic_type": "rate",
+      "evidence": "long_name='Evapotranspiration'; standard_name='water_evaporation_flux'; units='kg m-2 s-1'; name suffix '_tavg'; global attribute 'tavg definision: past 3-hour average'; cell_methods='time: mean'",
+      "fill_value": -9999.0,
+      "long_name": "Evapotranspiration",
+      "standard_name": "water_evaporation_flux",
+      "monthly_statistic": "mean over the month of 3-hourly averages (cell_methods='time: mean')",
+      "sanity": {
+        "valid_cells": 485506,
+        "total_cells": 1728000,
+        "min": -2.9645752874785103e-06,
+        "max": 9.058942669071257e-05,
+        "mean": 1.8309961150611354e-05,
+        "fill_fraction": 0.7190358796296297
+      },
+      "sanity_by_sample": [
+        {
+          "file": "GLDAS_NOAH025_M.A200101.021.nc4",
+          "valid_cells": 242753,
+          "total_cells": 864000,
+          "min": -2.9645752874785103e-06,
+          "max": 6.831889186287299e-05,
+          "mean": 9.781804358811846e-06,
+          "fill_fraction": 0.7190358796296297
+        },
+        {
+          "file": "GLDAS_NOAH025_M.A202407.021.nc4",
+          "valid_cells": 242753,
+          "total_cells": 864000,
+          "min": -6.157700340736483e-07,
+          "max": 9.058942669071257e-05,
+          "mean": 2.683811794241086e-05,
+          "fill_fraction": 0.7190358796296297
+        }
+      ],
+      "sanity_checks": [
+        {
+          "check": "none",
+          "count": null,
+          "description": "no hard physical-range check defined for this quantity"
+        }
+      ],
+      "sanity_warnings": [],
+      "physically_impossible": [],
+      "companions": [],
+      "notes": "Rate in kg m-2 s-1; the monthly field is a time mean of 3-hourly averages. Small negative valid values occur (condensation) and are not flagged as impossible."
+    },
+    {
+      "registry_concept": "surface_runoff",
+      "product": "GLDAS_NOAH025_M",
+      "expected_name": "Qs_acc",
+      "found_name": "Qs_acc",
+      "status": "verified",
+      "units": "kg m-2",
+      "semantic_type": "accumulation",
+      "evidence": "long_name='Storm surface runoff'; standard_name='surface_runoff_amount'; units='kg m-2'; name suffix '_acc'; global attribute 'acc definision: past 3-hour accumulation'; cell_methods='time: mean'",
+      "fill_value": -9999.0,
+      "long_name": "Storm surface runoff",
+      "standard_name": "surface_runoff_amount",
+      "monthly_statistic": "unknown (file gives an 'acc' definition but time: mean)",
+      "sanity": {
+        "valid_cells": 485506,
+        "total_cells": 1728000,
+        "min": 0.0,
+        "max": 5.443360805511475,
+        "mean": 0.028021566842726994,
+        "fill_fraction": 0.7190358796296297
+      },
+      "sanity_by_sample": [
+        {
+          "file": "GLDAS_NOAH025_M.A200101.021.nc4",
+          "valid_cells": 242753,
+          "total_cells": 864000,
+          "min": 0.0,
+          "max": 3.676445245742798,
+          "mean": 0.009388759698655344,
+          "fill_fraction": 0.7190358796296297
+        },
+        {
+          "file": "GLDAS_NOAH025_M.A202407.021.nc4",
+          "valid_cells": 242753,
+          "total_cells": 864000,
+          "min": 0.0,
+          "max": 5.443360805511475,
+          "mean": 0.04665437398679864,
+          "fill_fraction": 0.7190358796296297
+        }
+      ],
+      "sanity_checks": [
+        {
+          "check": "negative valid values",
+          "count": 0,
+          "description": "negative values in a physically non-negative quantity"
+        }
+      ],
+      "sanity_warnings": [],
+      "physically_impossible": [],
+      "companions": [],
+      "notes": "Accumulation units (kg m-2). The file defines 'acc' as a past 3-hour accumulation, yet cell_methods='time: mean'. The file does NOT state whether the monthly value is a monthly total or a monthly mean of 3-hour accumulations; monthly_statistic is therefore 'unknown' and must be resolved in P02 before any totals are computed."
+    },
+    {
+      "registry_concept": "snow_water_equivalent",
+      "product": "GLDAS_NOAH025_M",
+      "expected_name": "SWE_inst",
+      "found_name": "SWE_inst",
+      "status": "verified",
+      "units": "kg m-2",
+      "semantic_type": "state",
+      "evidence": "long_name='Snow depth water equivalent'; standard_name='surface_snow_amount'; units='kg m-2'; name suffix '_inst'; global attribute 'inst definision: instantaneous'; cell_methods='time: mean'",
+      "fill_value": -9999.0,
+      "long_name": "Snow depth water equivalent",
+      "standard_name": "surface_snow_amount",
+      "monthly_statistic": "mean over the month (cell_methods='time: mean')",
+      "sanity": {
+        "valid_cells": 485506,
+        "total_cells": 1728000,
+        "min": 0.0,
+        "max": 115505.703125,
+        "mean": 842.3567738182446,
+        "fill_fraction": 0.7190358796296297
+      },
+      "sanity_by_sample": [
+        {
+          "file": "GLDAS_NOAH025_M.A200101.021.nc4",
+          "valid_cells": 242753,
+          "total_cells": 864000,
+          "min": 0.0,
+          "max": 105321.4375,
+          "mean": 816.337264828901,
+          "fill_fraction": 0.7190358796296297
+        },
+        {
+          "file": "GLDAS_NOAH025_M.A202407.021.nc4",
+          "valid_cells": 242753,
+          "total_cells": 864000,
+          "min": 0.0,
+          "max": 115505.703125,
+          "mean": 868.3762828075882,
+          "fill_fraction": 0.7190358796296297
+        }
+      ],
+      "sanity_checks": [
+        {
+          "check": "negative valid values",
+          "count": 0,
+          "description": "negative values in a physically non-negative quantity"
+        }
+      ],
+      "sanity_warnings": [
+        "Extreme maximum SWE (above 50,000 kg m-2) concentrated near 60.875 N, 44.125 W (Greenland) in the samples. This is a broad plausibility warning, not a scientific conclusion; mask or quality-control SWE before analysis."
+      ],
+      "physically_impossible": [],
+      "companions": [],
+      "notes": "State variable. Meaningful only where snow occurs; mask to snow-covered cells before analysis."
+    },
+    {
+      "registry_concept": "specific_humidity",
+      "product": "GLDAS_NOAH025_M",
+      "expected_name": "Qair_f_inst",
+      "found_name": "Qair_f_inst",
+      "status": "verified",
+      "units": "kg kg-1",
+      "semantic_type": "state",
+      "evidence": "long_name='Specific humidity'; standard_name='specific_humidity'; units='kg kg-1'; name suffix '_inst'; global attribute 'inst definision: instantaneous'; cell_methods='time: mean'",
+      "fill_value": -9999.0,
+      "long_name": "Specific humidity",
+      "standard_name": "specific_humidity",
+      "monthly_statistic": "mean over the month (cell_methods='time: mean')",
+      "sanity": {
+        "valid_cells": 491890,
+        "total_cells": 1728000,
+        "min": 0.0001197022502310574,
+        "max": 0.022124679759144783,
+        "mean": 0.0070196430029147985,
+        "fill_fraction": 0.7153414351851852
+      },
+      "sanity_by_sample": [
+        {
+          "file": "GLDAS_NOAH025_M.A200101.021.nc4",
+          "valid_cells": 245945,
+          "total_cells": 864000,
+          "min": 0.0001197022502310574,
+          "max": 0.021335186436772346,
+          "mean": 0.005220761117104648,
+          "fill_fraction": 0.7153414351851852
+        },
+        {
+          "file": "GLDAS_NOAH025_M.A202407.021.nc4",
+          "valid_cells": 245945,
+          "total_cells": 864000,
+          "min": 0.0006060577579773962,
+          "max": 0.022124679759144783,
+          "mean": 0.00881852488872495,
+          "fill_fraction": 0.7153414351851852
+        }
+      ],
+      "sanity_checks": [
+        {
+          "check": "outside 0-0.1 kg kg-1",
+          "count": 0,
+          "description": "specific-humidity values outside 0-0.1 kg kg-1"
+        }
+      ],
+      "sanity_warnings": [],
+      "physically_impossible": [],
+      "companions": [],
+      "notes": "Model forcing field; specific humidity (kg kg-1), not relative humidity."
+    },
+    {
+      "registry_concept": "precipitation",
+      "product": "GPM_3IMERGM",
+      "expected_name": "precipitation",
+      "found_name": "precipitation",
+      "status": "verified",
+      "units": "mm/hr",
+      "semantic_type": "rate",
+      "evidence": "long_name='Merged microwave-infrared-gauge precipitation estimate'; units='mm/hr'; GridHeader BinMethod=ARITHMETIC_MEAN; FileHeader TimeInterval=MONTH",
+      "fill_value": -9999.900390625,
+      "long_name": "Merged microwave-infrared-gauge precipitation estimate",
+      "standard_name": null,
+      "monthly_statistic": "monthly mean rate (GridHeader BinMethod=ARITHMETIC_MEAN; FileHeader TimeInterval=MONTH)",
+      "sanity": {
+        "valid_cells": 12868293,
+        "total_cells": 12960000,
+        "min": 0.0,
+        "max": 3.625000238418579,
+        "mean": 0.09058541082229085,
+        "fill_fraction": 0.007076157407407413
+      },
+      "sanity_by_sample": [
+        {
+          "file": "3B-MO.MS.MRG.3IMERG.20010101-S000000-E235959.01.V07B.HDF5",
+          "valid_cells": 6435052,
+          "total_cells": 6480000,
+          "min": 0.0,
+          "max": 2.9160001277923584,
+          "mean": 0.08252789777652893,
+          "fill_fraction": 0.0069364197530864535
+        },
+        {
+          "file": "3B-MO.MS.MRG.3IMERG.20240701-S000000-E235959.07.V07B.HDF5",
+          "valid_cells": 6433241,
+          "total_cells": 6480000,
+          "min": 0.0,
+          "max": 3.625000238418579,
+          "mean": 0.09864519211140413,
+          "fill_fraction": 0.007215895061728372
+        }
+      ],
+      "sanity_checks": [
+        {
+          "check": "negative precipitation",
+          "count": 0,
+          "description": "negative precipitation values"
+        }
+      ],
+      "sanity_warnings": [],
+      "physically_impossible": [],
+      "companions": [
+        {
+          "name": "randomError",
+          "long_name": "\nRoot-mean-square error estimate for \n                        merged microwave-infrared-gauge precipitation\n",
+          "units": "mm/hr",
+          "dimensions": [
+            "time",
+            "lon",
+            "lat"
+          ],
+          "fill_value": -9999.900390625
+        },
+        {
+          "name": "gaugeRelativeWeighting",
+          "long_name": "\nRelative weight of gauge observation in \n                        the merged microwave-infrared-gauge precipitation estimate\n",
+          "units": "percent",
+          "dimensions": [
+            "time",
+            "lon",
+            "lat"
+          ],
+          "fill_value": -9999
+        },
+        {
+          "name": "probabilityLiquidPrecipitation",
+          "long_name": "\nProbability of liquid precipitation;  estimated with\n                        a diagnostic parameterization using ancillary data\n",
+          "units": "percent",
+          "dimensions": [
+            "time",
+            "lon",
+            "lat"
+          ],
+          "fill_value": -9999
+        },
+        {
+          "name": "precipitationQualityIndex",
+          "long_name": null,
+          "units": null,
+          "dimensions": [
+            "time",
+            "lon",
+            "lat"
+          ],
+          "fill_value": -9999.900390625
+        }
+      ],
+      "notes": "The file stores mm/hr: a rate, not a monthly total. GridHeader BinMethod=ARITHMETIC_MEAN and FileHeader TimeInterval=MONTH indicate a monthly mean rate. P02 must multiply by the number of hours in each calendar month to obtain mm/month. Companion fields are randomError (mm/hr), gaugeRelativeWeighting (percent), probabilityLiquidPrecipitation (percent) and precipitationQualityIndex (no units attribute)."
+    }
+  ],
+  "quicklooks": [
+    "data/metadata/quicklook/GLDAS_NOAH025_M.200101.AvgSurfT_inst.png",
+    "data/metadata/quicklook/GLDAS_NOAH025_M.200101.RootMoist_inst.png",
+    "data/metadata/quicklook/GLDAS_NOAH025_M.202407.AvgSurfT_inst.png",
+    "data/metadata/quicklook/GLDAS_NOAH025_M.202407.RootMoist_inst.png",
+    "data/metadata/quicklook/GPM_3IMERGM.200101.precipitation.png",
+    "data/metadata/quicklook/GPM_3IMERGM.202407.precipitation.png",
+    "data/metadata/quicklook/GLDAS_NOAH10_M.200101.AvgSurfT_inst.png",
+    "data/metadata/quicklook/GLDAS_NOAH10_M.200101.RootMoist_inst.png"
+  ],
+  "notes": [
+    "Raw files are stored under data/raw/ and are git-ignored.",
+    "No regridding, anomaly, trend, significance or UI logic was run.",
+    "Candidate sanity statistics pool the listed sample months; see sanity_by_sample for per-file values.",
+    "All names, units and semantics come from the files or CMR metadata; anything undetermined is recorded as null or 'unknown'."
+  ]
+}
