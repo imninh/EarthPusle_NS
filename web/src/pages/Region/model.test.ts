@@ -5,6 +5,7 @@ import {
   CELL_METHOD,
   aggregateBbox,
   alignToMonths,
+  annualMeanSeries,
   browserTrendClass,
   buildBrowserEvidence,
   buildCellEvidence,
@@ -109,6 +110,29 @@ describe('aggregateBbox', () => {
     expect(result.maskCells).toBe(3)
     expect(result.cellsUsed).toBe(2)
     expect(result.missingTiles).toEqual([])
+  })
+
+  it('counts only cells that entered the anomaly mean for coverage', () => {
+    const range = { row0: 72, row1: 72, col0: 279, col1: 279 }
+    const values = new Float32Array(N_MONTHS * TILE_SIZE * TILE_SIZE).fill(Number.NaN)
+    const anomalies = new Float32Array(N_MONTHS * TILE_SIZE * TILE_SIZE).fill(Number.NaN)
+    values[(72 % TILE_SIZE) * TILE_SIZE + (279 % TILE_SIZE)] = 10
+    const tiles = new Map<string, LoadedTile>([
+      [tileIdFor(72, 279), { values, anomalies }],
+    ])
+    const result = aggregateBbox({ range, months: N_MONTHS, tiles, windowStart: 0, windowEnd: 0 })
+    expect(result.values[0]).toBe(10)
+    expect(result.maskCells).toBe(1)
+    expect(result.cellsUsed).toBe(0)
+  })
+})
+
+describe('annualMeanSeries', () => {
+  it('averages finite months per calendar year and skips empty years', () => {
+    const months = ['2001-01', '2001-02', '2001-03', '2002-01', '2002-02']
+    const values = [1, 3, null, 10, 20]
+    expect(annualMeanSeries(months, values)).toEqual({ x: ['2001-07', '2002-07'], y: [2, 15] })
+    expect(annualMeanSeries(months, values, '2001-01', '2001-12')).toEqual({ x: ['2001-07'], y: [2] })
   })
 })
 

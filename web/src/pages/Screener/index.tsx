@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+import { PlaceSearch } from '../../components/PlaceSearch'
+import { Chip, Disclosure, HelpTip } from '../../components/ui'
 import { useApp } from '../../data/AppState'
-import { loadRegions, loadScreener } from '../../data/loaders'
-import type { Region, ScreenerFile } from '../../data/types'
+import { loadRegionsFile, loadScreener } from '../../data/loaders'
+import type { RegionsFile, ScreenerFile } from '../../data/types'
 import { TrendThumbnail } from './TrendThumbnail'
 import {
   MAGNITUDE_TOOLTIP,
@@ -16,7 +18,9 @@ import {
   formatContrast,
   formatMagnitude,
   formatPercent,
+  hasDiscontinuityFields,
   metricValue,
+  screenerHeadline,
   sortByMetric,
   sortDescription,
   type ScreenerViewRow,
@@ -35,9 +39,8 @@ function ariaSort(active: SortKey, direction: SortDirection, column: SortKey): '
 }
 
 export default function ScreenerPage() {
-  const { index, windowId, navigate } = useApp()
-  const [domainId, setDomainId] = useState('global')
-  const [regions, setRegions] = useState<Region[] | null>(null)
+  const { index, windowId, domain, setDomain, navigate } = useApp()
+  const [regionsFile, setRegionsFile] = useState<RegionsFile | null>(null)
   const [regionsError, setRegionsError] = useState<string | null>(null)
   const [screener, setScreener] = useState<ScreenerFile | null>(null)
   const [screenerError, setScreenerError] = useState<string | null>(null)
@@ -47,9 +50,9 @@ export default function ScreenerPage() {
 
   useEffect(() => {
     let cancelled = false
-    loadRegions()
-      .then((list) => {
-        if (!cancelled) setRegions(list)
+    loadRegionsFile()
+      .then((file) => {
+        if (!cancelled) setRegionsFile(file)
       })
       .catch((err: unknown) => {
         if (!cancelled) setRegionsError(messageOf(err))
@@ -64,7 +67,7 @@ export default function ScreenerPage() {
     setLoading(true)
     setScreener(null)
     setScreenerError(null)
-    loadScreener(windowId, domainId)
+    loadScreener(windowId, domain)
       .then((file) => {
         if (cancelled) return
         setScreener(file)
@@ -79,11 +82,17 @@ export default function ScreenerPage() {
     return () => {
       cancelled = true
     }
-  }, [windowId, domainId])
+  }, [windowId, domain])
 
   const windowMeta = index.windows.find((item) => item.id === windowId)
+  const regions = regionsFile?.regions ?? []
+  const countries = regionsFile?.countries ?? []
   const domainLabel =
-    domainId === 'global' ? 'Global land' : (regions?.find((region) => region.id === domainId)?.label ?? domainId)
+    domain === 'global'
+      ? 'global land'
+      : (regions.find((region) => region.id === domain)?.label ??
+        countries.find((country) => country.id === domain)?.label ??
+        domain)
   const viewRows = useMemo(
     () => (screener ? buildViewRows(index.variables, screener.rows) : []),
     [index.variables, screener],
@@ -93,6 +102,8 @@ export default function ScreenerPage() {
     [viewRows, sortKey, sortDir],
   )
   const empty = screener != null && domainHasNoEvaluatedCells(viewRows)
+  const showQuality = hasDiscontinuityFields(viewRows)
+  const headline = screenerHeadline(viewRows, domainLabel)
 
   const onSort = (key: SortKey) => {
     if (key === sortKey) {
@@ -104,48 +115,64 @@ export default function ScreenerPage() {
   }
 
   const openVariable = (variableId: string) => {
-    navigate('discovery', { variableId })
+    navigate('discovery', { variableId, windowId })
   }
 
   return (
     <section className="screener">
-      <header className="screener-intro">
-        <p>This page shows which Earth variables are changing, over how much area, how strongly, and whether directions disagree across places.</p>
-        <p>
-          &quot;Significant&quot; means a trend whose FDR-adjusted q-value is below {index.q_threshold} (Mann–Kendall
-          test, corrected for autocorrelation and for testing thousands of grid cells).
+      <header className="screener-head">
+        <div>
+          <p className="eyebrow">Evidence ranking</p>
+          <h1>Variable Screener</h1>
+          <p className="screener-promise">
+            Which variables are changing, over how much area, how strongly, and where the directions disagree.
+          </p>
+        </div>
+        <p className="screener-period">
+          Period {windowMeta ? `${windowMeta.start} to ${windowMeta.end}` : windowId} · FDR q &lt;{' '}
+          {index.q_threshold}
         </p>
       </header>
 
-      <label className="screener-control">
-        <span>Domain</span>
-        <select value={domainId} onChange={(event) => setDomainId(event.target.value)} aria-describedby="screener-domain-note">
-          <option value="global">Global land</option>
-          {(regions ?? []).map((region) => (
-            <option key={region.id} value={region.id}>
-              {region.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <p id="screener-domain-note" className="screener-note">
-        Region boxes are approximate. Period {windowMeta ? `${windowMeta.start} to ${windowMeta.end}` : windowId} comes
-        from the header.
-      </p>
+      <div className="screener-toolbar">
+        <div className="screener-domain">
+          <span className="field-label">Domain</span>
+          <div className="screener-domain-row">
+            <button
+              type="button"
+              className={domain === 'global' ? 'button primary' : 'button'}
+              aria-pressed={domain === 'global'}
+              onClick={() => setDomain('global')}
+            >
+              Global land
+            </button>
+            <PlaceSearch
+              onPick={(selection) => setDomain(selection.regionId)}
+              placeholder="Search a country or region"
+            />
+            <Chip tone="accent">{domainLabel}</Chip>
+          </div>
+          <p id="screener-domain-note" className="screener-note">
+            Type to search countries and approximate region boxes. Countries appear when the export includes the
+            optional 1.2 country grid.
+          </p>
+        </div>
+      </div>
+
       {regions == null && regionsError == null ? (
         <p className="screener-note" role="status">
-          Loading regions…
+          Loading domains…
         </p>
       ) : null}
       {regionsError ? (
         <p className="screener-status screener-status-error" role="alert">
-          Could not load regions. {regionsError}
+          Could not load domains. {regionsError}
         </p>
       ) : null}
 
       {loading ? (
         <p className="screener-status" role="status">
-          Loading screener for {domainLabel}…
+          Loading the ranking for {domainLabel}…
         </p>
       ) : null}
       {screenerError ? (
@@ -153,49 +180,83 @@ export default function ScreenerPage() {
           Could not load this domain. {screenerError}
         </p>
       ) : null}
-      {!loading && !screenerError && empty ? (
-        <p className="screener-status" role="status">
-          No cells were evaluated in {domainLabel} for this period, so there is nothing to rank.
-        </p>
-      ) : null}
 
-      {!loading && !screenerError && screener && !empty ? (
+      {!loading && !screenerError && screener ? (
         <>
-          <p className="screener-note">
-            Bars run from decrease on the left to increase on the right. The increase colour is labelled with that
-            variable&apos;s increase meaning. Typical change: {MAGNITUDE_TOOLTIP}.
-          </p>
-          <p className="screener-note">
-            Thumbnails show the full global trend grid for this period. They are not cropped to the selected domain.
-          </p>
-          <div className="screener-sortbar" role="group" aria-label="Sort by">
-            {SORT_COLUMNS.map((column) => (
-              <SortButton key={column.id} column={column} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-            ))}
-          </div>
-          <div className="screener-table-wrap">
-            <table className="screener-table">
-              <caption>
-                {sortDescription(sortKey, sortDir)} Missing values sort last.
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Variable</th>
-                  {SORT_COLUMNS.map((column) => (
-                    <th key={column.id} scope="col" aria-sort={ariaSort(sortKey, sortDir, column.id)}>
-                      <SortButton column={column} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                    </th>
-                  ))}
-                  <th scope="col">Map</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedRows.map((row) => (
-                  <ScreenerTableRow key={row.variableId} row={row} windowId={windowId} onOpen={openVariable} />
+          {!empty ? <p className="screener-headline">{headline}</p> : null}
+          {!empty ? (
+            <>
+              <div className="screener-sortbar" role="group" aria-label="Sort by">
+                {SORT_COLUMNS.map((column) => (
+                  <SortButton key={column.id} column={column} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+              <div className="screener-table-wrap">
+                <table className="screener-table">
+                  <caption>
+                    {sortDescription(sortKey, sortDir)} Missing values sort last.
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Variable</th>
+                      {SORT_COLUMNS.map((column) => (
+                        <th key={column.id} scope="col" aria-sort={ariaSort(sortKey, sortDir, column.id)}>
+                          <SortButton column={column} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                        </th>
+                      ))}
+                      {showQuality ? (
+                        <th scope="col">
+                          Data discontinuity
+                          <HelpTip label="About the data discontinuity flag">
+                            A flag means the change looks like a sudden jump rather than a gradual trend. Read the
+                            evidence; it is not proof that the data are wrong.
+                          </HelpTip>
+                        </th>
+                      ) : null}
+                      <th scope="col">Map</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedRows.map((row) => (
+                      <ScreenerTableRow
+                        key={row.variableId}
+                        row={row}
+                        windowId={windowId}
+                        showQuality={showQuality}
+                        onOpen={openVariable}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <p className="screener-status" role="status">
+              No cells were evaluated in {domainLabel} for this period, so there is nothing to rank.
+            </p>
+          )}
+          <Disclosure summary="How to read this table">
+            <p>
+              &ldquo;Significant&rdquo; means a trend whose FDR-adjusted q-value is below {index.q_threshold}. The test
+              is the Hamed–Rao modified Mann–Kendall test, corrected for autocorrelation and for testing thousands of
+              grid cells.
+            </p>
+            <p>
+              Area fractions are area-weighted over evaluated cells. Bars run from significant decrease on the left to
+              significant increase on the right; the increase colour uses each variable&apos;s own meaning. Typical
+              change is {MAGNITUDE_TOOLTIP}.
+            </p>
+            <p>
+              The &ldquo;opposite trends&rdquo; score is near 0 when one direction dominates and near 0.5 when increase
+              and decrease cover similar area. Coverage is the valid fraction of months in the window; below 70% is
+              called out.
+            </p>
+            <p>
+              Thumbnails show the full global trend grid and are not cropped to the selected domain. A{' '}
+              <strong>possible data discontinuity</strong> badge means a Pettitt/step test found a sudden jump; it is a
+              warning to read the evidence, not a verdict.
+            </p>
+          </Disclosure>
         </>
       ) : null}
     </section>
@@ -226,10 +287,12 @@ function SortButton({
 function ScreenerTableRow({
   row,
   windowId,
+  showQuality,
   onOpen,
 }: {
   row: ScreenerViewRow
   windowId: string
+  showQuality: boolean
   onOpen: (variableId: string) => void
 }) {
   const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
@@ -300,6 +363,27 @@ function ScreenerTableRow({
           ) : null}
         </span>
       </td>
+      {showQuality ? (
+        <td data-label="Data discontinuity">
+          {row.stepFlag == null ? (
+            <span>—</span>
+          ) : row.stepFlag > 0 ? (
+            <span className="screener-quality">
+              <Chip tone="warn" title="Possible data discontinuity: the change looks like a sudden jump, not a gradual trend.">
+                Possible data discontinuity
+              </Chip>
+              <span className="screener-meta">{formatPercent(row.stepFlag)} of area flagged</span>
+              {row.sigTrendFlagged != null ? (
+                <span className="screener-meta">
+                  {formatPercent(row.sigTrendFlagged)} of significant area also flagged
+                </span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="screener-meta">None detected</span>
+          )}
+        </td>
+      ) : null}
       <td data-label="Map">
         <TrendThumbnail
           variableId={row.variableId}

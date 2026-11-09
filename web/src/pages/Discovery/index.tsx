@@ -2,11 +2,12 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
 import {
+  AttributionControl,
   GeoJSONSource,
   ImageSource,
   Map as MapLibreMap,
+  NavigationControl,
   type MapMouseEvent,
-  type StyleSpecification,
   setWorkerUrl,
 } from 'maplibre-gl'
 import {
@@ -19,6 +20,8 @@ import {
   PATTERN_MIXED,
   PATTERN_WARMING_DRYING,
   PATTERN_WARMING_WETTING,
+  QUALITY_STEP,
+  QUALITY_STEP_KNOWN_FORCING,
   TREND_DECREASE,
   TREND_INCREASE,
   TREND_NOT_SIGNIFICANT,
@@ -29,35 +32,47 @@ import {
   rowToLat,
 } from '../../data/contract'
 import { useApp } from '../../data/AppState'
-import { loadFloatLayer, loadPatternClass, loadRegions, loadTrendClass } from '../../data/loaders'
-import type { DataIndex, Region, Selection } from '../../data/types'
+import {
+  loadBreakpointYear,
+  loadCountries,
+  loadFloatLayer,
+  loadPatternClass,
+  loadQualityFlag,
+  loadRegions,
+  loadTrendClass,
+} from '../../data/loaders'
+import type { Country, DataIndex, Region, Selection } from '../../data/types'
+import { PlaceSearch } from '../../components/PlaceSearch'
 import {
   type ClassPalette,
   type Rgba,
   divergingColour,
   finiteAbsPercentile,
-  gridImage,
   MERCATOR_LAT_LIMIT,
   NOT_SIGNIFICANT_OPACITY,
   patternColour,
-  projectGridToMercator,
   rateAlpha,
   sequentialColour,
   trendColour,
 } from '../../maps/gridImage'
+import {
+  clipImageToLand,
+  projectEquirectToMercator,
+  renderClassImage,
+  renderContinuousImage,
+  renderQualityImage,
+} from '../../maps/renderGrid'
+import {
+  applyBasemapTheme,
+  buildBasemapStyle,
+  loadNaturalEarth,
+  type BasemapData,
+} from '../../maps/basemap'
 import './discovery.css'
 
 // Vite's prebundled maplibre looks for the worker beside that bundle, where the file is not
 // copied. Point at the package worker before any map is created. This stays inside Discovery.
 setWorkerUrl(maplibreWorkerUrl)
-
-const DEMO_STYLE_URL = 'https://demotiles.maplibre.org/style.json'
-const GRID_COORDINATES: [[number, number], [number, number], [number, number], [number, number]] = [
-  [-180, MERCATOR_LAT_LIMIT],
-  [180, MERCATOR_LAT_LIMIT],
-  [180, -MERCATOR_LAT_LIMIT],
-  [-180, -MERCATOR_LAT_LIMIT],
-]
 
 /** Not a contract field. Fixed copy so the info panel can state the method. */
 const METHOD_ONE_LINER =
@@ -67,7 +82,7 @@ const METHOD_ONE_LINER =
 const COVERAGE_NOTE =
   'Coverage is valid months divided by months in the window. A cell is evaluated only when valid months are at least 80% of the window and the window is at least 10 years; otherwise the class is insufficient data. Cells outside the common land mask are left transparent.'
 
-const LAYERS = [
+const BASE_LAYERS = [
   { id: 'trend', label: 'Trend' },
   { id: 'rate', label: 'Rate of change' },
   { id: 'std', label: 'Standardized change' },
@@ -75,9 +90,11 @@ const LAYERS = [
   { id: 'pattern', label: 'Pattern (core)' },
   { id: 'coverage', label: 'Coverage' },
 ] as const
+const QUALITY_LAYER = { id: 'quality', label: 'Data quality' } as const
 
-type LayerId = (typeof LAYERS)[number]['id']
-type BasemapState = 'loading' | 'demo' | 'plain'
+type LayerId = (typeof BASE_LAYERS)[number]['id'] | 'quality'
+type Projection = 'globe' | 'mercator'
+type BasemapState = 'loading' | 'ready' | 'error'
 type LoadState = 'loading' | 'ready' | 'error'
 
 interface Palette extends ClassPalette {
@@ -97,6 +114,8 @@ interface GridBundle {
   nValid: Float32Array
   coverage: Float32Array
   pattern: Int8Array
+  quality: Int8Array | null
+  breakYear: Float32Array | null
 }
 
 interface CellPick {
@@ -109,6 +128,13 @@ interface ClickState {
   showRegions: boolean
   navigate: (page: 'region', opts: { selection: Selection }) => void
   setCell: (cell: CellPick) => void
+}
+
+interface HoverState {
+  x: number
+  y: number
+  title: string
+  detail: string
 }
 
 interface RingCollection {
@@ -136,18 +162,29 @@ const FALLBACK_PALETTE: Palette = {
   sequentialHigh: [8, 64, 129, 255],
 }
 
+const CANVAS_CACHE_LIMIT = 8
+
 export default function DiscoveryPage() {
   const { index, variable, variableId, windowId, navigate, selection } = useApp()
   const [layer, setLayer] = useState<LayerId>('trend')
+  const [projection, setProjection] = useState<Projection>('globe')
   const [showRegions, setShowRegions] = useState(false)
   const [regions, setRegions] = useState<Region[]>([])
+  const [countries, setCountries] = useState<Country[]>([])
   const [regionNote, setRegionNote] = useState<string | null>(null)
   const [grids, setGrids] = useState<GridBundle | null>(null)
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [error, setError] = useState<string | null>(null)
   const [palette, setPalette] = useState<Palette | null>(null)
-  const [basemap, setBasemap] = useState<BasemapState>('loading')
+  const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const [basemapData, setBasemapData] = useState<BasemapData | null>(null)
+  const [basemapState, setBasemapState] = useState<BasemapState>('loading')
+  const [basemapError, setBasemapError] = useState<string | null>(null)
   const [mapEpoch, setMapEpoch] = useState(0)
+  const [panelOpen, setPanelOpen] = useState(true)
+  const [legendOpen, setLegendOpen] = useState(true)
+  const [hover, setHover] = useState<HoverState | null>(null)
+  const [pickedPlace, setPickedPlace] = useState<{ id: string; label: string; bbox: [number, number, number, number] } | null>(null)
   const [cell, setCell] = useState<CellPick | null>(() =>
     selection?.kind === 'cell' ? { row: selection.row, col: selection.col } : null,
   )
@@ -156,32 +193,89 @@ export default function DiscoveryPage() {
   const mapNodeRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const canvasCache = useRef(new Map<string, HTMLCanvasElement>())
   const cellNow = useRef(cell)
+  const darkNow = useRef(dark)
   const clickState = useRef<ClickState>({ regions: [], showRegions: false, navigate, setCell })
+  const interaction = useRef<{
+    grids: GridBundle | null
+    layer: LayerId
+    variable: DataIndex['variables'][number]
+    qThreshold: number
+  }>({ grids: null, layer: 'trend', variable, qThreshold: index.q_threshold })
   cellNow.current = cell
+  darkNow.current = dark
   clickState.current = { regions, showRegions, navigate, setCell }
+  interaction.current = {
+    grids,
+    layer: layer === 'quality' && grids?.quality == null ? 'trend' : layer,
+    variable,
+    qThreshold: index.q_threshold,
+  }
 
   const windowMeta = index.windows.find((item) => item.id === windowId)
   const temperatureLabel = variableLabel(index, index.pattern_pair.temperature)
   const moistureLabel = variableLabel(index, index.pattern_pair.moisture)
   const rateLimit = useMemo(() => (grids ? finiteAbsPercentile(grids.slope, 0.98) : null), [grids])
-  const layerLabel = LAYERS.find((item) => item.id === layer)?.label ?? layer
+  const qualityAvailable = Boolean(index.quality) && grids?.quality != null
+  const activeLayer: LayerId = layer === 'quality' && !qualityAvailable ? 'trend' : layer
+  const layers = qualityAvailable ? [...BASE_LAYERS, QUALITY_LAYER] : [...BASE_LAYERS]
+  const layerLabel = layers.find((item) => item.id === activeLayer)?.label ?? activeLayer
+
+  function pickPlace(place: { kind: 'region'; regionId: string }): void {
+    const country = countries.find((item) => item.id === place.regionId)
+    const region = regions.find((item) => item.id === place.regionId)
+    const found = country ?? region
+    if (!found) return
+    const [west, south, east, north] = found.bbox
+    setPickedPlace({ id: found.id, label: found.label, bbox: found.bbox })
+    mapRef.current?.fitBounds(
+      [
+        [west, south],
+        [east, north],
+      ],
+      { padding: 70, duration: 900, maxZoom: 6 },
+    )
+  }
 
   useLayoutEffect(() => {
     const root = rootRef.current
     if (!root) return
-    const read = () => setPalette(readPalette(root))
-    read()
     const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const read = () => {
+      setPalette(readPalette(root))
+      setDark(media.matches)
+    }
+    read()
     media.addEventListener('change', read)
     return () => media.removeEventListener('change', read)
   }, [])
 
   useEffect(() => {
     let cancelled = false
-    loadRegions()
-      .then((list) => {
-        if (!cancelled) setRegions(list)
+    loadNaturalEarth()
+      .then((data) => {
+        if (cancelled) return
+        setBasemapData(data)
+        setBasemapState('ready')
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setBasemapState('error')
+        setBasemapError(err instanceof Error ? err.message : String(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([loadRegions(), loadCountries()])
+      .then(([regionList, countryList]) => {
+        if (cancelled) return
+        setRegions(regionList)
+        setCountries(countryList)
       })
       .catch((err: unknown) => {
         if (!cancelled) setRegionNote(err instanceof Error ? err.message : String(err))
@@ -194,9 +288,12 @@ export default function DiscoveryPage() {
   useEffect(() => {
     let cancelled = false
     const key = `${variableId}|${windowId}`
-    setGrids(null)
     setLoadState('loading')
     setError(null)
+    const quality = Promise.all([
+      loadQualityFlag(variableId, windowId),
+      loadBreakpointYear(variableId, windowId),
+    ]).catch(() => [null, null] as const)
     Promise.all([
       loadTrendClass(variableId, windowId),
       loadFloatLayer(variableId, windowId, 'sen_slope_decade'),
@@ -207,10 +304,25 @@ export default function DiscoveryPage() {
       loadFloatLayer(variableId, windowId, 'n_valid'),
       loadFloatLayer(variableId, windowId, 'coverage'),
       loadPatternClass(windowId),
+      quality,
     ])
-      .then(([trend, slope, stdChange, pValue, qValue, tau, nValid, coverage, pattern]) => {
+      .then(([trend, slope, stdChange, pValue, qValue, tau, nValid, coverage, pattern, extraQuality]) => {
         if (cancelled) return
-        setGrids({ key, trend, slope, stdChange, pValue, qValue, tau, nValid, coverage, pattern })
+        const [qualityFlag, breakYear] = extraQuality
+        setGrids({
+          key,
+          trend,
+          slope,
+          stdChange,
+          pValue,
+          qValue,
+          tau,
+          nValid,
+          coverage,
+          pattern,
+          quality: qualityFlag,
+          breakYear,
+        })
         setLoadState('ready')
       })
       .catch((err: unknown) => {
@@ -226,57 +338,40 @@ export default function DiscoveryPage() {
 
   useEffect(() => {
     const node = mapNodeRef.current
-    const root = rootRef.current
-    if (!node) return
+    if (!node || !basemapData) return
     let cancelled = false
-    let remoteReady = false
-    let plainApplied = false
     const map = new MapLibreMap({
       container: node,
-      style: DEMO_STYLE_URL,
-      center: [0, 20],
-      zoom: 1,
+      style: buildBasemapStyle(darkNow.current, basemapData.land, basemapData.borders, projection),
+      center: [15, 18],
+      zoom: 2.0,
       renderWorldCopies: false,
-      dragRotate: false,
-      pitchWithRotate: false,
-      touchPitch: false,
+      dragRotate: true,
+      pitchWithRotate: true,
+      touchPitch: true,
       fadeDuration: 0,
+      attributionControl: false,
     })
     mapRef.current = map
+    map.addControl(new AttributionControl({ compact: true, customAttribution: 'Natural Earth' }), 'bottom-right')
+    map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
 
     const mountOverlays = () => {
+      if (cancelled) return
+      applyBasemapTheme(map, darkNow.current)
       ensureGrid(map)
       ensureRegions(map, clickState.current.regions, clickState.current.showRegions)
       ensureCell(map, cellNow.current)
       const canvas = canvasRef.current
       if (canvas) pushCanvas(map, canvas)
-      if (!cancelled) setMapEpoch((value) => value + 1)
+      setMapEpoch((value) => value + 1)
     }
 
-    const usePlain = () => {
-      if (remoteReady || plainApplied || cancelled) return
-      plainApplied = true
-      const background = root ? getComputedStyle(root).getPropertyValue('--bg').trim() || '#d5dde6' : '#d5dde6'
-      map.setStyle(plainStyle(background))
-      if (!cancelled) setBasemap('plain')
-    }
-
-    map.on('style.load', () => {
-      if (!plainApplied) {
-        remoteReady = true
-        if (!cancelled) setBasemap('demo')
-      }
-      mountOverlays()
-    })
+    map.on('style.load', mountOverlays)
     map.on('error', (event) => {
-      const failure = (event as { error?: { message?: string; status?: number } }).error
-      const message = failure?.message ?? ''
-      const styleFailed = /demotiles\.maplibre\.org\/style\.json|Failed to load style/i.test(message)
-      if (!remoteReady && styleFailed) usePlain()
+      const message = (event as { error?: { message?: string } }).error?.message
+      if (message) setBasemapError(message)
     })
-    const timer = window.setTimeout(() => {
-      if (!remoteReady) usePlain()
-    }, 10000)
 
     const onClick = (event: MapMouseEvent) => {
       const state = clickState.current
@@ -294,34 +389,74 @@ export default function DiscoveryPage() {
       if (row < 0 || row >= N_ROWS || col < 0 || col >= N_COLS) return
       state.setCell({ row, col })
     }
+
+    const onMove = (event: MapMouseEvent) => {
+      const state = interaction.current
+      const lon = normalizeLon(event.lngLat.lng)
+      const lat = event.lngLat.lat
+      const row = latToRow(lat)
+      const col = lonToCol(lon)
+      if (!state.grids || row < 0 || row >= N_ROWS || col < 0 || col >= N_COLS) {
+        setHover(null)
+        return
+      }
+      const index = cellIndex(row, col)
+      const grids = state.grids
+      const title = `${formatLatitude(rowToLat(row))}, ${formatLongitude(colToLon(col))}`
+      const detail = hoverDetail(state.layer, grids, index, state.variable)
+      setHover({ x: event.point.x, y: event.point.y, title, detail })
+    }
+    const onLeave = () => setHover(null)
+
     map.on('click', onClick)
+    map.on('mousemove', onMove)
+    map.on('mouseout', onLeave)
     const observer = new ResizeObserver(() => map.resize())
     observer.observe(node)
     requestAnimationFrame(() => map.resize())
 
     return () => {
       cancelled = true
-      window.clearTimeout(timer)
       observer.disconnect()
       map.off('click', onClick)
+      map.off('mousemove', onMove)
+      map.off('mouseout', onLeave)
       map.remove()
       mapRef.current = null
     }
-  }, [])
+  }, [basemapData, projection])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.isStyleLoaded()) return
+    applyBasemapTheme(map, dark)
+  }, [dark])
 
   useLayoutEffect(() => {
-    if (!palette) return
-    const image = grids ? projectGridToMercator(renderLayer(grids, layer, palette, index.q_threshold)) : null
-    const canvas = image ? imageCanvas(image) : null
-    canvasRef.current = canvas
     const map = mapRef.current
-    if (!map || mapEpoch === 0 || !map.getLayer('grid-raster')) return
-    if (!canvas) {
-      map.setLayoutProperty('grid-raster', 'visibility', 'none')
+    if (!map || (!grids && !canvasRef.current)) return
+    if (!grids || !palette || !basemapData) {
+      if (map.getLayer('grid-raster')) map.setLayoutProperty('grid-raster', 'visibility', 'none')
       return
     }
-    pushCanvas(map, canvas)
-  }, [grids, palette, layer, mapEpoch, index.q_threshold])
+    const usedLayer: LayerId = layer === 'quality' && grids.quality == null ? 'trend' : layer
+    const key = `${grids.key}|${usedLayer}|${dark}`
+    let canvas = canvasCache.current.get(key)
+    if (!canvas) {
+      const image = buildLayerImage(grids, usedLayer, palette, index.q_threshold)
+      const clipped = clipImageToLand(image, basemapData.land)
+      // MapLibre image sources are textured in Mercator space in both globe
+      // and flat projections, so warp once here. This keeps the raster aligned
+      // with the Natural Earth basemap and prevents colour bleeding over ocean.
+      canvas = imageCanvas(projectEquirectToMercator(imageDataFromCanvas(clipped)))
+      rememberCanvas(canvasCache.current, key, canvas)
+    }
+    canvasRef.current = canvas
+    if (map.getLayer('grid-raster')) {
+      pushCanvas(map, canvas)
+      map.setLayoutProperty('grid-raster', 'visibility', 'visible')
+    }
+  }, [grids, palette, layer, projection, dark, basemapData, mapEpoch, index.q_threshold])
 
   useEffect(() => {
     const map = mapRef.current
@@ -345,10 +480,104 @@ export default function DiscoveryPage() {
       <div className="discovery-body">
         <div className="discovery-map">
           <div ref={mapNodeRef} className="discovery-map-canvas" aria-label="World map of the selected variable" />
-          {loadState === 'loading' ? (
+          <div className="discovery-place-search">
+            <PlaceSearch onPick={pickPlace} compact placeholder="Search a country or region" />
+          </div>
+          {pickedPlace ? (
+            <div className="discovery-place-callout">
+              <strong>{pickedPlace.label}</strong>
+              <div className="discovery-place-actions">
+                <button
+                  type="button"
+                  className="discovery-primary"
+                  onClick={() => navigate('region', { selection: { kind: 'region', regionId: pickedPlace.id } })}
+                >
+                  Open evidence
+                </button>
+                <button type="button" onClick={() => setPickedPlace(null)} aria-label="Close place callout">
+                  Close
+                </button>
+              </div>
+            </div>
+          ) : null}
+          <div className="discovery-map-toolbar">
+            <div className="discovery-segmented" role="group" aria-label="Map projection">
+              <button
+                type="button"
+                aria-pressed={projection === 'globe'}
+                onClick={() => setProjection('globe')}
+              >
+                Globe
+              </button>
+              <button
+                type="button"
+                aria-pressed={projection === 'mercator'}
+                onClick={() => setProjection('mercator')}
+              >
+                Flat map
+              </button>
+            </div>
+            <button
+              type="button"
+              className="discovery-panel-toggle"
+              aria-pressed={panelOpen}
+              onClick={() => setPanelOpen((open) => !open)}
+            >
+              {panelOpen ? 'Hide panel' : 'Show panel'}
+            </button>
+          </div>
+
+          <div className={`discovery-legend-drawer${legendOpen ? ' is-open' : ''}`}>
+            <button
+              type="button"
+              className="discovery-legend-toggle"
+              aria-expanded={legendOpen}
+              onClick={() => setLegendOpen((open) => !open)}
+            >
+              {legendOpen ? 'Hide legend' : 'Legend'}
+            </button>
+            {legendOpen ? (
+              <Legend
+                layer={activeLayer}
+                palette={palette ?? FALLBACK_PALETTE}
+                variableUnit={variable.display_unit}
+                increaseMeans={variable.increase_means}
+                qThreshold={index.q_threshold}
+                rateLimit={rateLimit}
+                temperatureLabel={temperatureLabel}
+                moistureLabel={moistureLabel}
+              />
+            ) : null}
+          </div>
+
+          {hover ? (
+            <div className="discovery-tooltip" style={{ left: hover.x + 14, top: hover.y + 14 }} role="status">
+              <strong>{hover.title}</strong>
+              <span>{hover.detail}</span>
+            </div>
+          ) : null}
+
+          {loadState === 'loading' && !grids ? (
             <div className="discovery-status" role="status">
               <div className="discovery-spinner" />
               <span>Loading layer…</span>
+            </div>
+          ) : null}
+          {loadState === 'loading' && grids ? (
+            <div className="discovery-status-badge" role="status">
+              Updating layer…
+            </div>
+          ) : null}
+          {basemapState === 'loading' ? (
+            <div className="discovery-status" role="status">
+              <div className="discovery-spinner" />
+              <span>Loading Natural Earth basemap…</span>
+            </div>
+          ) : null}
+          {basemapState === 'error' ? (
+            <div className="discovery-status discovery-status-error" role="alert">
+              <strong>The offline basemap failed to load.</strong>
+              <span>{basemapError}</span>
             </div>
           ) : null}
           {loadState === 'error' ? (
@@ -358,19 +587,20 @@ export default function DiscoveryPage() {
             </div>
           ) : null}
         </div>
-        <div className="discovery-panels">
+
+        <div className={`discovery-panels${panelOpen ? '' : ' is-collapsed'}`} hidden={!panelOpen}>
           <section className="discovery-card">
             <h2>{layerLabel}</h2>
             <p className="discovery-muted">
               {variable.label}, {windowMeta ? `${windowMeta.start} to ${windowMeta.end}` : windowId}
             </p>
             <div className="discovery-layers" role="radiogroup" aria-label="Map layer">
-              {LAYERS.map((item) => (
+              {layers.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   role="radio"
-                  aria-checked={layer === item.id}
+                  aria-checked={activeLayer === item.id}
                   onClick={() => setLayer(item.id)}
                 >
                   {item.label}
@@ -378,16 +608,7 @@ export default function DiscoveryPage() {
               ))}
             </div>
           </section>
-          <Legend
-            layer={layer}
-            palette={palette ?? FALLBACK_PALETTE}
-            variableUnit={variable.display_unit}
-            increaseMeans={variable.increase_means}
-            qThreshold={index.q_threshold}
-            rateLimit={rateLimit}
-            temperatureLabel={temperatureLabel}
-            moistureLabel={moistureLabel}
-          />
+
           <CellPanel
             cell={cell}
             grids={grids}
@@ -403,6 +624,7 @@ export default function DiscoveryPage() {
               navigate('region', { selection: { kind: 'cell', row: cell.row, col: cell.col } })
             }}
           />
+
           <section className="discovery-card">
             <h2>Regions</h2>
             <label className="discovery-check">
@@ -431,12 +653,13 @@ export default function DiscoveryPage() {
               ))}
             </ul>
           </section>
+
           <InfoPanel
             variable={variable}
-            basemap={basemap}
+            basemapState={basemapState}
             temperatureLabel={temperatureLabel}
             moistureLabel={moistureLabel}
-            patternLayer={layer === 'pattern'}
+            patternLayer={activeLayer === 'pattern'}
           />
         </div>
       </div>
@@ -464,7 +687,7 @@ function Legend({
   moistureLabel: string
 }) {
   return (
-    <section className="discovery-card discovery-legend">
+    <section className="discovery-legend">
       <h2>Legend</h2>
       <p>
         Display unit: {variableUnit}.
@@ -474,12 +697,13 @@ function Legend({
         {layer === 'coverage' ? ' Coverage is a fraction of valid months from 0 to 1.' : null}
         {layer === 'trend' ? ' Trend classes describe direction, not a rate.' : null}
         {layer === 'pattern' ? ` Pattern classes compare ${temperatureLabel} and ${moistureLabel}.` : null}
+        {layer === 'quality' ? ' Hatching marks cells whose change looks like a sudden jump, not a gradual trend.' : null}
       </p>
       {layer === 'trend' ? (
         <ul>
           <Swatch colour={palette.increase} text={`Significant increase (${increaseMeans})`} />
           <Swatch colour={palette.decrease} text="Significant decrease" />
-          <Swatch colour={palette.neutral} text="Not significant" />
+          <Swatch colour={[palette.neutral[0], palette.neutral[1], palette.neutral[2], 120]} text="Not significant" />
           <Swatch hatch={palette} text="Insufficient data" />
           <Swatch text="Outside domain (transparent)" />
         </ul>
@@ -520,9 +744,22 @@ function Legend({
           <Swatch colour={palette.warmingWetting} text={patternWords(PATTERN_WARMING_WETTING, temperatureLabel, moistureLabel)} />
           <Swatch colour={palette.coolingDrying} text={patternWords(PATTERN_COOLING_DRYING, temperatureLabel, moistureLabel)} />
           <Swatch colour={palette.coolingWetting} text={patternWords(PATTERN_COOLING_WETTING, temperatureLabel, moistureLabel)} />
-          <Swatch colour={palette.mixed} text={patternWords(PATTERN_MIXED, temperatureLabel, moistureLabel)} />
+          <Swatch colour={[palette.mixed[0], palette.mixed[1], palette.mixed[2], 130]} text={patternWords(PATTERN_MIXED, temperatureLabel, moistureLabel)} />
           <Swatch hatch={palette} text={patternWords(INSUFFICIENT_DATA, temperatureLabel, moistureLabel)} />
           <Swatch text="Outside domain (transparent)" />
+        </ul>
+      ) : null}
+      {layer === 'quality' ? (
+        <ul>
+          <QualitySwatch text="Possible data discontinuity (sudden jump)" />
+          <li>
+            <span className="discovery-swatch discovery-quality-swatch discovery-quality-swatch-known" />
+            <span>Sudden jump inside a documented forcing-change period</span>
+          </li>
+          <li>
+            <span className="discovery-swatch" />
+            <span>No step-like change detected</span>
+          </li>
         </ul>
       ) : null}
       <p>FDR-adjusted q {'<'} 0.05</p>
@@ -542,6 +779,15 @@ function Swatch({ colour, hatch, text }: { colour?: Rgba; hatch?: Palette; text:
   return (
     <li>
       <span className="discovery-swatch" style={style} />
+      <span>{text}</span>
+    </li>
+  )
+}
+
+function QualitySwatch({ text }: { text: string }) {
+  return (
+    <li>
+      <span className="discovery-swatch discovery-quality-swatch" />
       <span>{text}</span>
     </li>
   )
@@ -641,6 +887,12 @@ function CellPanel({
                 <dd>{patternWords(values.pattern, temperatureLabel, moistureLabel)}</dd>
               </>
             ) : null}
+            {values && values.quality != null ? (
+              <>
+                <dt>Data quality</dt>
+                <dd>{qualityNote(values.quality, values.breakYear, variable.product)}</dd>
+              </>
+            ) : null}
           </dl>
           <button type="button" className="discovery-primary" onClick={onInspect}>
             Inspect evidence
@@ -653,13 +905,13 @@ function CellPanel({
 
 function InfoPanel({
   variable,
-  basemap,
+  basemapState,
   temperatureLabel,
   moistureLabel,
   patternLayer,
 }: {
   variable: DataIndex['variables'][number]
-  basemap: BasemapState
+  basemapState: BasemapState
   temperatureLabel: string
   moistureLabel: string
   patternLayer: boolean
@@ -705,50 +957,102 @@ function InfoPanel({
         </p>
       ) : null}
       <p>
-        Web Mercator cannot show beyond about ±85° latitude, so the polar rows of this 90° to −90° grid are clipped.
-        The raster is pinned to ±85.05° because MapLibre cannot tile an image corner at ±90°, and each row is
-        placed at its Web Mercator latitude. A clicked cell uses its true centre.
+        Coastlines, country borders and graticule come from Natural Earth 50m, bundled offline with the app. The globe
+        uses the full 90° to −90° grid; the flat map uses Web Mercator and therefore clips beyond about ±85°.
       </p>
       <p className="discovery-muted">
-        Basemap: {DEMO_STYLE_URL}.{' '}
-        {basemap === 'demo'
-          ? 'Demo tiles are loaded.'
-          : basemap === 'plain'
-            ? 'That style did not load, so the map is using a plain background.'
-            : 'Waiting for the demo style.'}
+        Basemap: Natural Earth (offline).{' '}
+        {basemapState === 'ready'
+          ? 'Land and border data loaded locally.'
+          : basemapState === 'error'
+            ? 'The local basemap failed to load.'
+            : 'Loading the local basemap.'}
       </p>
     </section>
   )
 }
 
-function renderLayer(grids: GridBundle, layer: LayerId, palette: Palette, qThreshold: number): ImageData {
-  if (layer === 'trend') return gridImage(grids.trend, (value, index) => trendColour(value, palette, index))
-  if (layer === 'pattern') return gridImage(grids.pattern, (value, index) => patternColour(value, palette, index))
+function buildLayerImage(
+  grids: GridBundle,
+  layer: LayerId,
+  palette: Palette,
+  qThreshold: number,
+): ImageData {
+  const trendPaint = (value: number, index: number): Rgba => {
+    const colour = trendColour(value, palette, index)
+    if (value === TREND_NOT_SIGNIFICANT) return [colour[0], colour[1], colour[2], 108]
+    if (value === INSUFFICIENT_DATA) return [colour[0], colour[1], colour[2], 220]
+    return colour
+  }
+  if (layer === 'trend') return renderClassImage(grids.trend, trendPaint)
+  if (layer === 'pattern') {
+    return renderClassImage(grids.pattern, (value, index) => {
+      const colour = patternColour(value, palette, index)
+      if (value === PATTERN_MIXED) return [colour[0], colour[1], colour[2], 132]
+      if (value === INSUFFICIENT_DATA) return [colour[0], colour[1], colour[2], 220]
+      return colour
+    })
+  }
   if (layer === 'rate') {
     const limit = finiteAbsPercentile(grids.slope, 0.98)
-    return gridImage(grids.slope, (value, index) =>
-      divergingColour(value, limit, palette.decrease, palette.increase, palette.divergingMid, rateAlpha(grids.qValue[index], qThreshold)),
+    return renderContinuousImage(grids.slope, (value, index) =>
+      divergingColour(
+        value,
+        limit,
+        palette.decrease,
+        palette.increase,
+        palette.divergingMid,
+        rateAlpha(grids.qValue[index], qThreshold),
+      ),
     )
   }
   if (layer === 'std') {
-    return gridImage(grids.stdChange, (value) =>
-      divergingColour(value, 2, palette.decrease, palette.increase, palette.divergingMid, 255),
+    return renderContinuousImage(grids.stdChange, (value, index) =>
+      divergingColour(
+        value,
+        2,
+        palette.decrease,
+        palette.increase,
+        palette.divergingMid,
+        rateAlpha(grids.qValue[index], qThreshold),
+      ),
     )
   }
   if (layer === 'significance') {
-    return gridImage(grids.qValue, (value) => sequentialColour(value, palette.sequentialHigh, palette.sequentialLow))
+    return renderContinuousImage(grids.qValue, (value) =>
+      sequentialColour(value, palette.sequentialHigh, palette.sequentialLow),
+    )
   }
-  return gridImage(grids.coverage, (value) => sequentialColour(value, palette.sequentialLow, palette.sequentialHigh))
+  if (layer === 'coverage') {
+    return renderContinuousImage(grids.coverage, (value) =>
+      sequentialColour(value, palette.sequentialLow, palette.sequentialHigh),
+    )
+  }
+  return renderQualityImage(grids.trend, grids.quality ?? new Int8Array(N_ROWS * N_COLS), trendPaint)
 }
 
 function imageCanvas(image: ImageData): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = image.width
   canvas.height = image.height
-  const context = canvas.getContext('2d', { willReadFrequently: true })
+  const context = canvas.getContext('2d')
   if (!context) throw new Error('Could not draw the grid image.')
   context.putImageData(image, 0, 0)
   return canvas
+}
+
+function imageDataFromCanvas(canvas: HTMLCanvasElement): ImageData {
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('Could not read the grid canvas.')
+  return context.getImageData(0, 0, canvas.width, canvas.height)
+}
+
+function rememberCanvas(cache: Map<string, HTMLCanvasElement>, key: string, canvas: HTMLCanvasElement): void {
+  if (cache.size >= CANVAS_CACHE_LIMIT) {
+    const oldest = cache.keys().next().value
+    if (oldest) cache.delete(oldest)
+  }
+  cache.set(key, canvas)
 }
 
 function readCell(grids: GridBundle, cell: CellPick) {
@@ -762,7 +1066,46 @@ function readCell(grids: GridBundle, cell: CellPick) {
     nValid: grids.nValid[index],
     coverage: grids.coverage[index],
     pattern: grids.pattern[index],
+    quality: grids.quality ? grids.quality[index] : null,
+    breakYear: grids.breakYear ? grids.breakYear[index] : null,
   }
+}
+
+function hoverDetail(
+  layer: LayerId,
+  grids: GridBundle,
+  index: number,
+  variable: DataIndex['variables'][number],
+): string {
+  if (layer === 'trend') return `${trendWords(grids.trend[index], variable.increase_means)} · ${formatStat(grids.slope[index])} ${variable.display_unit}/decade`
+  if (layer === 'pattern') {
+    return `${patternWords(grids.pattern[index], 'Temperature', 'Moisture')} · ${formatStat(grids.slope[index])} ${variable.display_unit}/decade`
+  }
+  if (layer === 'quality') return `${qualityWords(grids.quality ? grids.quality[index] : null)} · ${formatStat(grids.slope[index])} ${variable.display_unit}/decade`
+  if (layer === 'rate') return `Sen slope ${formatStat(grids.slope[index])} ${variable.display_unit}/decade`
+  if (layer === 'std') return `Standardized change ${formatStat(grids.stdChange[index])} per decade`
+  if (layer === 'significance') return `q ${formatStat(grids.qValue[index])}`
+  return `Coverage ${formatStat(grids.coverage[index])}`
+}
+
+function qualityWords(code: number | null): string {
+  if (code === QUALITY_STEP) return 'Possible data discontinuity: change looks like a sudden jump'
+  if (code === QUALITY_STEP_KNOWN_FORCING) return 'Possible data discontinuity in a documented forcing-change period'
+  if (code === INSUFFICIENT_DATA) return 'Data quality not evaluated'
+  if (code === OUTSIDE_DOMAIN) return 'Outside domain'
+  return 'No step-like change detected'
+}
+
+function qualityNote(code: number, breakYear: number | null, product: string): string {
+  if (code === QUALITY_STEP || code === QUALITY_STEP_KNOWN_FORCING) {
+    const year = breakYear != null && Number.isFinite(breakYear) ? ` around ${breakYear.toFixed(1)}` : ''
+    const period =
+      code === QUALITY_STEP_KNOWN_FORCING
+        ? ` This falls inside a documented forcing-change period for ${product}.`
+        : ''
+    return `change looks like a sudden jump${year}.${period}`
+  }
+  return qualityWords(code)
 }
 
 function trendWords(code: number, increaseMeans: string): string {
@@ -859,14 +1202,6 @@ function parseCssColour(input: string, fallback: Rgba): Rgba {
   return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3]), alpha]
 }
 
-function plainStyle(background: string): StyleSpecification {
-  return {
-    version: 8,
-    sources: {},
-    layers: [{ id: 'background', type: 'background', paint: { 'background-color': background } }],
-  }
-}
-
 function normalizeLon(lon: number): number {
   const wrapped = (((lon + 180) % 360) + 360) % 360 - 180
   return wrapped === 180 ? -180 : wrapped
@@ -934,15 +1269,32 @@ function cellCollection(cell: CellPick): RingCollection {
   }
 }
 
+type GridCoordinates = [[number, number], [number, number], [number, number], [number, number]]
+
+function gridCoordinates(): GridCoordinates {
+  // MapLibre image sources are placed in Mercator space even when the style
+  // uses the globe projection. A corner exactly at ±90° does not tile, and a
+  // near-polar corner warps the raster into radial streaks, so both modes use
+  // the Web Mercator limit. The globe still shows the round planet; the last
+  // ~5° at each pole is outside the image texture.
+  const limit = MERCATOR_LAT_LIMIT
+  return [
+    [-180, limit],
+    [180, limit],
+    [180, -limit],
+    [-180, -limit],
+  ]
+}
+
 function ensureGrid(map: MapLibreMap) {
   if (map.getSource('grid')) return
-  map.addSource('grid', { type: 'image', coordinates: GRID_COORDINATES })
+  map.addSource('grid', { type: 'image', coordinates: gridCoordinates() })
   map.addLayer({
     id: 'grid-raster',
     type: 'raster',
     source: 'grid',
     layout: { visibility: 'none' },
-    paint: { 'raster-resampling': 'nearest', 'raster-fade-duration': 0 },
+    paint: { 'raster-resampling': 'linear', 'raster-fade-duration': 0, 'raster-opacity': 1 },
   })
 }
 
@@ -993,6 +1345,10 @@ function pushCanvas(map: MapLibreMap, canvas: HTMLCanvasElement) {
   const source = map.getSource('grid')
   if (!source || source.type !== 'image') return
   const imageSource = source as ImageSource
-  imageSource.updateImage({ image: canvas })
-  if (map.getLayer('grid-raster')) map.setLayoutProperty('grid-raster', 'visibility', 'visible')
+  imageSource.updateImage({ image: canvas, coordinates: gridCoordinates() })
+  if (map.getLayer('grid-raster')) {
+    map.setLayoutProperty('grid-raster', 'visibility', 'visible')
+    map.setPaintProperty('grid-raster', 'raster-opacity', 1)
+  }
 }
+

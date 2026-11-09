@@ -1,6 +1,6 @@
 // Fetch helpers for the contract files. All results are cached per path.
 import { N_COLS, N_MONTHS, N_ROWS, TILE_SIZE, type FloatLayer } from './contract'
-import type { CasesFile, DataIndex, Region, RegionSeries, ScreenerFile } from './types'
+import type { CasesFile, Country, DataIndex, RegionSeries, RegionsFile, ScreenerFile } from './types'
 
 const BASE = `${import.meta.env.BASE_URL}data`
 const cache = new Map<string, Promise<unknown>>()
@@ -36,7 +36,38 @@ function checkLength<T extends { length: number }>(arr: T, expected: number, wha
 }
 
 export const loadIndex = () => json<DataIndex>('index.json')
-export const loadRegions = () => json<{ regions: Region[] }>('regions.json').then((r) => r.regions)
+export const loadRegionsFile = () => json<RegionsFile>('regions.json')
+export const loadRegions = () => loadRegionsFile().then((r) => r.regions)
+/** Schema 1.2 (§11). Empty list when the export has no countries. */
+export const loadCountries = () => loadRegionsFile().then((r): Country[] => r.countries ?? [])
+
+/** Schema 1.2 (§11): country index per cell (−1 = none), or null when not exported. */
+export async function loadCountryGrid(): Promise<Int16Array | null> {
+  const file = await loadRegionsFile()
+  if (!file.country_grid) return null
+  const buf = await binary(file.country_grid)
+  return checkLength(new Int16Array(buf), N_ROWS * N_COLS, 'country_grid')
+}
+
+/**
+ * Schema 1.2 (§12): quality flag grid, or null when the export has no quality layers.
+ * Codes: 0 none, 1 step-like change, 2 step-like change in a known forcing-change period,
+ * −9 not evaluated, −99 outside domain.
+ */
+export async function loadQualityFlag(variableId: string, windowId: string): Promise<Int8Array | null> {
+  const index = await loadIndex()
+  if (!index.quality) return null
+  const buf = await binary(`grids/${variableId}/${windowId}/quality_flag.i8`)
+  return checkLength(new Int8Array(buf), N_ROWS * N_COLS, 'quality_flag')
+}
+
+/** Schema 1.2 (§12): decimal break year where flagged (NaN elsewhere), or null when absent. */
+export async function loadBreakpointYear(variableId: string, windowId: string): Promise<Float32Array | null> {
+  const index = await loadIndex()
+  if (!index.quality) return null
+  const buf = await binary(`grids/${variableId}/${windowId}/breakpoint_year.f32`)
+  return checkLength(new Float32Array(buf), N_ROWS * N_COLS, 'breakpoint_year')
+}
 export const loadCases = () => json<CasesFile>('cases.json')
 export const loadScreener = (windowId: string, domain = 'global') =>
   json<ScreenerFile>(`screener/${windowId}/${domain}.json`)

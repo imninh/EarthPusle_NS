@@ -10,14 +10,18 @@ import {
 } from '../../data/contract'
 import {
   cellSeriesFromTile,
+  loadBreakpointYear,
   loadCorrelationLayer,
+  loadCountries,
+  loadCountryGrid,
   loadFloatLayer,
+  loadQualityFlag,
   loadRegionSeries,
   loadRegions,
   loadTile,
   loadTrendClass,
 } from '../../data/loaders'
-import type { DataIndex, Selection, VariableMeta, WindowMeta } from '../../data/types'
+import type { Country, DataIndex, Region, Selection, VariableMeta, WindowMeta } from '../../data/types'
 import {
   aggregateBbox,
   alignToMonths,
@@ -32,14 +36,18 @@ import {
   meanFinite,
   tileIdsForRange,
   windowMonths,
+  type CellRange,
   type EvidenceModel,
   type LoadedTile,
   type TrendLine,
 } from './model'
+import { cellQuality, qualityShareForCountry, qualityShareForRange, type QualitySummary } from './quality'
 
 export interface PlaceData {
   title: string
   detail: string
+  /** Includes the preposition, e.g. "in Vietnam". */
+  plainLabel: string
   note: string | null
   unit: string
   months: string[]
@@ -47,6 +55,8 @@ export interface PlaceData {
   anomalies: (number | null)[]
   evidence: EvidenceModel
   trend: TrendLine | null
+  quality: QualitySummary | null
+  country: Country | null
 }
 
 export interface LoadHooks {
@@ -98,6 +108,73 @@ async function loadTilePair(
     }),
   )
   return tiles
+}
+
+async function loadCellQuality(
+  index: DataIndex,
+  variableId: string,
+  windowId: string,
+  row: number,
+  col: number,
+): Promise<QualitySummary | null> {
+  if (!index.quality) return null
+  try {
+    const [flagLayer, breakLayer] = await Promise.all([
+      loadQualityFlag(variableId, windowId),
+      loadBreakpointYear(variableId, windowId),
+    ])
+    if (!flagLayer) return null
+    return cellQuality(flagLayer, breakLayer, row, col)
+  } catch {
+    // Quality layers are optional (schema 1.2): absent files must not break the page.
+    return null
+  }
+}
+
+async function loadRangeQuality(
+  index: DataIndex,
+  variableId: string,
+  windowId: string,
+  range: CellRange,
+): Promise<QualitySummary | null> {
+  if (!index.quality) return null
+  try {
+    const [flagLayer, breakLayer] = await Promise.all([
+      loadQualityFlag(variableId, windowId),
+      loadBreakpointYear(variableId, windowId),
+    ])
+    if (!flagLayer) return null
+    return qualityShareForRange(flagLayer, breakLayer, range)
+  } catch {
+    return null
+  }
+}
+
+async function loadRegionQuality(
+  index: DataIndex,
+  variableId: string,
+  windowId: string,
+  region: Region | null,
+  country: Country | null,
+): Promise<QualitySummary | null> {
+  if (!index.quality) return null
+  try {
+    if (country) {
+      const [flagLayer, breakLayer, countryGrid] = await Promise.all([
+        loadQualityFlag(variableId, windowId),
+        loadBreakpointYear(variableId, windowId),
+        loadCountryGrid(),
+      ])
+      if (!flagLayer || !countryGrid) return null
+      return qualityShareForCountry(flagLayer, breakLayer, countryGrid, country.index)
+    }
+    if (!region) return null
+    const range = cellsInsideBbox(region.bbox)
+    if (!range) return null
+    return loadRangeQuality(index, variableId, windowId, range)
+  } catch {
+    return null
+  }
 }
 
 /** Anomaly series for the comparison chart, aligned to index.months. */
@@ -156,8 +233,9 @@ export async function loadPlace(
   const calendar = requireWindow(index, window)
   const label = windowLabel(window)
   if (selection.kind === 'cell') return loadCell(index, variable, window.id, selection, calendar, label, hooks)
-  if (selection.kind === 'region') return loadRegion(index, variable, selection.regionId, calendar, label, hooks)
-  return loadBox(index, variable, selection.bbox, calendar, label, hooks)
+  if (selection.kind === 'region')
+    return loadRegion(index, variable, selection.regionId, window.id, calendar, label, hooks)
+  return loadBox(index, variable, selection.bbox, window.id, calendar, label, hooks)
 }
 
 async function loadCell(
@@ -174,11 +252,12 @@ async function loadCell(
   hooks.onProgress?.('Loading the cell series and precomputed layers…')
   const wanted = CELL_LAYERS.filter((name) => index.layers.float.includes(name))
   const tileId = tileIdFor(row, col)
-  const [valuesTile, anomalyTile, trendClass, layerList] = await Promise.all([
+  const [valuesTile, anomalyTile, trendClass, layerList, quality] = await Promise.all([
     loadTile(variable.id, tileId, 'values'),
     loadTile(variable.id, tileId, 'anomalies'),
     index.layers.class.includes('trend_class') ? loadTrendClass(variable.id, windowId) : Promise.resolve(null),
     Promise.all(wanted.map((name) => loadFloatLayer(variable.id, windowId, name))),
+    loadCellQuality(index, variable.id, windowId, row, col),
   ])
   const layerAt = (name: FloatLayer) => {
     const position = wanted.indexOf(name)
@@ -199,6 +278,7 @@ async function loadCell(
   return {
     title: `Cell row ${row}, column ${col}`,
     detail: `${formatLat(rowToLat(row))}, ${formatLon(colToLon(col))}. One grid cell.`,
+    plainLabel: 'at this grid cell',
     note:
       valuesTile == null && anomalyTile == null
         ? `No monthly tile is exported for ${tileId}. The evidence card still uses the precomputed grid layers.`
@@ -224,6 +304,8 @@ async function loadCell(
       alignToMonths(index.months, anomalies, calendar.months),
       senSlopeDecade == null ? null : senSlopeDecade / 10,
     ),
+    quality,
+    country: null,
   }
 }
 
@@ -231,13 +313,20 @@ async function loadRegion(
   index: DataIndex,
   variable: VariableMeta,
   regionId: string,
+  windowId: string,
   calendar: { months: string[] },
   label: string,
   hooks: LoadHooks,
 ): Promise<PlaceData> {
   hooks.onProgress?.('Loading the region series…')
-  const [series, regions] = await Promise.all([loadRegionSeries(regionId, variable.id), loadRegions()])
-  const region = regions.find((item) => item.id === regionId)
+  const [series, regions, countries] = await Promise.all([
+    loadRegionSeries(regionId, variable.id),
+    loadRegions(),
+    loadCountries(),
+  ])
+  const region = regions.find((item) => item.id === regionId) ?? null
+  const country = countries.find((item) => item.id === regionId) ?? null
+  const quality = await loadRegionQuality(index, variable.id, windowId, region, country)
   const values = alignToMonths(series.months, series.values, index.months)
   const anomalies = alignToMonths(series.months, series.anomalies, index.months)
   const built = buildBrowserEvidence({
@@ -248,12 +337,16 @@ async function loadRegion(
     coverage: meanFinite(alignToMonths(series.months, series.valid_cell_fraction, calendar.months)),
     coverageNote: 'Mean of valid_cell_fraction over months in this window.',
   })
-  const box = region ? region.bbox.join(', ') : null
+  const title = country?.label ?? region?.label ?? regionId
+  const box = country?.bbox ?? region?.bbox ?? null
+  const boxText = box ? ` Approximate bbox [west, south, east, north]: ${box.join(', ')}.` : ''
+  const detail = country
+    ? `Country region from Natural Earth. ${country.n_cells} grid cells inside the common mask.${boxText}`
+    : `Predefined region. The box is approximate.${boxText}`
   return {
-    title: region?.label ?? regionId,
-    detail: box
-      ? `Predefined region. Approximate box [west, south, east, north]: ${box}.`
-      : 'Predefined region. The box is approximate.',
+    title,
+    detail,
+    plainLabel: `in ${title}`,
     note: null,
     unit: series.unit || variable.display_unit,
     months: index.months,
@@ -261,6 +354,8 @@ async function loadRegion(
     anomalies,
     evidence: built.evidence,
     trend: built.trend,
+    quality,
+    country,
   }
 }
 
@@ -268,6 +363,7 @@ async function loadBox(
   index: DataIndex,
   variable: VariableMeta,
   bbox: [number, number, number, number],
+  windowId: string,
   calendar: { start: number; end: number; months: string[] },
   label: string,
   hooks: LoadHooks,
@@ -292,6 +388,7 @@ async function loadBox(
     return {
       title,
       detail: 'Approximate box. No 1° cell centre falls inside it.',
+      plainLabel: 'in this custom box',
       note: 'Widen the box so that it contains at least one cell centre.',
       unit: variable.display_unit,
       months: index.months,
@@ -299,11 +396,16 @@ async function loadBox(
       anomalies: empty,
       evidence: built.evidence,
       trend: null,
+      quality: null,
+      country: null,
     }
   }
   const known = new Set(index.tiles.ids)
   const present = tileIdsForRange(range).filter((id) => known.has(id))
-  const tiles = await loadTilePair(variable.id, present, false, hooks.onProgress)
+  const [tiles, quality] = await Promise.all([
+    loadTilePair(variable.id, present, false, hooks.onProgress),
+    loadRangeQuality(index, variable.id, windowId, range),
+  ])
   const aggregated = aggregateBbox({
     range,
     months: N_MONTHS,
@@ -326,6 +428,7 @@ async function loadBox(
   return {
     title,
     detail: 'Approximate box. Area-weighted mean of cells with data, weighted by cos(latitude).',
+    plainLabel: 'in this custom box',
     note: null,
     unit: variable.display_unit,
     months: index.months,
@@ -333,5 +436,7 @@ async function loadBox(
     anomalies: aggregated.anomalies,
     evidence: built.evidence,
     trend: built.trend,
+    quality,
+    country: null,
   }
 }

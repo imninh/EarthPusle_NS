@@ -8,6 +8,8 @@ import {
   coverageIsLow,
   domainHasNoEvaluatedCells,
   formatPercent,
+  hasDiscontinuityFields,
+  screenerHeadline,
   significantArea,
   sortByMetric,
   sortDescription,
@@ -190,8 +192,89 @@ describe('view rows', () => {
     const [row] = buildViewRows([variable], [])
     expect(row?.nCells).toBeNull()
     expect(row?.significantArea).toBeNull()
+    expect(row?.stepFlag).toBeNull()
+    expect(row?.sigTrendFlagged).toBeNull()
     expect(domainHasNoEvaluatedCells([])).toBe(true)
     expect(domainHasNoEvaluatedCells([{ nCells: 0 }, { nCells: null }])).toBe(true)
     expect(domainHasNoEvaluatedCells([{ nCells: 0 }, { nCells: 3 }])).toBe(false)
+  })
+})
+
+describe('schema 1.2 quality fields', () => {
+  const variable = {
+    id: 'example',
+    label: 'Example variable',
+    category: 'water',
+    source_type: 'model' as const,
+    display_unit: 'mm/month',
+    increase_means: 'wetter',
+  }
+  const base: ScreenerRow = {
+    variable: 'example',
+    valid_area_fraction: 0.9,
+    sig_increase_area_fraction: 0.2,
+    sig_decrease_area_fraction: 0.1,
+    median_abs_std_change_decade: 0.4,
+    median_sen_slope_decade_sig: 1,
+    regional_contrast: 0.2,
+    n_cells_evaluated: 100,
+  }
+
+  it('maps the optional fields and detects their presence', () => {
+    const [without] = buildViewRows([variable], [base])
+    expect(hasDiscontinuityFields([without!])).toBe(false)
+
+    const [withQuality] = buildViewRows(
+      [variable],
+      [{ ...base, step_flag_area_fraction: 0.12, sig_trend_flagged_fraction: 0.3 }],
+    )
+    expect(withQuality?.stepFlag).toBeCloseTo(0.12)
+    expect(withQuality?.sigTrendFlagged).toBeCloseTo(0.3)
+    expect(hasDiscontinuityFields([withQuality!])).toBe(true)
+  })
+
+  it('keeps a known zero flag distinct from a missing field', () => {
+    const [row] = buildViewRows([variable], [{ ...base, step_flag_area_fraction: 0 }])
+    expect(row?.stepFlag).toBe(0)
+    expect(hasDiscontinuityFields([row!])).toBe(true)
+  })
+})
+
+describe('screener headline', () => {
+  const variable = {
+    id: 'a',
+    label: 'A',
+    category: 'water',
+    source_type: 'model' as const,
+    display_unit: 'mm',
+    increase_means: 'wetter',
+  }
+  const row = (id: string, increase: number, decrease: number, cells = 10): ScreenerRow => ({
+    variable: id,
+    valid_area_fraction: 1,
+    sig_increase_area_fraction: increase,
+    sig_decrease_area_fraction: decrease,
+    median_abs_std_change_decade: 0.2,
+    median_sen_slope_decade_sig: 1,
+    regional_contrast: 0.2,
+    n_cells_evaluated: cells,
+  })
+
+  it('counts evaluated variables above the display threshold', () => {
+    const rows = buildViewRows(
+      [variable, { ...variable, id: 'b', label: 'B' }, { ...variable, id: 'c', label: 'C' }],
+      [row('a', 0.3, 0.1), row('b', 0.02, 0.02), row('c', 0.9, 0.0, 0)],
+    )
+    expect(screenerHeadline(rows, 'Global land')).toBe(
+      '1 of 2 variables show significant change over more than 10% of Global land.',
+    )
+  })
+
+  it('handles empty and all-small domains without inventing a ranking', () => {
+    expect(screenerHeadline([], 'Mekong')).toBe('No cells were evaluated in Mekong for this period.')
+    const rows = buildViewRows([variable], [row('a', 0.02, 0.02)])
+    expect(screenerHeadline(rows, 'Mekong')).toBe(
+      'No variable shows significant change over more than 10% of Mekong in this period.',
+    )
   })
 })

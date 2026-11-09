@@ -2,11 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnomalyTrendChart } from '../../charts/AnomalyTrendChart'
 import { ComparisonChart } from '../../charts/ComparisonChart'
 import { MonthlyValuesChart } from '../../charts/MonthlyValuesChart'
+import { PlaceSearch } from '../../components/PlaceSearch'
 import { useApp } from '../../data/AppState'
-import { loadRegions } from '../../data/loaders'
-import type { Region, Selection } from '../../data/types'
+import { loadCountries, loadRegions } from '../../data/loaders'
+import type { Country, Region, Selection } from '../../data/types'
+import { CountryLocator } from './CountryLocator'
 import { loadAnomalies, loadCellSpearman, loadPlace, type PlaceData } from './loadPlace'
 import {
+  annualMeanSeries,
   correlationPairId,
   senTrendSeries,
   spearmanInWindow,
@@ -15,6 +18,8 @@ import {
   zScoresInWindow,
   type EvidenceModel,
 } from './model'
+import { qualityBannerText, qualityDetailText, type QualitySummary } from './quality'
+import { summarySentence } from './summary'
 import './region.css'
 
 type RhoState = 'idle' | 'loading' | 'missing' | { rho: number; n: number | null }
@@ -31,6 +36,7 @@ export default function RegionPage() {
   const windowMeta = index.windows.find((item) => item.id === windowId) ?? index.windows[0]
   const key = selectionKey(selection)
   const [regions, setRegions] = useState<Region[] | null>(null)
+  const [countries, setCountries] = useState<Country[]>([])
   const [regionsError, setRegionsError] = useState<string | null>(null)
   const [draft, setDraft] = useState({ west: '', south: '', east: '', north: '' })
   const [formError, setFormError] = useState<string | null>(null)
@@ -56,9 +62,11 @@ export default function RegionPage() {
 
   useEffect(() => {
     let cancelled = false
-    loadRegions()
-      .then((list) => {
-        if (!cancelled) setRegions(list)
+    Promise.all([loadRegions(), loadCountries()])
+      .then(([list, countryList]) => {
+        if (cancelled) return
+        setRegions(list)
+        setCountries(countryList)
       })
       .catch((error: unknown) => {
         if (!cancelled) setRegionsError(error instanceof Error ? error.message : String(error))
@@ -169,6 +177,29 @@ export default function RegionPage() {
 
   const trendSeries =
     place?.trend && windowMeta ? senTrendSeries(place.months, windowMeta.start, windowMeta.end, place.trend) : null
+  const annualMeans = useMemo(
+    () =>
+      place && windowMeta
+        ? annualMeanSeries(place.months, place.anomalies, windowMeta.start, windowMeta.end)
+        : null,
+    [place, windowMeta],
+  )
+  const knownForcingPeriod = place
+    ? (index.quality?.known_forcing_changes[place.evidence.product] ?? null)
+    : null
+  const qualityBanner = place
+    ? qualityBannerText(place.quality, place.evidence.product, place.evidence.productVersion, knownForcingPeriod)
+    : null
+  const summary =
+    place && windowMeta
+      ? summarySentence({
+          evidence: place.evidence,
+          placeLabel: place.plainLabel,
+          windowStart: windowMeta.start,
+          windowEnd: windowMeta.end,
+          quality: place.quality,
+        })
+      : null
   const others = index.variables.filter((item) => item.id !== variableId)
   const categories = [...new Set(others.map((item) => item.category))]
 
@@ -185,6 +216,7 @@ export default function RegionPage() {
       {selection == null ? (
         <Picker
           regions={regions}
+          countries={countries}
           regionsError={regionsError}
           draft={draft}
           formError={formError}
@@ -225,6 +257,9 @@ export default function RegionPage() {
           rhoLabel={rhoText(canPrecompute, rhoState, place, secondAnomalies, loadingSecond, windowMeta)}
           trendMonths={trendSeries?.months ?? null}
           trendY={trendSeries?.y ?? null}
+          annualMeans={annualMeans}
+          summary={summary}
+          qualityBanner={qualityBanner}
         />
       )}
     </section>
@@ -249,6 +284,7 @@ function rhoText(
 
 function Picker({
   regions,
+  countries,
   regionsError,
   draft,
   formError,
@@ -257,6 +293,7 @@ function Picker({
   onSubmit,
 }: {
   regions: Region[] | null
+  countries: Country[]
   regionsError: string | null
   draft: { west: string; south: string; east: string; north: string }
   formError: string | null
@@ -267,8 +304,37 @@ function Picker({
   return (
     <div className="region-stack">
       <p className="muted">
-        Pick a predefined region or enter an approximate box. You can also click a cell on the Global Discovery map.
+        Pick a country, a predefined region, or enter an approximate box. You can also click a cell on the Global
+        Discovery map.
       </p>
+      {PlaceSearch && (
+        <article className="region-card">
+          <h3>Search places</h3>
+          <PlaceSearch
+            onPick={(selection) => onRegion(selection.regionId)}
+            placeholder="Search a country or region"
+            compact
+          />
+        </article>
+      )}
+      {countries.length > 0 && (
+        <article className="region-card">
+          <h3>Countries</h3>
+          <p className="muted">
+            Natural Earth country regions with at least three cells in the common mask.
+          </p>
+          <ul className="region-list">
+            {countries.map((country) => (
+              <li key={country.id}>
+                <button type="button" className="region-button secondary" onClick={() => onRegion(country.id)}>
+                  {country.label}
+                  <small>{country.n_cells} cells inside the common mask</small>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </article>
+      )}
       <article className="region-card">
         <h3>Predefined regions</h3>
         <p className="muted">These boxes are approximate.</p>
@@ -358,6 +424,9 @@ function Explorer({
   rhoLabel,
   trendMonths,
   trendY,
+  annualMeans,
+  summary,
+  qualityBanner,
 }: {
   place: PlaceData | null
   placeError: string | null
@@ -379,11 +448,14 @@ function Explorer({
   rhoLabel: string
   trendMonths: string[] | null
   trendY: number[] | null
+  annualMeans: { x: string[]; y: number[] } | null
+  summary: string | null
+  qualityBanner: string | null
 }) {
   const caption =
     place?.evidence.source === 'precomputed'
-      ? 'Shaded band is the current window. The Sen line uses the precomputed per-year slope.'
-      : 'Shaded band is the current window. The Sen line is the fit used in the evidence card.'
+      ? 'Shaded band is the current window. The Sen line uses the precomputed per-year slope. Dots are annual means of the monthly anomalies.'
+      : 'Shaded band is the current window. The Sen line is the fit used in the evidence card. Dots are annual means of the monthly anomalies.'
   return (
     <div className="region-stack">
       {place && <p className="muted">{place.detail}</p>}
@@ -400,7 +472,13 @@ function Explorer({
       {place && (
         <>
           {place.note && <p className="region-warn">{place.note}</p>}
-          <EvidenceCard evidence={place.evidence} />
+          {summary && <p className="plain-summary">{summary}</p>}
+          {place.country && (
+            <article className="region-card">
+              <CountryLocator key={place.country.id} country={place.country} />
+            </article>
+          )}
+          <EvidenceCard evidence={place.evidence} quality={place.quality} qualityBanner={qualityBanner} />
           <article className="region-card">
             <MonthlyValuesChart months={place.months} values={place.values} unit={place.unit} label={variableLabel} />
           </article>
@@ -414,6 +492,8 @@ function Explorer({
               windowEnd={windowEnd}
               trendMonths={trendMonths}
               trendY={trendY}
+              annualMeans={annualMeans}
+              breakYear={place.quality?.breakYear ?? null}
               caption={trendY ? caption : `${caption} Not enough valid months to draw a Sen line.`}
             />
           </article>
@@ -468,13 +548,27 @@ function Explorer({
   )
 }
 
-function EvidenceCard({ evidence }: { evidence: EvidenceModel }) {
+function EvidenceCard({
+  evidence,
+  quality,
+  qualityBanner,
+}: {
+  evidence: EvidenceModel
+  quality: QualitySummary | null
+  qualityBanner: string | null
+}) {
+  const qualityDetail = qualityDetailText(quality)
   return (
     <article className="region-card">
       <h3>Evidence</h3>
       {evidence.shortWindow && (
         <p className="region-warn" role="status">
           This window is shorter than 10 years. The trend test on a short window is not reliable.
+        </p>
+      )}
+      {qualityBanner && (
+        <p className="quality-banner" role="status">
+          {qualityBanner}
         </p>
       )}
       <p className="method-banner">{evidence.method}</p>
@@ -484,6 +578,16 @@ function EvidenceCard({ evidence }: { evidence: EvidenceModel }) {
         <dt>Product</dt>
         <dd>
           {evidence.product} version {evidence.productVersion}
+        </dd>
+        <dt>DOI</dt>
+        <dd>
+          {evidence.doi ? (
+            <a href={`https://doi.org/${evidence.doi}`} target="_blank" rel="noreferrer">
+              {evidence.doi}
+            </a>
+          ) : (
+            'Not listed'
+          )}
         </dd>
         <dt>Source variable</dt>
         <dd>{evidence.sourceVariable}</dd>
@@ -512,6 +616,12 @@ function EvidenceCard({ evidence }: { evidence: EvidenceModel }) {
         </dd>
         <dt>Trend class</dt>
         <dd>{evidence.trendClass}</dd>
+        {qualityDetail && (
+          <>
+            <dt>Data-quality check</dt>
+            <dd>{qualityDetail}</dd>
+          </>
+        )}
         {evidence.cellsUsed != null && (
           <>
             <dt>Cells used</dt>

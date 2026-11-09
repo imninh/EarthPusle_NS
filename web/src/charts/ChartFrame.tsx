@@ -8,8 +8,15 @@ export interface ChartTrace {
   x: readonly string[]
   y: readonly (number | null)[]
   name: string
-  color: 'accent' | 'secondary' | 'text'
+  color: 'accent' | 'secondary' | 'text' | 'mean'
   dash?: 'solid' | 'dash'
+  /** Default: a line (single valid points become markers). */
+  mode?: 'line' | 'markers'
+}
+
+export interface ChartMarker {
+  x: string
+  label: string
 }
 
 interface ChartFrameProps {
@@ -17,10 +24,11 @@ interface ChartFrameProps {
   yTitle: string
   traces: readonly ChartTrace[]
   band?: { start: string; end: string } | null
+  markers?: readonly ChartMarker[] | null
   footer?: ReactNode
 }
 
-export function ChartFrame({ title, yTitle, traces, band, footer }: ChartFrameProps) {
+export function ChartFrame({ title, yTitle, traces, band, markers, footer }: ChartFrameProps) {
   const colors = useChartColors()
   const frameRef = useRef<HTMLDivElement>(null)
 
@@ -41,9 +49,50 @@ export function ChartFrame({ title, yTitle, traces, band, footer }: ChartFramePr
     return () => observer.disconnect()
   }, [])
 
-  const palette = { accent: colors.accent, secondary: colors.secondary, text: colors.text }
+  const palette = { accent: colors.accent, secondary: colors.secondary, text: colors.text, mean: colors.text }
   const data: PlotSegment[] = []
   for (const trace of traces) data.push(...segmentTrace(trace, palette[trace.color]))
+  const shapes: Record<string, unknown>[] = []
+  if (band) {
+    shapes.push({
+      type: 'rect',
+      xref: 'x',
+      yref: 'paper',
+      x0: monthIso(band.start),
+      x1: monthAfterIso(band.end),
+      y0: 0,
+      y1: 1,
+      fillcolor: withAlpha(colors.accent, 0.16),
+      line: { width: 0 },
+      layer: 'below',
+    })
+  }
+  for (const marker of markers ?? []) {
+    shapes.push({
+      type: 'line',
+      xref: 'x',
+      yref: 'paper',
+      x0: monthIso(marker.x),
+      x1: monthIso(marker.x),
+      y0: 0,
+      y1: 1,
+      line: { color: colors.muted, width: 1, dash: 'dot' },
+    })
+  }
+  const annotations = (markers ?? []).map((marker) => ({
+    x: monthIso(marker.x),
+    y: 1,
+    xref: 'x',
+    yref: 'paper',
+    text: marker.label,
+    showarrow: false,
+    font: { color: colors.muted, size: 10 },
+    bgcolor: withAlpha(colors.surface, 0.88),
+    bordercolor: colors.border,
+    borderwidth: 1,
+    xanchor: 'center',
+    yanchor: 'bottom',
+  }))
   const layout = {
     title: { text: title, font: { size: 14, color: colors.text }, x: 0, xanchor: 'left' },
     paper_bgcolor: 'rgba(0,0,0,0)',
@@ -72,22 +121,8 @@ export function ChartFrame({ title, yTitle, traces, band, footer }: ChartFramePr
       bordercolor: colors.border,
       font: { color: colors.text, size: 12 },
     },
-    shapes: band
-      ? [
-          {
-            type: 'rect',
-            xref: 'x',
-            yref: 'paper',
-            x0: monthIso(band.start),
-            x1: monthAfterIso(band.end),
-            y0: 0,
-            y1: 1,
-            fillcolor: withAlpha(colors.accent, 0.16),
-            line: { width: 0 },
-            layer: 'below',
-          },
-        ]
-      : [],
+    shapes,
+    annotations,
   }
 
   return (
@@ -148,6 +183,7 @@ function segmentTrace(trace: ChartTrace, color: string): PlotSegment[] {
   }
   return segments.map((segment) => {
     const single = segment.start === segment.end
+    const markerOnly = trace.mode === 'markers'
     const x: string[] = []
     const y: number[] = []
     for (let i = segment.start; i <= segment.end; i++) {
@@ -156,13 +192,13 @@ function segmentTrace(trace: ChartTrace, color: string): PlotSegment[] {
     }
     return {
       type: 'scatter',
-      mode: single ? 'markers' : 'lines',
+      mode: markerOnly || single ? 'markers' : 'lines',
       x,
       y,
       name: trace.name,
       connectgaps: false,
-      line: { color, width: 1.75, dash: trace.dash ?? 'solid' },
-      marker: { color, size: single ? 7 : 0 },
+      line: markerOnly ? undefined : { color, width: 1.75, dash: trace.dash ?? 'solid' },
+      marker: { color, size: markerOnly ? 5 : single ? 7 : 0 },
       hovertemplate: `%{x|%Y-%m}: %{y:.4f}<extra>${trace.name}</extra>`,
     }
   })

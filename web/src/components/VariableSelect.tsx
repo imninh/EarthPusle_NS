@@ -5,9 +5,9 @@ export function VariableSelect() {
   const { index, variableId, setVariableId } = useApp()
   const categories = [...new Set(index.variables.map((v) => v.category))]
   return (
-    <label className="control">
+    <label className="field control">
       <span>Variable</span>
-      <select value={variableId} onChange={(e) => setVariableId(e.target.value)}>
+      <select className="select" value={variableId} onChange={(e) => setVariableId(e.target.value)}>
         {categories.map((cat) => (
           <optgroup key={cat} label={cat}>
             {index.variables
@@ -28,9 +28,9 @@ export function VariableSelect() {
 export function WindowSelect() {
   const { index, windowId, setWindowId } = useApp()
   return (
-    <label className="control">
+    <label className="field control">
       <span>Period</span>
-      <select value={windowId} onChange={(e) => setWindowId(e.target.value)}>
+      <select className="select" value={windowId} onChange={(e) => setWindowId(e.target.value)}>
         {index.windows.map((w) => (
           <option key={w.id} value={w.id}>
             {w.start} to {w.end}

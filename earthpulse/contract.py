@@ -8,7 +8,7 @@ the frontend mirror is web/src/data/contract.ts. Change all three together.
 
 from __future__ import annotations
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.1"  # P08 bumps to "1.2" together with the 1.2 export (validator requires equality)
 
 # --- Analysis grid -------------------------------------------------------------------
 # Global 1-degree grid, cell centres. Row 0 is the northernmost row (lat 89.5),
@@ -89,3 +89,17 @@ TILE_SIZE = 10
 
 # Correlation pair ids (variable ids joined with "__", alphabetical order).
 CORRELATION_LAYERS = ("r", "q", "r_detrended", "q_detrended", "n_pairs")
+
+# --- Schema 1.2: data-quality layers (docs/DATA_CONTRACT.md §12) ------------------------
+QUALITY_NONE = 0
+QUALITY_STEP = 1
+QUALITY_STEP_KNOWN_FORCING = 2
+QUALITY_LAYERS = ("quality_flag", "breakpoint_year")
+QUALITY_FDR_Q = 0.05
+QUALITY_MIN_DELTA_BIC = 2.0
+KNOWN_FORCING_CHANGES = {"GLDAS_NOAH10_M": (2008, 2012)}
+
+# --- Schema 1.2: country regions (docs/DATA_CONTRACT.md §11) -----------------------------
+COUNTRY_NONE = -1
+COUNTRY_MIN_CELLS = 3
+COUNTRY_GRID_FILE = "regions/country_grid.i16"

@@ -31,6 +31,10 @@ export interface ScreenerViewRow {
   contrast: number | null
   coverage: number | null
   nCells: number | null
+  /** Schema 1.2 §12: area fraction with a possible data discontinuity. */
+  stepFlag: number | null
+  /** Schema 1.2 §12: flagged fraction of the significant-trend area. */
+  sigTrendFlagged: number | null
 }
 
 type VariableFields = Pick<
@@ -174,6 +178,37 @@ export function buildViewRows(variables: readonly VariableFields[], rows: readon
       contrast: row ? finiteOrNull(row.regional_contrast) : null,
       coverage: row ? finiteOrNull(row.valid_area_fraction) : null,
       nCells: row ? finiteOrNull(row.n_cells_evaluated) : null,
+      stepFlag: row ? finiteOrNull(row.step_flag_area_fraction) : null,
+      sigTrendFlagged: row ? finiteOrNull(row.sig_trend_flagged_fraction) : null,
     }
   })
+}
+
+/** True only when the export actually contains schema-1.2 quality fields. */
+export function hasDiscontinuityFields(rows: readonly ScreenerViewRow[]): boolean {
+  return rows.some((row) => row.stepFlag != null || row.sigTrendFlagged != null)
+}
+
+/** Display rule for the headline, not a data result. */
+export const HEADLINE_THRESHOLD = 0.1
+
+/**
+ * One-line ranking summary computed from the rows. "Land" comes from the caller's domain
+ * label, so a country domain does not claim to describe the whole planet.
+ */
+export function screenerHeadline(
+  rows: readonly ScreenerViewRow[],
+  domainLabel: string,
+  threshold = HEADLINE_THRESHOLD,
+): string {
+  const evaluated = rows.filter((row) => row.nCells != null && row.nCells > 0)
+  const percent = Math.round(threshold * 100)
+  if (evaluated.length === 0) return `No cells were evaluated in ${domainLabel} for this period.`
+  const broad = evaluated.filter(
+    (row) => row.significantArea != null && row.significantArea > threshold,
+  ).length
+  if (broad === 0) {
+    return `No variable shows significant change over more than ${percent}% of ${domainLabel} in this period.`
+  }
+  return `${broad} of ${evaluated.length} variables show significant change over more than ${percent}% of ${domainLabel}.`
 }

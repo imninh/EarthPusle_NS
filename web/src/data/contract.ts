@@ -1,6 +1,6 @@
 // Mirror of earthpulse/contract.py and docs/DATA_CONTRACT.md. Change all three together.
 
-export const SCHEMA_VERSION = '1.1'
+export const SCHEMA_VERSION = '1.1' // P08 bumps to '1.2' with the 1.2 export
 
 export const N_ROWS = 180
 export const N_COLS = 360
@@ -50,3 +50,11 @@ export function tileIdFor(row: number, col: number): string {
   const c0 = Math.floor(col / TILE_SIZE) * TILE_SIZE
   return `r${String(r0).padStart(3, '0')}_c${String(c0).padStart(3, '0')}`
 }
+
+// --- Schema 1.2: data-quality layers (DATA_CONTRACT §12). Optional: may be absent. ---
+export const QUALITY_NONE = 0
+export const QUALITY_STEP = 1
+export const QUALITY_STEP_KNOWN_FORCING = 2
+
+// --- Schema 1.2: country regions (DATA_CONTRACT §11). Optional: may be absent. ---
+export const COUNTRY_NONE = -1

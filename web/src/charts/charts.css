@@ -51,6 +51,14 @@
   vertical-align: middle;
 }
 
+.swatch-mean {
+  background: var(--text);
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  vertical-align: 0;
+}
+
 @media (max-width: 480px) {
   .chart-frame {
     height: 240px;

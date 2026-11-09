@@ -1,0 +1,23 @@
+# P06 Detective Cases configuration (owned by P06).
+#
+# Numbers in cases.json are always computed from the P03/P08 grids.  This file
+# may only change selection thresholds and human wording; it must never contain
+# data values.  Keys under `overrides` are case ids (`case-01`, ...) and may
+# only set `title` and/or `why_selected`.
+
+# Minimum number of eligible cells in a connected 8-neighbour cluster.
+min_cluster_cells: 15
+
+# Selection set size.  The algorithm tries to cover the four story categories
+# (IMERG precipitation, opposite-direction pair, multi-variable pattern,
+# Southeast Asia / Mekong) and fills up to max_cases with the best remaining
+# distinct variable/window candidates.
+target_cases: 4
+max_cases: 6
+
+# Wording-only overrides, for example:
+# overrides:
+#   case-01:
+#     title: "A human-written title"
+#     why_selected: "Human-written wording that keeps every computed number."
+overrides: {}

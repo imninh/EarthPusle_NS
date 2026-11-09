@@ -29,8 +29,10 @@ export interface EvidenceModel {
   method: string
   source: 'precomputed' | 'browser'
   variableLabel: string
+  category: string
   product: string
   productVersion: string
+  doi: string | null
   sourceVariable: string
   windowLabel: string
   senSlopeDecade: number | null
@@ -152,8 +154,10 @@ export function cellTrendClassWords(code: number | null): string {
 function variableFields(variable: VariableMeta, windowLabel: string, monthsInWindow: number) {
   return {
     variableLabel: variable.label,
+    category: variable.category,
     product: variable.product,
     productVersion: variable.product_version,
+    doi: variable.doi,
     sourceVariable: variable.source_variable,
     windowLabel,
     slopeUnit: perDecadeUnit(variable.slope_unit),
@@ -294,6 +298,34 @@ export function zScoresInWindow(
   })
 }
 
+/** Mean of the monthly anomalies in each calendar year, placed at mid-year for the chart. */
+export function annualMeanSeries(
+  months: readonly string[],
+  values: readonly (number | null)[],
+  start = '',
+  end = '',
+): { x: string[]; y: number[] } {
+  const groups = new Map<number, { sum: number; n: number }>()
+  const count = Math.min(months.length, values.length)
+  for (let i = 0; i < count; i++) {
+    const month = months[i]
+    if ((start && month < start) || (end && month > end)) continue
+    const value = normalizeValue(values[i])
+    if (value == null) continue
+    const year = Number(month.slice(0, 4))
+    if (!Number.isFinite(year)) continue
+    const group = groups.get(year) ?? { sum: 0, n: 0 }
+    group.sum += value
+    group.n += 1
+    groups.set(year, group)
+  }
+  const years = [...groups.keys()].sort((a, b) => a - b)
+  return {
+    x: years.map((year) => `${year}-07`),
+    y: years.map((year) => groups.get(year)!.sum / groups.get(year)!.n),
+  }
+}
+
 export function spearmanInWindow(
   months: readonly string[],
   a: readonly (number | null)[],
@@ -411,7 +443,8 @@ export interface BboxAggregate {
 /**
  * Area-weighted mean (weight = cos(latitude)) of in-box cells.
  * A mask cell has at least one finite sample. A cell "contributed" when it has
- * a finite sample inside the window. Tiles absent from `tiles` are missing.
+ * a finite **anomaly** inside the window, because the trend is computed on anomalies.
+ * Tiles absent from `tiles` are missing.
  */
 export function aggregateBbox(args: {
   range: CellRange
@@ -458,11 +491,8 @@ export function aggregateBbox(args: {
           sumAnomaly[month] += weight * anomaly
           weightAnomaly[month] += weight
         }
-        if (
-          month >= args.windowStart &&
-          month <= args.windowEnd &&
-          (valueOk || anomalyOk)
-        ) {
+        // Coverage is about the anomaly mean used for the trend, not the values chart.
+        if (month >= args.windowStart && month <= args.windowEnd && anomalyOk) {
           contributed = true
         }
       }
