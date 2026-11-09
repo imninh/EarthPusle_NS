@@ -7,6 +7,8 @@
 # - Qs_acc (surface runoff) is excluded until its monthly statistic is resolved (P01 open question 1).
 # - SWE_inst is excluded for now: extreme values over Greenland need a QC rule first (P01 surprise 12).
 # - Precipitation comes only from IMERG; GLDAS forcing precipitation is not exposed.
+# - After the real P03 run: every GLDAS variable carries the official homogeneity caveat
+#   (GLDAS-2 README §1.5.3 and §1.6: AGRMET radiation rescaled from 2008, uncorrected shift after 2011).
 #
 # conversion: how to go from the native monthly value to display_unit.
 #   identity | kelvin_to_celsius | per_second_to_per_month | per_hour_to_per_month | kg_per_kg_to_g_per_kg
@@ -48,6 +50,7 @@ variables:
     verified: true
     description: Temperature of the land surface itself (skin), averaged over the month.
     caveats:
+      - "GLDAS-2.1 forcing is not temporally homogeneous: its radiation input was rescaled from 2008 and shows a shift after 2011 that NASA could not correct (GLDAS-2 README, sections 1.5.3 and 1.6). Part of a trend can be a data artifact."
       - GLDAS Noah land-surface model output, not a direct measurement.
       - Skin temperature, not the 2 m air temperature reported by weather stations.
 
@@ -66,6 +69,7 @@ variables:
     verified: true
     description: Water held in the soil layers that plant roots draw from, averaged over the month.
     caveats:
+      - "GLDAS-2.1 forcing is not temporally homogeneous: its radiation input was rescaled from 2008 and shows a shift after 2011 that NASA could not correct (GLDAS-2 README, sections 1.5.3 and 1.6). Part of a trend can be a data artifact."
       - Model diagnostic from GLDAS Noah, not an in-situ measurement.
 
   - id: precipitation
@@ -101,6 +105,7 @@ variables:
     verified: true
     description: Air temperature near the surface, averaged over the month.
     caveats:
+      - "GLDAS-2.1 forcing is not temporally homogeneous: its radiation input was rescaled from 2008 and shows a shift after 2011 that NASA could not correct (GLDAS-2 README, sections 1.5.3 and 1.6). Part of a trend can be a data artifact."
       - Meteorological forcing field used to drive the GLDAS model, not a model prediction.
 
   - id: surface_soil_moisture
@@ -118,6 +123,7 @@ variables:
     verified: true
     description: Water in the top 10 cm of soil, averaged over the month.
     caveats:
+      - "GLDAS-2.1 forcing is not temporally homogeneous: its radiation input was rescaled from 2008 and shows a shift after 2011 that NASA could not correct (GLDAS-2 README, sections 1.5.3 and 1.6). Part of a trend can be a data artifact."
       - GLDAS Noah land-surface model output, not a direct measurement.
 
   - id: evapotranspiration
@@ -135,6 +141,7 @@ variables:
     verified: true
     description: Water returned to the air from soil and plants, as a monthly total.
     caveats:
+      - "GLDAS-2.1 forcing is not temporally homogeneous: its radiation input was rescaled from 2008 and shows a shift after 2011 that NASA could not correct (GLDAS-2 README, sections 1.5.3 and 1.6). Part of a trend can be a data artifact."
       - GLDAS Noah land-surface model output, not a direct measurement.
 
   - id: specific_humidity
@@ -152,6 +159,7 @@ variables:
     verified: true
     description: Mass of water vapour per mass of near-surface air, averaged over the month.
     caveats:
+      - "GLDAS-2.1 forcing is not temporally homogeneous: its radiation input was rescaled from 2008 and shows a shift after 2011 that NASA could not correct (GLDAS-2 README, sections 1.5.3 and 1.6). Part of a trend can be a data artifact."
       - Meteorological forcing field used to drive the GLDAS model.
 
 excluded:
