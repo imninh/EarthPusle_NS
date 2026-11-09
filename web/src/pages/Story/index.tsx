@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react'
-import { Chip } from '../../components/ui'
+import { Chip, Disclosure } from '../../components/ui'
 import { useApp } from '../../data/AppState'
 import { loadCases } from '../../data/loaders'
 import type { CasesFile, DetectiveCase } from '../../data/types'
 import { CaseMiniMap } from './MiniMap'
+import { QualityCaution } from './QualityCaution'
 import {
+  caseDetails,
   caseIdForStep,
+  caseLead,
+  casePlaceLabel,
   evidenceLabel,
   evidenceVariableId,
   formatBbox,
   formatCoverage,
   formatSlope,
   formatStat,
+  isCautionCase,
   significanceCopy,
   stepFromCaseId,
   stepTitle,
@@ -141,7 +146,10 @@ export default function StoryPage() {
                 onClick={() => navigate('story', { caseId: item.id })}
               >
                 <span className="story-step-number">{index + 1}</span>
-                <span>{item.title}</span>
+                <span className="story-step-text">
+                  <span className="story-step-title">{item.title}</span>
+                  <span className="story-step-place">{casePlaceLabel(item)}</span>
+                </span>
               </button>
             ))}
           </nav>
@@ -210,12 +218,15 @@ function IntroCard({
           </p>
         </section>
         <section>
-          <h3>Possible data discontinuity</h3>
+          <h3>Sudden shifts and quality flags</h3>
           <p>
             {hasQuality
-              ? 'This export includes data-quality layers. A flag marks a change that looks like a sudden jump rather than a gradual trend.'
-              : 'When the export includes data-quality layers, a flag marks a change that looks like a sudden jump rather than a gradual trend.'}{' '}
-            Read it as a warning to inspect the evidence, never as a claim that the data are wrong.
+              ? 'This export includes data-quality layers. '
+              : 'When the export includes data-quality layers, '}
+            Code 1 means a sudden shift around a break year: this could be a real jump in the climate or a data
+            artefact. The trend is still significant; a step fits slightly better than a straight line. Code 2 means
+            the shift falls during a documented GLDAS input change (2008–2012): possible data discontinuity, so read
+            the trend with caution.
           </p>
         </section>
         <section>
@@ -237,6 +248,9 @@ function CaseCard({ item, number, total }: { item: DetectiveCase; number: number
   const variable = index.variables.find((entry) => entry.id === variableId)
   const variableLabel = variable?.label ?? variableId
   const increaseMeans = variable?.increase_means ?? 'increase'
+  const lead = caseLead(item)
+  const details = caseDetails(item)
+  const caution = isCautionCase(item)
   const open = (page: 'discovery' | 'region') =>
     navigate(page, {
       variableId,
@@ -245,7 +259,7 @@ function CaseCard({ item, number, total }: { item: DetectiveCase; number: number
     })
 
   return (
-    <article className="story-card ui-card">
+    <article className={caution ? 'story-card caution ui-card' : 'story-card ui-card'}>
       <div className="story-card-top">
         <span className="story-step-number">
           Case {number} of {total}
@@ -253,10 +267,20 @@ function CaseCard({ item, number, total }: { item: DetectiveCase; number: number
         <Chip tone="accent">{item.window}</Chip>
       </div>
       <h2>{item.title}</h2>
-      <p className="story-why">{item.why_selected}</p>
+      <p className="story-why">{lead}</p>
       <p className="story-region">
         <strong>{item.region.label}</strong> · approximate box {formatBbox(item.region.bbox)}
       </p>
+
+      {details ? (
+        <Disclosure summary="How this case was chosen">
+          <p>{details}</p>
+        </Disclosure>
+      ) : null}
+
+      {caution ? (
+        <QualityCaution item={item} variableId={variableId} qualityAvailable={Boolean(index.quality)} />
+      ) : null}
 
       <CaseMiniMap variableId={variableId} windowId={item.window} bbox={item.region.bbox} label={variableLabel} />
 

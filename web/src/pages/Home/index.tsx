@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../../data/AppState'
-import { loadScreener, loadTrendClass } from '../../data/loaders'
-import type { DataIndex, ScreenerFile, WindowMeta } from '../../data/types'
+import { loadCases, loadScreener, loadTrendClass } from '../../data/loaders'
+import type { CasesFile, DataIndex, ScreenerFile, WindowMeta } from '../../data/types'
 import { paintTrendClass, trendColoursFrom } from '../Screener/thumbnail'
-import { buildHomeInsights, heroVariableId, type HomeInsight } from './insights'
+import {
+  buildCautionEntry,
+  buildHomeInsights,
+  heroVariableId,
+  qualityEvidenceText,
+  type HomeInsight,
+} from './insights'
 import './home.css'
 
 /** The long window is the default story on Home; the header still controls the other views. */
@@ -24,6 +30,7 @@ export default function HomePage() {
   const { index, navigate } = useApp()
   const windowMeta = homeWindow(index)
   const [screener, setScreener] = useState<ScreenerFile | null>(null)
+  const [cases, setCases] = useState<CasesFile | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
 
@@ -43,11 +50,26 @@ export default function HomePage() {
     }
   }, [windowMeta.id, attempt])
 
+  useEffect(() => {
+    let cancelled = false
+    loadCases()
+      .then((file) => {
+        if (!cancelled) setCases(file)
+      })
+      .catch(() => {
+        // The caution entry is optional; Home still works without cases.json.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const rows = screener?.rows ?? []
   const insights = useMemo(
     () => buildHomeInsights(index.variables, rows, windowMeta.start, windowMeta.end),
     [index.variables, rows, windowMeta.start, windowMeta.end],
   )
+  const caution = useMemo(() => buildCautionEntry(cases?.cases), [cases])
   const heroId = useMemo(() => heroVariableId(index.variables, rows), [index.variables, rows])
   const hero = index.variables.find((variable) => variable.id === heroId) ?? index.variables[0]
 
@@ -155,7 +177,7 @@ export default function HomePage() {
       <section className="home-section" aria-labelledby="home-entry-title">
         <div className="home-section-head">
           <div>
-            <p className="eyebrow">Three ways in</p>
+            <p className="eyebrow">{caution ? 'Four ways in' : 'Three ways in'}</p>
             <h2 id="home-entry-title">Choose how you want to explore</h2>
           </div>
         </div>
@@ -184,6 +206,16 @@ export default function HomePage() {
             action="Open Story mode"
             onClick={() => navigate('story', { caseId: null })}
           />
+          {caution ? (
+            <EntryCard
+              kicker="Look closer"
+              title={caution.title}
+              body={caution.summary}
+              foot="Caution case · read the evidence"
+              action="Open this case"
+              onClick={() => navigate('story', { caseId: caution.caseId })}
+            />
+          ) : null}
         </div>
       </section>
     </div>
@@ -191,6 +223,7 @@ export default function HomePage() {
 }
 
 function InsightCard({ insight, onOpen }: { insight: HomeInsight; onOpen: () => void }) {
+  const qualityText = qualityEvidenceText(insight)
   return (
     <button type="button" className="home-insight" onClick={onOpen}>
       <span className="home-insight-kicker">{insight.kicker}</span>
@@ -198,6 +231,12 @@ function InsightCard({ insight, onOpen }: { insight: HomeInsight; onOpen: () => 
       <span className="home-insight-unit">{insight.unit}</span>
       <span className="home-insight-title">{insight.title}</span>
       <span className="home-insight-detail">{insight.detail}</span>
+      {qualityText != null ? (
+        <span className="home-insight-quality">
+          {qualityText}
+          <span aria-hidden="true"> →</span>
+        </span>
+      ) : null}
       <span className="home-insight-link" aria-hidden="true">
         Inspect evidence →
       </span>

@@ -103,30 +103,60 @@ describe('qualityShareForCountry', () => {
 })
 
 describe('quality wording', () => {
-  it('uses calm discontinuity wording and the documented forcing period', () => {
+  it('uses the code-2 wording for a documented forcing change', () => {
     const flags = flagLayer()
     const breaks = breakLayer()
     flags[cellIndex(10, 20)] = 2
     breaks[cellIndex(10, 20)] = 2011.4
     const quality = cellQuality(flags, breaks, 10, 20)
     const banner = qualityBannerText(quality, 'GLDAS_NOAH10_M', '2.1', [2008, 2012])
-    expect(banner).toContain('sudden jump around 2011')
-    expect(banner).toContain('GLDAS-2.1 inputs changed around 2008–2012')
-    expect(banner).toContain('read the trend with caution')
+    expect(banner).toBe(
+      'Sudden shift during a documented GLDAS input change (2008–2012): possible data discontinuity. Read the trend with caution.',
+    )
+    expect(qualityDetailText(quality)).toBe(banner)
     expect(banner).not.toMatch(/wrong|error/i)
-    expect(qualityDetailText(quality)?.toLowerCase()).toContain('possible data discontinuity')
+    expect(banner).not.toContain('step-like')
   })
 
-  it('describes a regional flagged share', () => {
+  it('uses the code-1 wording for a shift outside the documented period', () => {
     const flags = flagLayer()
     const breaks = breakLayer()
     flags[cellIndex(10, 20)] = 1
+    breaks[cellIndex(10, 20)] = 2015.2
+    const quality = cellQuality(flags, breaks, 10, 20)
+    const banner = qualityBannerText(quality, 'GLDAS_NOAH10_M', '2.1', [2008, 2012])
+    expect(banner).toContain('Sudden shift around 2015')
+    expect(banner).toContain('real jump in the climate or a data artefact')
+    expect(banner).toContain('step fits slightly better than a straight line')
+    expect(banner).not.toMatch(/wrong|error/i)
+    expect(qualityDetailText(quality)).toBe(banner)
+  })
+
+  it('describes a regional flagged share with code-1 wording', () => {
+    const flags = flagLayer()
+    const breaks = breakLayer()
+    flags[cellIndex(10, 20)] = 1
+    breaks[cellIndex(10, 20)] = 2015
+    flags[cellIndex(10, 21)] = 0
+    const quality = qualityShareForRange(flags, breaks, { row0: 10, row1: 10, col0: 20, col1: 21 })
+    const banner = qualityBannerText(quality, 'GLDAS_NOAH10_M', '2.1', [2008, 2012])
+    expect(banner).toContain('About 50% of evaluated cells in this region show a sudden shift around 2015')
+    expect(banner).toContain('real jump in the climate or a data artefact')
+    expect(qualityDetailText(quality)).toContain('50% of evaluated cells show a sudden shift around 2015')
+  })
+
+  it('uses code-2 wording for a regional break inside the documented period', () => {
+    const flags = flagLayer()
+    const breaks = breakLayer()
+    flags[cellIndex(10, 20)] = 2
     breaks[cellIndex(10, 20)] = 2011
     flags[cellIndex(10, 21)] = 0
     const quality = qualityShareForRange(flags, breaks, { row0: 10, row1: 10, col0: 20, col1: 21 })
     const banner = qualityBannerText(quality, 'GLDAS_NOAH10_M', '2.1', [2008, 2012])
-    expect(banner).toContain('About 50% of evaluated cells in this region')
-    expect(qualityDetailText(quality)).toContain('50% of evaluated cells')
+    expect(banner).toContain('About 50% of evaluated cells in this region show a sudden shift during a documented GLDAS input change (2008–2012)')
+    expect(banner).toContain('possible data discontinuity')
+    expect(banner).toContain('Read the trend with caution')
+    expect(qualityDetailText(quality)).toContain('50% of evaluated cells show a sudden shift during a documented GLDAS input change (2008–2012)')
   })
 
   it('returns no banner when quality is absent or unflagged', () => {
@@ -135,6 +165,6 @@ describe('quality wording', () => {
     flags[cellIndex(10, 20)] = 0
     const clean = cellQuality(flags, breakLayer(), 10, 20)
     expect(qualityBannerText(clean, 'GLDAS_NOAH10_M', '2.1', [2008, 2012])).toBeNull()
-    expect(qualityDetailText(clean)).toBe('No step-like change detected in this cell.')
+    expect(qualityDetailText(clean)).toBe('No sudden shift detected in this cell.')
   })
 })

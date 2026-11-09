@@ -1,6 +1,6 @@
 // Home-page headlines. Every value is derived from the real screener rows; labels and
 // directions come from index.json. No result numbers are hard-coded.
-import type { ScreenerRow, VariableMeta } from '../../data/types'
+import type { DetectiveCase, ScreenerRow, VariableMeta } from '../../data/types'
 import { buildViewRows, formatPercent, type ScreenerViewRow } from '../Screener/metrics'
 
 export interface HomeInsight {
@@ -11,23 +11,43 @@ export interface HomeInsight {
   title: string
   detail: string
   variableId: string | null
+  /** Schema 1.2 §12: flagged share of the significant area, when the export has it. */
+  qualityFlagged: number | null
 }
 
+export interface CautionEntry {
+  caseId: string
+  title: string
+  summary: string
+}
 /** Display rule for the breadth headline, not a data value. */
 export const BREADTH_THRESHOLD = 0.1
+
+/** A flagged share above this fraction gets one muted evidence line. */
+export const QUALITY_NOTE_THRESHOLD = 0.2
+
+export function shouldShowQualityNote(insight: HomeInsight): boolean {
+  return insight.qualityFlagged != null && insight.qualityFlagged > QUALITY_NOTE_THRESHOLD
+}
+
+/** Muted evidence line for a card whose significant area is substantially flagged. */
+export function qualityEvidenceText(insight: HomeInsight): string | null {
+  if (!shouldShowQualityNote(insight) || insight.qualityFlagged == null) return null
+  return `${formatPercent(insight.qualityFlagged)} of this area shows a sudden shift; read the evidence`
+}
 
 function evaluated(rows: readonly ScreenerViewRow[]): ScreenerViewRow[] {
   return rows.filter((row) => row.nCells != null && row.nCells > 0)
 }
 
-function decreaseWord(increaseMeans: string): string {
-  const words: Record<string, string> = {
-    warmer: 'cooling',
-    wetter: 'drying',
-    'more humid': 'less humid',
-    'more evaporation': 'less evaporation',
-  }
-  return words[increaseMeans] ?? 'decrease'
+function lossScore(row: ScreenerViewRow): number | null {
+  if (row.sigDecrease == null) return null
+  if (row.sigTrendFlagged == null) return row.sigDecrease
+  return row.sigDecrease * Math.max(0, 1 - Math.min(1, row.sigTrendFlagged))
+}
+
+function qualityFlagged(row: ScreenerViewRow): number | null {
+  return row.sigTrendFlagged != null && Number.isFinite(row.sigTrendFlagged) ? row.sigTrendFlagged : null
 }
 
 function maxBy(rows: readonly ScreenerViewRow[], value: (row: ScreenerViewRow) => number | null): ScreenerViewRow | null {
@@ -72,6 +92,7 @@ export function buildHomeInsights(
       title: `${temperature.label} is warming`,
       detail: `A significant ${temperature.increaseMeans} trend over ${formatPercent(temperature.sigIncrease)} of land, ${period}.`,
       variableId: temperature.variableId,
+      qualityFlagged: qualityFlagged(temperature),
     })
   }
 
@@ -87,19 +108,21 @@ export function buildHomeInsights(
       title: `${broad} of ${viewRows.length} variables show significant change`,
       detail: `Each has a significant increase or decrease over more than ${Math.round(BREADTH_THRESHOLD * 100)}% of land, ${period}.`,
       variableId: null,
+      qualityFlagged: null,
     })
   }
 
-  const decreasing = maxBy(viewRows, (row) => row.sigDecrease)
+  const decreasing = maxBy(viewRows, lossScore)
   if (decreasing && decreasing.sigDecrease != null && decreasing.sigDecrease > 0) {
     insights.push({
       id: 'decrease',
       kicker: 'Loss signal',
       value: formatPercent(decreasing.sigDecrease),
-      unit: `of land shows significant ${decreaseWord(decreasing.increaseMeans)}`,
+      unit: `of land shows a significant decrease in ${decreasing.label.toLowerCase()}`,
       title: `${decreasing.label}: significant decrease`,
       detail: `${decreasing.label} falls significantly over ${formatPercent(decreasing.sigDecrease)} of land, ${period}.`,
       variableId: decreasing.variableId,
+      qualityFlagged: qualityFlagged(decreasing),
     })
   }
 
@@ -113,6 +136,7 @@ export function buildHomeInsights(
       title: `${contrasting.label} changes in both directions`,
       detail: `${formatPercent(contrasting.sigIncrease)} of land increases and ${formatPercent(contrasting.sigDecrease)} decreases. The score is near 0.5 when both directions cover similar area.`,
       variableId: contrasting.variableId,
+      qualityFlagged: qualityFlagged(contrasting),
     })
   }
 
@@ -128,4 +152,17 @@ export function heroVariableId(variables: readonly VariableMeta[], rows: readonl
 
 function perspectiveFallback(variables: readonly VariableMeta[]): string | null {
   return variables.find((variable) => variable.id === 'air_temperature')?.id ?? variables[0]?.id ?? null
+}
+
+/** The published caution case, if the export has one. Never invents a place or a number. */
+export function buildCautionEntry(cases: readonly DetectiveCase[] | null | undefined): CautionEntry | null {
+  const item = cases?.find((entry) => entry.kind === 'caution')
+  if (!item) return null
+  const place = item.region.label.trim() || 'this place'
+  const summary = item.summary?.trim() || item.why_selected.trim()
+  return {
+    caseId: item.id,
+    title: `Look closer: ${place}`,
+    summary,
+  }
 }

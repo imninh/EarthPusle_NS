@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import type { CasesFile, DataIndex, DetectiveCase } from '../../data/types'
 import {
+  caseDetails,
   caseIdForStep,
+  caseLead,
+  casePlaceLabel,
+  caseWindowYears,
+  cautionShare,
   evidenceVariableId,
   formatBbox,
   formatSlope,
   hasCases,
+  isCautionCase,
   significanceCopy,
   stepFromCaseId,
   stepTitle,
   trendClassWords,
+  yearPosition,
 } from './model'
 
 const detectiveCase = (id: string, variable = 'precipitation'): DetectiveCase => ({
@@ -86,5 +93,49 @@ describe('case evidence formatting', () => {
     expect(formatSlope(Number.NaN)).toBe('—')
     expect(formatBbox([-80, -20, -45.25, 5])).toBe('[-80, -20, -45.3, 5]')
     expect(significanceCopy(0.05)).toContain('below 0.05')
+  })
+})
+
+describe('case lead, details and labels', () => {
+  it('uses summary as the lead and falls back to why_selected', () => {
+    expect(caseLead({ ...detectiveCase('a'), summary: '  A plain sentence.  ' })).toBe('A plain sentence.')
+    expect(caseLead(detectiveCase('b'))).toBe('Because')
+  })
+
+  it('puts technical details in the disclosure without repeating the lead', () => {
+    expect(caseDetails({ ...detectiveCase('a'), summary: 'Plain.', details: ' Score = 8.2. ' })).toBe('Score = 8.2.')
+    expect(caseDetails({ ...detectiveCase('a'), summary: 'Plain.', why_selected: 'Technical.' })).toBe('Technical.')
+    expect(caseDetails({ ...detectiveCase('a'), summary: 'Same.', why_selected: 'Same.' })).toBeNull()
+    expect(caseDetails(detectiveCase('a'))).toBeNull()
+  })
+
+  it('shows a non-empty place name and detects caution cases', () => {
+    expect(casePlaceLabel(detectiveCase('a'))).toBe('Region')
+    expect(casePlaceLabel({ ...detectiveCase('a'), region: { ...detectiveCase('a').region, label: '  ' } })).toBe(
+      'Unnamed place',
+    )
+    expect(isCautionCase({ ...detectiveCase('a'), kind: 'caution' })).toBe(true)
+    expect(isCautionCase({ ...detectiveCase('a'), kind: 'finding' })).toBe(false)
+    expect(isCautionCase(detectiveCase('a'))).toBe(false)
+  })
+})
+
+describe('caution chart helpers', () => {
+  it('prefers the case flagged share and clamps the fallback', () => {
+    expect(cautionShare({ ...detectiveCase('a'), quality_flag_share: 0.536 }, 0.2)).toBe(0.536)
+    expect(cautionShare(detectiveCase('a'), 0.2)).toBe(0.2)
+    expect(cautionShare(detectiveCase('a'), 1.4)).toBe(1)
+    expect(cautionShare({ ...detectiveCase('a'), quality_flag_share: -0.2 })).toBe(0)
+    expect(cautionShare(detectiveCase('a'), null)).toBeNull()
+  })
+
+  it('maps years onto the case window for the break marker', () => {
+    expect(caseWindowYears('2001-2024')).toEqual({ start: 2001, end: 2024 })
+    expect(caseWindowYears('2013-2024')).toEqual({ start: 2013, end: 2024 })
+    expect(caseWindowYears('not-a-window')).toBeNull()
+    expect(yearPosition(2012, '2001-2024')).toBeCloseTo((11 / 23) * 100, 8)
+    expect(yearPosition(1990, '2001-2024')).toBe(0)
+    expect(yearPosition(2030, '2001-2024')).toBe(100)
+    expect(yearPosition(2005, 'nope')).toBeNull()
   })
 })

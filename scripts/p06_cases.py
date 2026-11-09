@@ -28,11 +28,15 @@ from earthpulse.cases import (
     DEFAULT_MAX_CASES,
     DEFAULT_MIN_CLUSTER_CELLS,
     DEFAULT_PRECIPITATION_VARIABLE,
+    DEFAULT_PREFERRED_COUNTRY_IDS,
     DEFAULT_REGIONS_PATH,
     DEFAULT_REGISTRY_PATH,
     DEFAULT_TARGET_CASES,
     DEFAULT_TRENDS_DIR,
+    DEFAULT_WINDOW_PRIORITY_BONUS,
     build_cases_file,
+    build_caution_candidate,
+    combine_quality_flags,
     country_candidates,
     load_cases_config,
     pattern_candidates,
@@ -115,6 +119,18 @@ def _load_quality_from_export(
     values = np.fromfile(path, dtype=np.int8)
     if values.size != contract.N_ROWS * contract.N_COLS:
         raise ValueError(f"{path}: unexpected quality_flag size {values.size}")
+    return values.reshape(contract.N_ROWS, contract.N_COLS)
+
+
+def _load_breakpoint_from_export(
+    export_dir: Path, variable: str, window: str
+) -> np.ndarray | None:
+    path = export_dir / "grids" / variable / window / "breakpoint_year.f32"
+    if not path.is_file():
+        return None
+    values = np.fromfile(path, dtype="<f4")
+    if values.size != contract.N_ROWS * contract.N_COLS:
+        raise ValueError(f"{path}: unexpected breakpoint_year size {values.size}")
     return values.reshape(contract.N_ROWS, contract.N_COLS)
 
 
@@ -339,9 +355,12 @@ def main(argv: list[str] | None = None) -> int:
 
     trend_cache: dict[tuple[str, str], dict] = {}
     quality_cache: dict[tuple[str, str], np.ndarray | None] = {}
+    quality_check_windows: dict[tuple[str, str], tuple[str, ...]] = {}
     candidates: list[dict] = []
     skipped: list[str] = []
 
+    # Load all trend layers first so the 2001-2024 quality layer is available
+    # when a 12-year window is evaluated.
     for window in windows:
         for variable in variables:
             variable_id = str(variable["id"])
@@ -351,8 +370,28 @@ def main(argv: list[str] | None = None) -> int:
                 skipped.append(f"{variable_id}/{window}")
                 continue
             trend_cache[(variable_id, window)] = layers
-            quality = _load_quality(export_dir, variable_id, window, layers)
-            quality_cache[(variable_id, window)] = quality
+
+    for (variable_id, window), layers in trend_cache.items():
+        quality_cache[(variable_id, window)] = _load_quality(
+            export_dir, variable_id, window, layers
+        )
+
+    for window in windows:
+        for variable in variables:
+            variable_id = str(variable["id"])
+            key = (variable_id, window)
+            layers = trend_cache.get(key)
+            if layers is None:
+                continue
+            quality = quality_cache.get(key)
+            check_windows = [window]
+            if window != "2001-2024":
+                quality_2001_2024 = quality_cache.get((variable_id, "2001-2024"))
+                if quality_2001_2024 is not None:
+                    quality = combine_quality_flags(quality, quality_2001_2024)
+                    quality_cache[key] = quality
+                    check_windows.append("2001-2024")
+            quality_check_windows[key] = tuple(check_windows)
             candidates.extend(
                 trend_candidates(
                     layers,
@@ -360,6 +399,7 @@ def main(argv: list[str] | None = None) -> int:
                     window,
                     mask=mask,
                     quality_flag=quality,
+                    quality_check_windows=tuple(check_windows),
                     min_cluster_cells=min_cluster_cells,
                     regions=regions,
                 )
@@ -384,6 +424,12 @@ def main(argv: list[str] | None = None) -> int:
             )
             if quality is not None
         }
+        pattern_check = [window]
+        if any(
+            "2001-2024" in quality_check_windows.get((variable_id, window), ())
+            for variable_id in (temperature_variable, moisture_variable)
+        ):
+            pattern_check.append("2001-2024")
         candidates.extend(
             pattern_candidates(
                 {
@@ -396,6 +442,7 @@ def main(argv: list[str] | None = None) -> int:
                 pattern_layer=pattern_layer,
                 mask=mask,
                 quality_flags=quality_flags,
+                quality_check_windows=tuple(pattern_check),
                 min_cluster_cells=min_cluster_cells,
                 regions=regions,
             )
@@ -416,6 +463,12 @@ def main(argv: list[str] | None = None) -> int:
                 for variable_id in layers_by_variable
                 if quality_cache.get((variable_id, window)) is not None
             }
+            country_check = [window]
+            if any(
+                "2001-2024" in quality_check_windows.get((variable_id, window), ())
+                for variable_id in layers_by_variable
+            ):
+                country_check.append("2001-2024")
             candidates.extend(
                 country_candidates(
                     layers_by_variable,
@@ -424,6 +477,7 @@ def main(argv: list[str] | None = None) -> int:
                     window,
                     mask=mask,
                     quality_flags=quality_flags,
+                    quality_check_windows=tuple(country_check),
                     min_cells=min_cluster_cells,
                     regions=regions,
                 )
@@ -435,8 +489,87 @@ def main(argv: list[str] | None = None) -> int:
         target_cases=target_cases,
         precipitation_variable=DEFAULT_PRECIPITATION_VARIABLE,
         regions=regions,
+        preferred_country_ids=DEFAULT_PREFERRED_COUNTRY_IDS,
+        min_place_cells=min_cluster_cells,
+        window_priority_bonus=DEFAULT_WINDOW_PRIORITY_BONUS,
     )
-    cases_file = build_cases_file(selected, registry, config=config)
+
+    # P06c: replace the Vietnam slot with exactly one caution case built from
+    # the whole Vietnam air-temperature country domain, including flagged cells.
+    caution = None
+    caution_reason = ""
+    vietnam_country = next(
+        (
+            country
+            for country in countries
+            if str(country.get("id")) == "country_704"
+            or str(country.get("label") or "").strip().lower() == "vietnam"
+        ),
+        None,
+    )
+    air_layers = trend_cache.get(("air_temperature", "2001-2024"))
+    air_quality = quality_cache.get(("air_temperature", "2001-2024"))
+    if vietnam_country is None:
+        caution_reason = "Vietnam is not present in the country grid metadata"
+    elif country_grid is None:
+        caution_reason = "the country grid is not available"
+    elif air_layers is None:
+        caution_reason = "air_temperature/2001-2024 trend layers are missing"
+    elif air_quality is None:
+        caution_reason = "air_temperature/2001-2024 quality flags are missing"
+    else:
+        breakpoint_year = _load_breakpoint_from_export(
+            export_dir, "air_temperature", "2001-2024"
+        )
+        caution, caution_reason = build_caution_candidate(
+            air_layers,
+            "air_temperature",
+            "2001-2024",
+            vietnam_country,
+            country_grid,
+            mask=mask,
+            quality_flag=air_quality,
+            breakpoint_year=breakpoint_year,
+            min_cells=min_cluster_cells,
+            regions=regions,
+        )
+
+    if caution is not None:
+        selected = [
+            candidate
+            for candidate in selected
+            if candidate.get("role") != "southeast-asia"
+        ]
+        selected = [
+            candidate
+            for candidate in selected
+            if not (
+                str(candidate.get("country_id") or "") == "country_704"
+                and candidate.get("variable") == "air_temperature"
+                and candidate.get("window") == "2001-2024"
+            )
+        ]
+        if len(selected) >= max_cases:
+            selected = selected[: max_cases - 1]
+        caution["role"] = "caution"
+        selected.append(caution)
+        print(
+            "Caution case: Vietnam air temperature 2001–2024 built from the "
+            "country domain, flagged cells included."
+        )
+    else:
+        print(
+            f"Caution case not built: {caution_reason}. Falling back to the "
+            "current Southeast Asia rule."
+        )
+
+    cases_file = build_cases_file(
+        selected,
+        registry,
+        config=config,
+        countries=countries,
+        country_grid=country_grid,
+    )
     output_path = write_cases(cases_file, export_dir / "cases.json")
 
     print(
@@ -452,12 +585,54 @@ def main(argv: list[str] | None = None) -> int:
             f"WARNING: only {len(selected)} cases met the documented rules "
             f"(target {target_cases}); no case was forced."
         )
+
+    if caution is None:
+        place_boxes = [
+            region["bbox"]
+            for region in regions
+            if region.get("id") in {"mekong", "southeast_asia"} and region.get("bbox")
+        ]
+
+        def _in_place(candidate: dict) -> bool:
+            latitude, longitude = candidate.get("center", (0.0, 0.0))
+            for west, south, east, north in place_boxes:
+                if not (south <= latitude <= north):
+                    continue
+                if west <= east:
+                    if west <= longitude <= east:
+                        return True
+                elif longitude >= west or longitude <= east:
+                    return True
+            return False
+
+        vietnam_selected = [
+            candidate
+            for candidate in selected
+            if str(candidate.get("country_id") or "") == "country_704"
+            or str(candidate.get("label") or "").strip().lower() == "vietnam"
+        ]
+        if vietnam_selected:
+            print("Southeast Asia slot: Vietnam case selected.")
+        elif any(_in_place(candidate) for candidate in selected):
+            print(
+                "Southeast Asia slot: no Vietnam case was available; used the "
+                "next preferred supported Mekong / Southeast Asia candidate."
+            )
+        else:
+            print(
+                "Southeast Asia slot omitted: no Vietnam / Mekong / Southeast Asia "
+                f"candidate with >= {min_cluster_cells} eligible cells after quality "
+                "screening."
+            )
+
     for number, candidate in enumerate(selected, start=1):
         print(
             f"  case-{number:02d} [{candidate.get('role')}] "
             f"{candidate['variable']} {candidate['window']} "
             f"kind={candidate.get('kind')} class={candidate.get('trend_class')} "
             f"cells={candidate['cells']} score={float(candidate['score']):.3f} "
+            f"quality={candidate.get('quality_check_windows')} "
+            f"adjust={candidate.get('score_adjustment', 1.0)} "
             f"bbox={candidate['bbox']}"
         )
 

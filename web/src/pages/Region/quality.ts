@@ -1,7 +1,7 @@
 // Schema 1.2 data-quality helpers (docs/DATA_CONTRACT.md §12).
-// Flag codes: 0 = no step-like change, 1 = step-like change, 2 = step-like change
+// Flag codes: 0 = no sudden shift, 1 = sudden shift, 2 = sudden shift
 // in a documented forcing-change period, −9 = not evaluated, −99 = outside domain.
-import { N_COLS, N_ROWS, cellAreaWeight, cellIndex } from '../../data/contract'
+import { N_COLS, N_ROWS, QUALITY_STEP_KNOWN_FORCING, cellAreaWeight, cellIndex } from '../../data/contract'
 import type { CellRange } from './model'
 
 export type QualityScope = 'cell' | 'region'
@@ -162,14 +162,50 @@ export function qualityShareForCountry(
   return finishTally(tally, 'region')
 }
 
-function productLabel(product: string, version: string): string {
-  if (product.startsWith('GLDAS')) return version ? `GLDAS-${version}` : product
-  return version ? `${product} ${version}` : product
+function productFamily(product: string): string {
+  return product.startsWith('GLDAS') ? 'GLDAS' : product
+}
+
+const DEFAULT_FORCING_PERIOD: readonly [number, number] = [2008, 2012]
+
+/** "documented GLDAS input change (2008–2012)" for the known forcing window. */
+export function documentedInputChange(
+  product: string,
+  knownForcingPeriod?: readonly [number, number] | null,
+): string {
+  const [start, end] = knownForcingPeriod ?? DEFAULT_FORCING_PERIOD
+  const period = start === end ? `${start}` : `${start}–${end}`
+  return `documented ${productFamily(product)} input change (${period})`
+}
+
+function breakYearWithin(year: number | null, period?: readonly [number, number] | null): boolean {
+  if (year == null || !period) return false
+  return year >= period[0] && year <= period[1]
+}
+
+/** Code 2 for a cell; for a region, a median break inside the documented period. */
+export function isKnownForcingShift(
+  quality: QualitySummary | null | undefined,
+  knownForcingPeriod?: readonly [number, number] | null,
+): boolean {
+  if (!quality?.available || !quality.flagged) return false
+  if (quality.flag === QUALITY_STEP_KNOWN_FORCING) return true
+  return quality.scope === 'region' && breakYearWithin(quality.breakYear, knownForcingPeriod)
+}
+
+function codeTwoSentence(product: string, period?: readonly [number, number] | null): string {
+  return `Sudden shift during a ${documentedInputChange(product, period)}: possible data discontinuity. Read the trend with caution.`
+}
+
+function codeOneSentence(year: number | null): string {
+  const around = year == null ? '' : ` around ${year}`
+  return `Sudden shift${around}: this could be a real jump in the climate or a data artefact. The trend is still significant; a step fits slightly better than a straight line.`
 }
 
 /**
- * Calm wording for the evidence card. Contract §12: a flag is a warning to read
- * the evidence, never a verdict that the data is "wrong".
+ * Quiet wording for the evidence card. Code 2 is a shift in a documented GLDAS
+ * input-change period; code 1 can be a real climate jump or a data artefact.
+ * Never says the data are "wrong" or an "error".
  */
 export function qualityBannerText(
   quality: QualitySummary | null | undefined,
@@ -179,24 +215,24 @@ export function qualityBannerText(
 ): string | null {
   if (!quality?.available || !quality.flagged) return null
   const year = quality.breakYear == null ? null : Math.round(quality.breakYear)
-  const around = year == null ? '' : ` around ${year}`
-  let text: string
+  const knownForcing = isKnownForcingShift(quality, knownForcingPeriod)
+  void version
   if (quality.scope === 'cell') {
-    text = `This cell’s change looks like a sudden jump${around}.`
-  } else if (quality.flaggedShare != null && quality.flaggedShare > 0) {
-    const pct = Math.max(1, Math.round(quality.flaggedShare * 100))
-    text = `About ${pct}% of evaluated cells in this region look like a sudden jump${around}.`
-  } else {
-    text = `Part of this change looks like a sudden jump${around}.`
+    return knownForcing ? codeTwoSentence(product, knownForcingPeriod) : codeOneSentence(year)
   }
-  if (knownForcingPeriod) {
-    const [start, end] = knownForcingPeriod
-    const period = start === end ? `${start}` : `${start}–${end}`
-    text += ` ${productLabel(product, version)} inputs changed around ${period}; read the trend with caution.`
-  } else {
-    text += ' Read the trend with caution.'
+  const pct =
+    quality.flaggedShare != null && quality.flaggedShare > 0
+      ? Math.max(1, Math.round(quality.flaggedShare * 100))
+      : null
+  const prefix =
+    pct == null
+      ? 'Part of this change shows'
+      : `About ${pct}% of evaluated cells in this region show`
+  if (knownForcing) {
+    return `${prefix} a sudden shift during a ${documentedInputChange(product, knownForcingPeriod)}: possible data discontinuity. Read the trend with caution.`
   }
-  return text
+  const around = year == null ? '' : ` around ${year}`
+  return `${prefix} a sudden shift${around}: this could be a real jump in the climate or a data artefact. The trend is still significant; a step fits slightly better than a straight line.`
 }
 
 /** Short row for the evidence card; null when the export has no quality layers. */
@@ -204,18 +240,21 @@ export function qualityDetailText(quality: QualitySummary | null | undefined): s
   if (!quality?.available) return null
   if (quality.scope === 'cell') {
     if (quality.flag == null) return 'No quality flag for this cell.'
-    if (quality.flag < 0) return 'This cell was not evaluated for step-like changes.'
-    if (!quality.flagged) return 'No step-like change detected in this cell.'
-    return quality.breakYear == null
-      ? 'Possible data discontinuity: change looks like a sudden jump.'
-      : `Possible data discontinuity: change looks like a sudden jump around ${Math.round(quality.breakYear)}.`
+    if (quality.flag < 0) return 'This cell was not evaluated for sudden shifts.'
+    if (!quality.flagged) return 'No sudden shift detected in this cell.'
+    return quality.flag === QUALITY_STEP_KNOWN_FORCING
+      ? codeTwoSentence('GLDAS_NOAH10_M', null)
+      : codeOneSentence(quality.breakYear == null ? null : Math.round(quality.breakYear))
   }
-  if (quality.evaluatedCells === 0) return 'No cells in this region were evaluated for step-like changes.'
-  if (!quality.flagged) return 'No step-like change detected in the evaluated cells.'
+  if (quality.evaluatedCells === 0) return 'No cells in this region were evaluated for sudden shifts.'
+  if (!quality.flagged) return 'No sudden shift detected in the evaluated cells.'
   const pct = quality.flaggedShare == null ? null : Math.round(quality.flaggedShare * 100)
   const share = pct == null ? '' : `${pct}% of evaluated cells`
-  const year = quality.breakYear == null ? '' : ` around ${Math.round(quality.breakYear)}`
-  return share
-    ? `${share} show a possible data discontinuity (change looks like a sudden jump${year}).`
-    : `Possible data discontinuity: change looks like a sudden jump${year}.`
+  const year = quality.breakYear == null ? null : Math.round(quality.breakYear)
+  const knownForcing = isKnownForcingShift(quality, DEFAULT_FORCING_PERIOD)
+  if (knownForcing) {
+    return `${share ? `${share} show` : 'The flagged cells show'} a sudden shift during a ${documentedInputChange('GLDAS_NOAH10_M', null)}: possible data discontinuity. Read the trend with caution.`
+  }
+  const around = year == null ? '' : ` around ${year}`
+  return `${share ? `${share} show` : 'The flagged cells show'} a sudden shift${around}: this could be a real jump in the climate or a data artefact. The trend is still significant; a step fits slightly better than a straight line.`
 }

@@ -152,10 +152,6 @@ export default function ScreenerPage() {
             />
             <Chip tone="accent">{domainLabel}</Chip>
           </div>
-          <p id="screener-domain-note" className="screener-note">
-            Type to search countries and approximate region boxes. Countries appear when the export includes the
-            optional 1.2 country grid.
-          </p>
         </div>
       </div>
 
@@ -206,10 +202,11 @@ export default function ScreenerPage() {
                       ))}
                       {showQuality ? (
                         <th scope="col">
-                          Data discontinuity
-                          <HelpTip label="About the data discontinuity flag">
-                            A flag means the change looks like a sudden jump rather than a gradual trend. Read the
-                            evidence; it is not proof that the data are wrong.
+                          Sudden shift
+                          <HelpTip label="About the sudden-shift quality flag">
+                            A flag means a step fits slightly better than a straight line. It could be a real jump in
+                            the climate or a data artefact. A shift during a documented GLDAS input change
+                            (2008–2012) is marked code 2: read the trend with caution.
                           </HelpTip>
                         </th>
                       ) : null}
@@ -253,8 +250,9 @@ export default function ScreenerPage() {
             </p>
             <p>
               Thumbnails show the full global trend grid and are not cropped to the selected domain. A{' '}
-              <strong>possible data discontinuity</strong> badge means a Pettitt/step test found a sudden jump; it is a
-              warning to read the evidence, not a verdict.
+              <strong>sudden shift</strong> flag means a step fits slightly better than a straight line: it could be a
+              real climate jump or a data artefact. Code 2 marks a shift during a documented GLDAS input change
+              (2008–2012), so read the trend with caution.
             </p>
           </Disclosure>
         </>
@@ -364,13 +362,16 @@ function ScreenerTableRow({
         </span>
       </td>
       {showQuality ? (
-        <td data-label="Data discontinuity">
+        <td data-label="Sudden shift flag">
           {row.stepFlag == null ? (
             <span>—</span>
           ) : row.stepFlag > 0 ? (
             <span className="screener-quality">
-              <Chip tone="warn" title="Possible data discontinuity: the change looks like a sudden jump, not a gradual trend.">
-                Possible data discontinuity
+              <Chip
+                tone="warn"
+                title="Sudden shift: a step fits slightly better than a straight line. It could be a real climate jump or a data artefact; read the evidence."
+              >
+                Sudden shift flagged
               </Chip>
               <span className="screener-meta">{formatPercent(row.stepFlag)} of area flagged</span>
               {row.sigTrendFlagged != null ? (
@@ -380,7 +381,7 @@ function ScreenerTableRow({
               ) : null}
             </span>
           ) : (
-            <span className="screener-meta">None detected</span>
+            <span className="screener-meta">No sudden shift detected</span>
           )}
         </td>
       ) : null}

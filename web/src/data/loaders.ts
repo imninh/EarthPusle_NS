@@ -68,6 +68,22 @@ export async function loadBreakpointYear(variableId: string, windowId: string): 
   const buf = await binary(`grids/${variableId}/${windowId}/breakpoint_year.f32`)
   return checkLength(new Float32Array(buf), N_ROWS * N_COLS, 'breakpoint_year')
 }
+
+/** Schema 1.3 (§13): witness agreement codes, or null when the export has no witness block. */
+export async function loadWitnessAgreement(variableId: string, windowId: string): Promise<Int8Array | null> {
+  const index = await loadIndex()
+  if (!index.witness) return null
+  const buf = await binary(`grids/${variableId}/${windowId}/witness_agreement.i8`)
+  return checkLength(new Int8Array(buf), N_ROWS * N_COLS, 'witness_agreement')
+}
+
+/** Schema 1.3 (§13): witness standardized change per decade (NaN = not evaluated), or null. */
+export async function loadWitnessStdChange(variableId: string, windowId: string): Promise<Float32Array | null> {
+  const index = await loadIndex()
+  if (!index.witness) return null
+  const buf = await binary(`grids/${variableId}/${windowId}/witness_std_change.f32`)
+  return checkLength(new Float32Array(buf), N_ROWS * N_COLS, 'witness_std_change')
+}
 export const loadCases = () => json<CasesFile>('cases.json')
 export const loadScreener = (windowId: string, domain = 'global') =>
   json<ScreenerFile>(`screener/${windowId}/${domain}.json`)

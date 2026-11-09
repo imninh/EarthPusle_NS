@@ -198,6 +198,7 @@ export default function RegionPage() {
           windowStart: windowMeta.start,
           windowEnd: windowMeta.end,
           quality: place.quality,
+          knownForcingPeriod,
         })
       : null
   const others = index.variables.filter((item) => item.id !== variableId)

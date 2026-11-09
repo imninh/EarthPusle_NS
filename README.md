@@ -8,10 +8,13 @@ change looks like a data discontinuity rather than a climate trend.
 Built for the NASA Space Apps Challenge 2026, challenge *Be An Earth System Trend Detective!*
 (<https://www.spaceappschallenge.org/2026/challenges/earth-system-trend-detective/>).
 
-> **Status (2026-11-09):** the app and pipeline work end to end on real data. The currently
-> published export is schema **1.1**; the wave-2 re-run that adds the Greenland/snow-ice mask,
-> data-quality layers, country domains and Detective Cases is in progress. Result figures in
-> the docs are marked `TODO(after P08)` until that export is published.
+> **Status (2026-11-09):** the app and pipeline work end to end on real data. The published
+> export is schema **1.2**: **3,558 files, 290.2 MB**, validated with `--release`, no synthetic
+> flag. It includes the Greenland/snow-ice mask (**14,250** cells), data-quality layers,
+> **143 country domains** and five P06d Detective Cases: China/Mongolia and Southern/Eastern
+> Africa soil moisture, South America rainfall, Algeria/Morocco warming + drying, and the
+> **Vietnam caution case** (“Vietnam is warming — but check the 2012 jump”). The cases use the
+> 2001–2024 quality cross-check and the Finding 1 flag wording.
 
 ## What it does
 
@@ -27,25 +30,43 @@ Built for the NASA Space Apps Challenge 2026, challenge *Be An Earth System Tren
 - **Traces evidence.** Every cell, region and country links back to its slope, q-value,
   coverage, product, DOI and method.
 - **Flags data problems.** A Pettitt change-point test plus a step-versus-linear ΔBIC check
-  marks cells where a change looks like a sudden jump; a break inside a documented GLDAS
-  forcing-change period gets a second code. A flag is a warning to read the evidence, not a
-  verdict that the data are wrong.
-- **Tells a story.** Detective Cases are selected from computed, unflagged results, and Story
-  mode walks through the evidence. If the evidence does not support a local case, the case is
-  omitted rather than forced.
+  marks cells where a change looks like a sudden jump. **Code 2:** “Sudden shift during a
+  documented GLDAS input change (2008–2012): possible data discontinuity. Read the trend with
+  caution.” **Code 1:** “Sudden shift around {year}: this could be a real jump in the climate
+  or a data artefact. The trend is still significant; a step fits slightly better than a
+  straight line.” A flag is a warning to read the evidence, never “wrong” or “error”.
+- **Tells a story.** Detective Cases are selected from computed results, and Story mode walks
+  through the evidence. Findings exclude flagged cells; the Vietnam caution case includes them
+  on purpose so the local warming trend can be read with its warning attached.
+
+## At a glance (2001–2024, published schema 1.2)
+
+- **Air temperature:** **58.4%** of land shows a significant increase and **4.0%** a significant
+  decrease; **35.1%** of the area carries a quality flag (49% of the significant area), so the
+  warming map is evidence to inspect, not a finished finding.
+- **Precipitation (IMERG):** **5.7%** significant increase vs **6.2%** significant decrease,
+  regional contrast **0.479** — the challenge's “same process, opposite trends” pattern.
+- **Vietnam caution case (30 cells):** air temperature rises **+0.42 °C per decade**
+  (q = **1.70e-3**), but **53.6%** of the area is flagged with a median break at **≈ 2012**,
+  inside the documented GLDAS **2008–2012** input change. The country screen also shows
+  **63.5%** significant warming and **86.9%** significant evapotranspiration increase.
+
+Every figure comes from `web/public/data/screener/2001-2024/global.json` and
+`country_704.json`; see `docs/submission/PROJECT_SUMMARY.md` for the full table.
 
 ## Screenshots
 
-> Placeholders — capture these from the published real export after P08; do not ship mock-data
-> screenshots.
+Real screenshots from the published schema-1.2 app, captured after P06d and the Finding 1
+wording:
 
-| Screen | Placeholder |
+| Screen | Screenshot |
 |---|---|
-| Home / headline insights | `docs/submission/screenshots/home.png` |
-| Variable Screener | `docs/submission/screenshots/screener.png` |
-| Global Discovery map | `docs/submission/screenshots/discovery.png` |
-| Region / country explorer | `docs/submission/screenshots/region.png` |
-| Story mode / Detective Case | `docs/submission/screenshots/story.png` |
+| Home / headline insights | ![Home](docs/submission/screenshots/home.png) |
+| Variable Screener | ![Screener](docs/submission/screenshots/screener.png) |
+| Global Discovery map | ![Discovery](docs/submission/screenshots/discovery.png) |
+| Region / country explorer (Vietnam) | ![Region](docs/submission/screenshots/region.png) |
+| Story mode / Vietnam caution case | ![Story](docs/submission/screenshots/story.png) |
+| Data-quality layer and flag wording | ![Quality flag](docs/submission/screenshots/quality_flag.png) |
 
 ## How it works
 
@@ -84,7 +105,7 @@ npm run dev
 ```
 
 Open the URL printed by Vite. The app serves the dataset in `web/public/data/`; the current
-folder contains the real schema-1.1 export. To regenerate synthetic mock data for UI work:
+folder contains the real schema-1.2 export. To regenerate synthetic mock data for UI work:
 
 ```bash
 .venv/Scripts/python scripts/make_mock_data.py

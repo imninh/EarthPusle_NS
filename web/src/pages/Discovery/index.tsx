@@ -705,7 +705,7 @@ function Legend({
         {layer === 'coverage' ? ' Coverage is a fraction of valid months from 0 to 1.' : null}
         {layer === 'trend' ? ' Trend classes describe direction, not a rate.' : null}
         {layer === 'pattern' ? ` Pattern classes compare ${temperatureLabel} and ${moistureLabel}.` : null}
-        {layer === 'quality' ? ' Hatching marks cells whose change looks like a sudden jump, not a gradual trend.' : null}
+        {layer === 'quality' ? ' Hatching marks a sudden shift. A code-1 shift could be a real climate jump or a data artefact; a code-2 shift falls during a documented GLDAS input change (2008–2012).' : null}
       </p>
       {layer === 'trend' ? (
         <ul>
@@ -759,14 +759,14 @@ function Legend({
       ) : null}
       {layer === 'quality' ? (
         <ul>
-          <QualitySwatch text="Possible data discontinuity (sudden jump)" />
+          <QualitySwatch text="Sudden shift: could be a real climate jump or a data artefact" />
           <li>
             <span className="discovery-swatch discovery-quality-swatch discovery-quality-swatch-known" />
-            <span>Sudden jump inside a documented forcing-change period</span>
+            <span>Sudden shift during a documented GLDAS input change (2008–2012): possible data discontinuity</span>
           </li>
           <li>
             <span className="discovery-swatch" />
-            <span>No step-like change detected</span>
+            <span>No sudden shift detected</span>
           </li>
         </ul>
       ) : null}
@@ -1126,21 +1126,28 @@ function hoverDetail(
 }
 
 function qualityWords(code: number | null): string {
-  if (code === QUALITY_STEP) return 'Possible data discontinuity: change looks like a sudden jump'
-  if (code === QUALITY_STEP_KNOWN_FORCING) return 'Possible data discontinuity in a documented forcing-change period'
+  if (code === QUALITY_STEP) return 'Sudden shift: could be a real climate jump or a data artefact'
+  if (code === QUALITY_STEP_KNOWN_FORCING) {
+    return 'Sudden shift during a documented GLDAS input change (2008–2012): possible data discontinuity'
+  }
   if (code === INSUFFICIENT_DATA) return 'Data quality not evaluated'
   if (code === OUTSIDE_DOMAIN) return 'Outside domain'
-  return 'No step-like change detected'
+  return 'No sudden shift detected'
+}
+
+function documentedInputChange(product: string): string {
+  const family = product.startsWith('GLDAS') ? 'GLDAS' : product
+  return `documented ${family} input change (2008–2012)`
 }
 
 function qualityNote(code: number, breakYear: number | null, product: string): string {
-  if (code === QUALITY_STEP || code === QUALITY_STEP_KNOWN_FORCING) {
-    const year = breakYear != null && Number.isFinite(breakYear) ? ` around ${breakYear.toFixed(1)}` : ''
-    const period =
-      code === QUALITY_STEP_KNOWN_FORCING
-        ? ` This falls inside a documented forcing-change period for ${product}.`
-        : ''
-    return `change looks like a sudden jump${year}.${period}`
+  const year = breakYear != null && Number.isFinite(breakYear) ? Math.round(breakYear) : null
+  if (code === QUALITY_STEP_KNOWN_FORCING) {
+    return `Sudden shift during a ${documentedInputChange(product)}: possible data discontinuity. Read the trend with caution.`
+  }
+  if (code === QUALITY_STEP) {
+    const around = year == null ? '' : ` around ${year}`
+    return `Sudden shift${around}: this could be a real jump in the climate or a data artefact. The trend is still significant; a step fits slightly better than a straight line.`
   }
   return qualityWords(code)
 }

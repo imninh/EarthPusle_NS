@@ -47,13 +47,18 @@ const flagged: QualitySummary = {
   breakYear: 2011.4,
 }
 
-function sentence(evidence: EvidenceModel, quality: QualitySummary | null = null): string {
+function sentence(
+  evidence: EvidenceModel,
+  quality: QualitySummary | null = null,
+  knownForcingPeriod: readonly [number, number] | null = [2008, 2012],
+): string {
   return summarySentence({
     evidence,
     placeLabel: 'in Vietnam',
     windowStart: '2001-01',
     windowEnd: '2024-12',
     quality,
+    knownForcingPeriod,
   })
 }
 
@@ -106,16 +111,25 @@ describe('summarySentence', () => {
     expect(text).toContain('there is not enough information')
   })
 
-  it('adds a caution when the quality flag is present', () => {
+  it('adds the code-2 caution when the flag falls in a documented forcing change', () => {
     const text = sentence(base, flagged)
-    expect(text).toContain('sudden jump around 2011')
-    expect(text).toContain('read with caution')
+    expect(text).toContain('documented GLDAS input change (2008–2012)')
+    expect(text).toContain('possible data discontinuity')
+    expect(text).toContain('read the trend with caution')
     expect(text.startsWith('Over 2001–2024')).toBe(true)
     expect(text.endsWith('.')).toBe(true)
   })
 
+  it('uses the code-1 caution for a shift outside the documented period', () => {
+    const text = sentence(base, { ...flagged, flag: 1, breakYear: 2015 })
+    expect(text).toContain('sudden shift around 2015')
+    expect(text).toContain('real jump in the climate or a data artefact')
+    expect(text).toContain('still significant')
+    expect(text).not.toMatch(/wrong|error/i)
+  })
+
   it('does not add a caution for an unflagged or absent quality result', () => {
-    expect(sentence(base, { ...flagged, flagged: false })).not.toContain('sudden jump')
-    expect(sentence(base, null)).not.toContain('sudden jump')
+    expect(sentence(base, { ...flagged, flagged: false })).not.toContain('sudden shift')
+    expect(sentence(base, null)).not.toContain('sudden shift')
   })
 })

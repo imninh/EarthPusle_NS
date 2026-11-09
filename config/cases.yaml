@@ -15,6 +15,28 @@ min_cluster_cells: 15
 target_cases: 4
 max_cases: 6
 
+# P06b selection rules (fixed in earthpulse/cases.py):
+# - 12-year candidates also use the 2001-2024 quality layer of the same
+#   variable, because 12 annual values have little power to detect a step.
+# - Full 2001-2024 candidates rank with a x1.25 score bonus, so they win when
+#   their raw score is within 20% of a shorter-window candidate.
+# - specific_humidity in 2001-2012 is down-weighted by x0.5 because
+#   REAL_RUN_REVIEW documents an early-period drop in that GLDAS field.
+# - The Southeast Asia slot prefers Vietnam, then the Mekong box, then the
+#   remaining Southeast Asia candidates; it is omitted if no candidate has at
+#   least min_cluster_cells eligible cells.
+# P06c:
+# - Every case gets a plain-language summary (why_selected = summary) and the
+#   technical selection text moves to details.
+# - region.label and title use the country holding most cells (from the 1.2
+#   country grid); coordinates are only a fallback.
+# - quality_flag_share is the area share of the source cells with
+#   quality_flag >= 1.
+# - Exactly one caution case is added for Vietnam air temperature 2001-2024,
+#   using the whole country domain and including flagged cells. It is only
+#   built when that trend is significantly warming; otherwise the normal
+#   Southeast Asia rule is used.
+
 # Wording-only overrides, for example:
 # overrides:
 #   case-01:

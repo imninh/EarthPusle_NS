@@ -2,7 +2,7 @@
 // Wording follows the numbers: no causal claims, and "not significant" is never
 // phrased as "no change".
 import type { EvidenceModel } from './model'
-import type { QualitySummary } from './quality'
+import { documentedInputChange, isKnownForcingShift, type QualitySummary } from './quality'
 
 export interface SummaryInput {
   evidence: EvidenceModel
@@ -11,6 +11,8 @@ export interface SummaryInput {
   windowStart: string
   windowEnd: string
   quality?: QualitySummary | null
+  /** Documented forcing-change period for this product, when the export defines one. */
+  knownForcingPeriod?: readonly [number, number] | null
 }
 
 function lowerFirst(text: string): string {
@@ -43,10 +45,17 @@ function windowYears(start: string, end: string): string {
   return `${startYear}–${endYear}`
 }
 
-function caution(quality: QualitySummary | null | undefined): string {
+function caution(
+  quality: QualitySummary | null | undefined,
+  product: string,
+  knownForcingPeriod?: readonly [number, number] | null,
+): string {
   if (!quality?.available || !quality.flagged) return ''
+  if (isKnownForcingShift(quality, knownForcingPeriod)) {
+    return `; a sudden shift during a ${documentedInputChange(product, knownForcingPeriod)}: possible data discontinuity; read the trend with caution`
+  }
   const year = quality.breakYear == null ? '' : ` around ${Math.round(quality.breakYear)}`
-  return `; a possible data discontinuity (change looks like a sudden jump${year}) means this trend should be read with caution`
+  return `; a sudden shift${year} could be a real jump in the climate or a data artefact; the trend is still significant, and a step fits slightly better than a straight line`
 }
 
 /**
@@ -57,7 +66,7 @@ export function summarySentence(input: SummaryInput): string {
   const { evidence, placeLabel, windowStart, windowEnd } = input
   const range = windowYears(windowStart, windowEnd)
   const variable = lowerFirst(evidence.variableLabel)
-  const trail = caution(input.quality)
+  const trail = caution(input.quality, evidence.product, input.knownForcingPeriod)
   const subject = `${variable} ${placeLabel}`
 
   if (evidence.trendClass === 'insufficient data') {

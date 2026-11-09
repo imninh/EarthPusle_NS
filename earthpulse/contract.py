@@ -103,3 +103,20 @@ KNOWN_FORCING_CHANGES = {"GLDAS_NOAH10_M": (2008, 2012)}
 COUNTRY_NONE = -1
 COUNTRY_MIN_CELLS = 3
 COUNTRY_GRID_FILE = "regions/country_grid.i16"
+
+# Schema 1.3 (§13): second witness. P14 bumps SCHEMA_VERSION to "1.3" with the 1.3 export.
+WITNESS_CORROBORATED = 2
+WITNESS_SAME_SIGN = 1
+WITNESS_MAIN_NOT_SIGNIFICANT = 0
+WITNESS_OPPOSITE_SIGN = -1
+WITNESS_CONTRADICTED = -2
+WITNESS_LAYERS = ("witness_agreement", "witness_std_change")
+WITNESSES = {
+    "air_temperature": ("M2TMNXSLV", "5.12.4", "T2M"),
+    "surface_skin_temperature": ("M2TMNXSLV", "5.12.4", "TS"),
+    "specific_humidity": ("M2TMNXSLV", "5.12.4", "QV2M"),
+    "evapotranspiration": ("M2TMNXLND", "5.12.4", "EVLAND"),
+    "surface_soil_moisture": ("M2TMNXLND", "5.12.4", "GWETTOP"),
+    "root_zone_soil_moisture": ("M2TMNXLND", "5.12.4", "GWETROOT"),
+    "precipitation": ("GPCPMON", "3.3", "sat_gauge_precip"),
+}

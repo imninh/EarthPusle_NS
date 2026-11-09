@@ -58,3 +58,10 @@ export const QUALITY_STEP_KNOWN_FORCING = 2
 
 // --- Schema 1.2: country regions (DATA_CONTRACT §11). Optional: may be absent. ---
 export const COUNTRY_NONE = -1
+
+// Schema 1.3 (§13): second witness. P14 bumps SCHEMA_VERSION to '1.3' with the 1.3 export.
+export const WITNESS_CORROBORATED = 2
+export const WITNESS_SAME_SIGN = 1
+export const WITNESS_MAIN_NOT_SIGNIFICANT = 0
+export const WITNESS_OPPOSITE_SIGN = -1
+export const WITNESS_CONTRADICTED = -2

@@ -55,6 +55,13 @@ DEFAULT_MAX_CASES = 6
 DEFAULT_TARGET_CASES = 4
 DEFAULT_PRECIPITATION_VARIABLE = "precipitation"
 DEFAULT_PLACE_REGION_IDS = ("mekong", "southeast_asia")
+DEFAULT_PREFERRED_COUNTRY_IDS = ("country_704",)  # Vietnam (Natural Earth ISO 704)
+DEFAULT_WINDOW_PRIORITY_BONUS = 1.25  # prefer 2001-2024 when raw scores are within 20%
+DEFAULT_SPECIFIC_HUMIDITY_WEIGHT = 0.5  # documented early-period drop (REAL_RUN_REVIEW)
+EARLY_WINDOW_QUALITY_LIMITATION = (
+    "12-year windows have little power to detect sudden shifts; the "
+    "2001\u20132024 check was used instead"
+)
 
 EVIDENCE_METHOD = (
     "Sen's slope + Hamed-Rao modified Mann-Kendall + BH-FDR"
@@ -66,17 +73,29 @@ DEFAULT_SELECTION_METHOD = (
     "(+1 or -1, BH-FDR q < q_threshold) are grouped into 8-neighbour connected "
     "clusters; clusters with fewer than the documented minimum of eligible "
     "cells are dropped and cells with quality_flag >= 1 (schema 1.2, when the "
-    "layer exists) are excluded. Candidates are scored as area (sum of "
-    "cos(latitude) weights) x median |standardized change per decade| x "
-    "(1 - quality-flag share). The selected set covers, when the evidence "
+    "layer exists) are excluded. For 12-year windows the union of the window's "
+    "own quality flag and the 2001\u20132024 quality flag of the same variable is "
+    "used, because 12 annual values have little power to detect a sudden shift. "
+    "Candidates are scored as area (sum of cos(latitude) weights) x median "
+    "|standardized change per decade| x (1 - quality-flag share). Candidates "
+    "in the full 2001\u20132024 window get a ranking bonus of x1.25, so a "
+    "full-window candidate is preferred whenever its raw score is within 20% "
+    "of a shorter-window candidate. specific_humidity in 2001\u20132012 is "
+    "down-weighted by x0.5 because REAL_RUN_REVIEW records a documented "
+    "early-period drop in that GLDAS field, so that artefact-like segment "
+    "should not win on score alone. The selected set covers, when the evidence "
     "supports it, (a) an IMERG precipitation case, (b) both directions of the "
     "strongest same-variable opposite-direction pair, (c) a multi-variable "
-    "pattern case (warming + drying preferred), and (d) the strongest "
-    "Southeast Asia / Mekong case; remaining slots are filled with the "
-    "highest-scoring distinct variable/window candidates. Country-level "
-    "candidates are added when a schema 1.2 country grid is present. Every "
-    "evidence number is an area-weighted aggregate of the underlying cell "
-    "grids."
+    "pattern case (warming + drying preferred), and (d) one Southeast Asia "
+    "case preferring Vietnam, then the Mekong box, then the rest; remaining "
+    "slots are filled with the highest-scoring distinct variable/window "
+    "candidates. Country-level candidates are added when a schema 1.2 country "
+    "grid is present. Exactly one caution case is added when Vietnam's "
+    "air_temperature 2001\u20132024 country domain has a significant warming trend: "
+    "it uses all country cells without excluding flagged cells and reports the "
+    "flagged share; otherwise the algorithm falls back to the normal Southeast "
+    "Asia rule. Every evidence number is an area-weighted aggregate of "
+    "the underlying cell grids."
 )
 
 _EVALUATED_CLASSES = (
@@ -98,6 +117,137 @@ _EIGHT_NEIGHBOURS = (
 )
 _FOUR_NEIGHBOURS = ((-1, 0), (0, -1), (0, 1), (1, 0))
 
+# A small UN M49 macro-region table keyed by ISO numeric code.  Africa and the
+# Americas use the intermediate region where one exists (Southern Africa,
+# Middle Africa, South America, ...), Asia/Europe/Oceania use the sub-region
+# (Eastern Asia, South-eastern Asia, Northern Europe, ...).  Values are strings
+# so they match the zero-padded ``iso_numeric`` field in regions.json.
+_M49_SUBREGIONS: dict[str, frozenset[str]] = {
+    "Australia and New Zealand": frozenset({"036", "162", "166", "334", "554", "574"}),
+    "Caribbean": frozenset({"028", "044", "052", "092", "136", "192", "212", "214", "308", "312", "332", "388", "474", "500", "531", "533", "534", "535", "630", "652", "659", "660", "662", "663", "670", "780", "796", "850"}),
+    "Central America": frozenset({"084", "188", "222", "320", "340", "484", "558", "591"}),
+    "Central Asia": frozenset({"398", "417", "762", "795", "860"}),
+    "Eastern Africa": frozenset({"086", "108", "174", "175", "231", "232", "260", "262", "404", "450", "454", "480", "508", "638", "646", "690", "706", "716", "728", "800", "834", "894"}),
+    "Eastern Asia": frozenset({"156", "344", "392", "408", "410", "446", "496"}),
+    "Eastern Europe": frozenset({"100", "112", "203", "348", "498", "616", "642", "643", "703", "804"}),
+    "Melanesia": frozenset({"090", "242", "540", "548", "598"}),
+    "Micronesia": frozenset({"296", "316", "520", "580", "581", "583", "584", "585"}),
+    "Middle Africa": frozenset({"024", "120", "140", "148", "178", "180", "226", "266", "678"}),
+    "Northern Africa": frozenset({"012", "434", "504", "729", "732", "788", "818"}),
+    "Northern America": frozenset({"060", "124", "304", "666", "840"}),
+    "Northern Europe": frozenset({"208", "233", "234", "246", "248", "352", "372", "428", "440", "578", "744", "752", "826", "831", "832", "833"}),
+    "Polynesia": frozenset({"016", "184", "258", "570", "612", "772", "776", "798", "876", "882"}),
+    "South America": frozenset({"032", "068", "074", "076", "152", "170", "218", "238", "239", "254", "328", "600", "604", "740", "858", "862"}),
+    "South-eastern Asia": frozenset({"096", "104", "116", "360", "418", "458", "608", "626", "702", "704", "764"}),
+    "Southern Africa": frozenset({"072", "426", "516", "710", "748"}),
+    "Southern Asia": frozenset({"004", "050", "064", "144", "356", "364", "462", "524", "586"}),
+    "Southern Europe": frozenset({"008", "020", "070", "191", "292", "300", "336", "380", "470", "499", "620", "674", "688", "705", "724", "807"}),
+    "Western Africa": frozenset({"132", "204", "270", "288", "324", "384", "430", "466", "478", "562", "566", "624", "654", "686", "694", "768", "854"}),
+    "Western Asia": frozenset({"031", "048", "051", "196", "268", "275", "368", "376", "400", "414", "422", "512", "634", "682", "760", "784", "792", "887"}),
+    "Western Europe": frozenset({"040", "056", "250", "276", "438", "442", "492", "528", "756"}),
+}
+
+_M49_SUBREGION_BY_ISO: dict[str, str] = {
+    iso: macro for macro, codes in _M49_SUBREGIONS.items() for iso in codes
+}
+
+
+def dominant_country_label(
+    candidate: Mapping,
+    countries: Sequence[Mapping] = (),
+    country_grid: np.ndarray | None = None,
+) -> str | None:
+    """Country name holding most of the candidate's cells (or top two).
+
+    Country-domain candidates use their own label.  For global clusters the
+    schema 1.2 country grid is used; the top country wins, or the top two are
+    joined with "and" when they jointly hold most cells.  Returns ``None``
+    when no country covers any candidate cell (caller falls back to the
+    existing place label).
+    """
+
+    if candidate.get("kind") in {"country", "caution"} and candidate.get("label"):
+        return str(candidate["label"])
+    if country_grid is None or not countries:
+        return None
+    rows = candidate.get("rows")
+    cols = candidate.get("cols")
+    if rows is None or cols is None:
+        return None
+    grid = _require_contract_shape("country_grid", country_grid)
+    values = np.asarray(grid)[np.asarray(rows, dtype=int), np.asarray(cols, dtype=int)]
+    values = values[values != contract.COUNTRY_NONE]
+    if values.size == 0:
+        return None
+
+    labels = {
+        int(country["index"]): str(country.get("label") or country.get("id"))
+        for country in countries
+        if "index" in country
+    }
+    iso_by_index = {}
+    for country in countries:
+        if "index" not in country:
+            continue
+        iso = str(country.get("iso_numeric") or "").strip()
+        if iso.isdigit():
+            iso = iso.zfill(3)
+        iso_by_index[int(country["index"])] = iso
+    counts = {}
+    for value in values.tolist():
+        counts[int(value)] = counts.get(int(value), 0) + 1
+    ranked = sorted(
+        counts.items(),
+        key=lambda item: (-item[1], labels.get(item[0], str(item[0]))),
+    )
+    total = sum(counts.values())
+    if total <= 0:
+        return None
+    top_index, top_count = ranked[0]
+    top_label = labels.get(top_index, str(top_index))
+    top_share = top_count / total
+    if len(ranked) == 1:
+        return top_label
+    second_index, second_count = ranked[1]
+    combined_share = (top_count + second_count) / total
+    if top_share >= 0.5 and combined_share < 0.7:
+        return top_label
+    if combined_share >= 0.7:
+        second_label = labels.get(second_index, str(second_index))
+        return f"{top_label} and {second_label}"
+
+    macro_counts: dict[str, int] = {}
+    for index, count in counts.items():
+        macro = _M49_SUBREGION_BY_ISO.get(iso_by_index.get(index, ""))
+        if macro:
+            macro_counts[macro] = macro_counts.get(macro, 0) + count
+    if macro_counts:
+        macro_total = sum(macro_counts.values())
+        ranked_macro = sorted(macro_counts.items(), key=lambda item: (-item[1], item[0]))
+        top_macro, top_macro_count = ranked_macro[0]
+        if len(ranked_macro) == 1 or top_macro_count / macro_total >= 0.5:
+            return top_macro
+        second_macro, second_macro_count = ranked_macro[1]
+        if (top_macro_count + second_macro_count) / macro_total >= 0.7:
+            return f"{top_macro} and {second_macro}"
+        return top_macro
+    return None
+
+
+def _place_name(
+    candidate: Mapping,
+    countries: Sequence[Mapping],
+    country_grid: np.ndarray | None,
+) -> str:
+    label = dominant_country_label(candidate, countries, country_grid)
+    if label:
+        return label
+    return str(candidate.get("label") or "the selected region")
+
+
+def _as_place_phrase(place: str) -> str:
+    return f"near {place}" if "\N{DEGREE SIGN}" in place else f"over {place}"
+
 
 # ---------------------------------------------------------------------------
 # Small grid helpers
@@ -117,6 +267,37 @@ def _require_contract_shape(name: str, array: np.ndarray) -> np.ndarray:
     expected = (contract.N_ROWS, contract.N_COLS)
     if result.shape != expected:
         raise ValueError(f"{name} must have shape {expected}, got {result.shape}")
+    return result
+
+
+def combine_quality_flags(
+    primary: np.ndarray | None,
+    extra: np.ndarray | None,
+) -> np.ndarray | None:
+    """Union of two quality-flag grids, keeping the stronger code.
+
+    ``-99``/``-9`` from the primary grid are preserved unless either grid
+    marks the cell as a step (``>= 1``). Code 2 wins over code 1.
+    """
+
+    if primary is None:
+        return None if extra is None else np.asarray(extra, dtype=np.int8).copy()
+    if extra is None:
+        return np.asarray(primary, dtype=np.int8).copy()
+    first = np.asarray(primary, dtype=np.int8)
+    second = np.asarray(extra, dtype=np.int8)
+    if first.shape != second.shape:
+        raise ValueError(
+            f"quality grids must have the same shape, got {first.shape} and {second.shape}"
+        )
+    result = first.copy()
+    both_flagged = (first >= 1) | (second >= 1)
+    result[both_flagged & (result < 1)] = 1
+    known_forcing = (
+        (first == contract.QUALITY_STEP_KNOWN_FORCING)
+        | (second == contract.QUALITY_STEP_KNOWN_FORCING)
+    )
+    result[known_forcing] = contract.QUALITY_STEP_KNOWN_FORCING
     return result
 
 
@@ -426,6 +607,7 @@ def _make_candidate(
     weights: np.ndarray,
     regions: Sequence[Mapping],
     quality_available: bool,
+    quality_check_windows: Sequence[str] = (),
     pattern_code: int | None = None,
     country: Mapping | None = None,
     evidence_classes: Mapping[str, int] | None = None,
@@ -443,6 +625,14 @@ def _make_candidate(
     )
 
     flagged_fraction = float(flagged.sum() / max(1, int(component.sum())))
+    component_rows, _ = np.nonzero(component)
+    flagged_rows, _ = np.nonzero(flagged)
+    component_area = float(weights[component_rows].sum())
+    quality_flag_share = (
+        float(weights[flagged_rows].sum() / component_area)
+        if component_area > 0.0
+        else 0.0
+    )
 
     evidence = []
     area_weight = float(weights[rows].sum())
@@ -452,7 +642,7 @@ def _make_candidate(
             eligible,
             weights,
             (evidence_classes or {}).get(variable_id, trend_class),
-            flagged_fraction,
+            quality_flag_share,
             quality_available,
         )
         stats["variable"] = variable_id
@@ -470,7 +660,17 @@ def _make_candidate(
 
     bbox_eval = _bbox_mask(bbox) & evaluated
     significant_share = float(eligible_cells / max(1, int(bbox_eval.sum())))
-    score = area_weight * score_base * (1.0 - flagged_fraction)
+    score = area_weight * score_base * (1.0 - quality_flag_share)
+
+    score_adjustment = 1.0
+    score_adjustment_reason = ""
+    if variable == "specific_humidity" and window == "2001-2012":
+        score_adjustment = DEFAULT_SPECIFIC_HUMIDITY_WEIGHT
+        score *= score_adjustment
+        score_adjustment_reason = (
+            "specific_humidity in 2001\u20132012 is down-weighted by 0.5 because "
+            "REAL_RUN_REVIEW documents an early-period drop in this GLDAS field."
+        )
 
     candidate = {
         "kind": kind,
@@ -486,11 +686,15 @@ def _make_candidate(
         "component_cells": int(component.sum()),
         "area_weight": area_weight,
         "flagged_fraction": flagged_fraction,
+        "quality_flag_share": quality_flag_share,
         "quality_available": quality_available,
+        "quality_check_windows": list(quality_check_windows),
         "bbox": bbox,
         "center": center,
         "label": label,
         "score": float(score),
+        "score_adjustment": score_adjustment,
+        "score_adjustment_reason": score_adjustment_reason,
         "significant_share": significant_share,
         "evidence": evidence,
         "candidate_id": (
@@ -509,6 +713,7 @@ def trend_candidates(
     *,
     mask: np.ndarray | None = None,
     quality_flag: np.ndarray | None = None,
+    quality_check_windows: Sequence[str] = (),
     min_cluster_cells: int = DEFAULT_MIN_CLUSTER_CELLS,
     regions: Sequence[Mapping] = (),
 ) -> list[dict]:
@@ -565,6 +770,7 @@ def trend_candidates(
                 weights=weights,
                 regions=regions,
                 quality_available=quality is not None,
+                quality_check_windows=quality_check_windows,
             )
             if candidate is not None and candidate["cells"] >= min_cluster_cells:
                 candidates.append(candidate)
@@ -591,6 +797,7 @@ def pattern_candidates(
     pattern_layer: np.ndarray | None = None,
     mask: np.ndarray | None = None,
     quality_flags: Mapping[str, np.ndarray] | None = None,
+    quality_check_windows: Sequence[str] = (),
     pattern_codes: Iterable[int] = (
         contract.PATTERN_WARMING_DRYING,
         contract.PATTERN_WARMING_WETTING,
@@ -674,6 +881,7 @@ def pattern_candidates(
                 weights=weights,
                 regions=regions,
                 quality_available=quality_available,
+                quality_check_windows=quality_check_windows,
                 pattern_code=pattern_code,
                 evidence_classes={
                     temperature_variable: _dominant_class(
@@ -697,6 +905,7 @@ def country_candidates(
     *,
     mask: np.ndarray | None = None,
     quality_flags: Mapping[str, np.ndarray] | None = None,
+    quality_check_windows: Sequence[str] = (),
     min_cells: int = DEFAULT_MIN_CLUSTER_CELLS,
     regions: Sequence[Mapping] = (),
 ) -> list[dict]:
@@ -770,12 +979,122 @@ def country_candidates(
                 weights=weights,
                 regions=regions,
                 quality_available=quality is not None,
+                quality_check_windows=quality_check_windows,
                 country=country,
             )
             if candidate is not None:
                 candidate["score"] *= significant_share
                 candidates.append(candidate)
     return candidates
+
+
+def build_caution_candidate(
+    layers: Mapping[str, np.ndarray],
+    variable: str,
+    window: str,
+    country: Mapping,
+    country_grid: np.ndarray,
+    *,
+    mask: np.ndarray | None = None,
+    quality_flag: np.ndarray | None = None,
+    breakpoint_year: np.ndarray | None = None,
+    min_cells: int = DEFAULT_MIN_CLUSTER_CELLS,
+    regions: Sequence[Mapping] = (),
+) -> tuple[dict | None, str]:
+    """Build the single Vietnam-style caution case without flag exclusion.
+
+    The case uses the whole country domain (all evaluated cells, flagged or
+    not).  It is only built when the variable has a significant warming trend
+    in the country: at least half of the evaluated cells are significant,
+    more cells warm than cool, and the area-weighted median slope is positive.
+    Returns ``(candidate, reason)``; ``candidate`` is ``None`` and ``reason``
+    explains why when the caution case cannot be supported.
+    """
+
+    if quality_flag is None:
+        return None, "no quality layer is available, so a flagged share cannot be reported"
+
+    classes = _require_contract_shape("trend_class", layers["trend_class"])
+    grid = _require_contract_shape("country_grid", country_grid)
+    index = int(country.get("index", contract.COUNTRY_NONE))
+    if index == contract.COUNTRY_NONE:
+        return None, "country has no index in the country_grid"
+
+    country_cells = grid == index
+    if mask is None:
+        allowed = country_cells
+    else:
+        allowed = country_cells & _require_contract_shape("mask", mask).astype(
+            bool, copy=False
+        )
+    evaluated = allowed & np.isin(classes, _EVALUATED_CLASSES)
+    evaluated_cells = int(evaluated.sum())
+    if evaluated_cells < min_cells:
+        return None, (
+            f"only {evaluated_cells} evaluated cells in the country domain "
+            f"(minimum {min_cells})"
+        )
+
+    increasing = allowed & (classes == contract.TREND_INCREASE)
+    decreasing = allowed & (classes == contract.TREND_DECREASE)
+    significant = increasing | decreasing
+    significant_share = int(significant.sum()) / max(1, evaluated_cells)
+    if significant_share < 0.5:
+        return None, (
+            f"only {significant_share:.0%} of the evaluated country cells have "
+            "a significant trend"
+        )
+    if int(increasing.sum()) <= int(decreasing.sum()):
+        return None, (
+            "the significant cells do not have a warming majority "
+            f"({int(increasing.sum())} increasing vs {int(decreasing.sum())} decreasing)"
+        )
+
+    weights = latitude_weights()
+    rows, _ = np.nonzero(evaluated)
+    median_slope = weighted_median(
+        np.asarray(layers["sen_slope_decade"], dtype=float)[evaluated],
+        weights[rows],
+    )
+    if median_slope is None or median_slope <= 0.0:
+        return None, "the area-weighted median slope is not warming"
+
+    quality = _require_contract_shape("quality_flag", quality_flag)
+    flagged = evaluated & (quality >= 1)
+
+    candidate = _make_candidate(
+        kind="caution",
+        variable=variable,
+        variables=(variable,),
+        window=window,
+        trend_class=contract.TREND_INCREASE,
+        component=allowed,
+        eligible=evaluated,
+        flagged=flagged,
+        layers_by_variable={variable: layers},
+        evaluated=evaluated,
+        weights=weights,
+        regions=regions,
+        quality_available=True,
+        quality_check_windows=(window,),
+        country=country,
+    )
+    if candidate is None:
+        return None, "the country domain produced no usable evidence"
+
+    break_year = None
+    if breakpoint_year is not None:
+        breaks = np.asarray(breakpoint_year, dtype=float)[flagged]
+        breaks = breaks[np.isfinite(breaks)]
+        if breaks.size:
+            break_year = float(np.median(breaks))
+    candidate["break_year"] = break_year
+    candidate["significant_share"] = float(significant_share)
+    candidate["caution_reason"] = (
+        "Caution case: the country domain includes every evaluated cell, "
+        "including cells with quality_flag >= 1."
+    )
+    return candidate, ""
 
 
 # ---------------------------------------------------------------------------
@@ -795,9 +1114,28 @@ def _candidate_key(candidate: Mapping) -> tuple:
     )
 
 
-def _rank_key(candidate: Mapping) -> tuple:
+def _preference_score(
+    candidate: Mapping,
+    window_priority_bonus: float = DEFAULT_WINDOW_PRIORITY_BONUS,
+) -> float:
+    """Score used only for ordering: boost the full 2001-2024 window.
+
+    A x1.25 boost means a 2001-2024 candidate wins whenever its raw score is
+    at least 80% of a shorter-window candidate's score (i.e. within 20%).
+    """
+
+    score = float(candidate.get("score", 0.0))
+    if candidate.get("window") == "2001-2024":
+        score *= window_priority_bonus
+    return score
+
+
+def _rank_key(
+    candidate: Mapping,
+    window_priority_bonus: float = DEFAULT_WINDOW_PRIORITY_BONUS,
+) -> tuple:
     return (
-        -float(candidate.get("score", 0.0)),
+        -_preference_score(candidate, window_priority_bonus),
         str(candidate.get("kind", "")),
         str(candidate.get("variable", "")),
         str(candidate.get("window", "")),
@@ -822,6 +1160,10 @@ def select_cases(
     precipitation_variable: str = DEFAULT_PRECIPITATION_VARIABLE,
     regions: Sequence[Mapping] = (),
     place_region_ids: Sequence[str] = DEFAULT_PLACE_REGION_IDS,
+    preferred_country_ids: Sequence[str] = DEFAULT_PREFERRED_COUNTRY_IDS,
+    preferred_country_labels: Sequence[str] = ("vietnam",),
+    min_place_cells: int = DEFAULT_MIN_CLUSTER_CELLS,
+    window_priority_bonus: float = DEFAULT_WINDOW_PRIORITY_BONUS,
 ) -> list[dict]:
     """Select a deterministic, contrasting set of cases from candidates."""
 
@@ -830,7 +1172,10 @@ def select_cases(
     if target_cases > max_cases:
         target_cases = max_cases
 
-    ordered = sorted(candidates, key=_rank_key)
+    def rank(candidate: Mapping) -> tuple:
+        return _rank_key(candidate, window_priority_bonus)
+
+    ordered = sorted(candidates, key=rank)
     selected: list[dict] = []
     used: set[tuple] = set()
 
@@ -854,7 +1199,9 @@ def select_cases(
         key = (str(candidate["variable"]), str(candidate["window"]))
         direction = int(candidate["trend_class"])
         current = groups.setdefault(key, {}).get(direction)
-        if current is None or float(candidate["score"]) > float(current["score"]):
+        if current is None or _preference_score(
+            candidate, window_priority_bonus
+        ) > _preference_score(current, window_priority_bonus):
             groups[key][direction] = candidate
 
     pairs = []
@@ -864,8 +1211,12 @@ def select_cases(
             and contract.TREND_DECREASE in directions
         ):
             strength = min(
-                float(directions[contract.TREND_INCREASE]["score"]),
-                float(directions[contract.TREND_DECREASE]["score"]),
+                _preference_score(
+                    directions[contract.TREND_INCREASE], window_priority_bonus
+                ),
+                _preference_score(
+                    directions[contract.TREND_DECREASE], window_priority_bonus
+                ),
             )
             pairs.append((strength, variable, window, directions))
     pairs.sort(
@@ -902,12 +1253,13 @@ def select_cases(
     patterns.sort(
         key=lambda candidate: (
             0 if candidate.get("pattern_code") == contract.PATTERN_WARMING_DRYING else 1,
-            ) + _rank_key(candidate)
+            ) + rank(candidate)
     )
     if patterns:
         add(patterns[0], "multi-variable-pattern")
 
-    # (d) Southeast Asia / Mekong, only if the evidence supports it.
+    # (d) one Southeast Asia slot: Vietnam, then Mekong, then the rest.
+    # It is omitted when no candidate has enough eligible cells (>= 15).
     place_boxes = [
         box
         for box in (
@@ -915,47 +1267,69 @@ def select_cases(
         )
         if box is not None
     ]
+    mekong_box = _region_box(regions, "mekong")
+    southeast_box = _region_box(regions, "southeast_asia")
+    preferred_ids = {str(value) for value in preferred_country_ids}
+    preferred_labels = {str(value).strip().lower() for value in preferred_country_labels}
 
-    def _place_rank(candidate: Mapping, min_fraction: float = 0.5) -> tuple | None:
+    def _is_preferred_country(candidate: Mapping) -> bool:
+        country_id = str(candidate.get("country_id") or "")
+        label = str(candidate.get("label") or "").strip().lower()
+        return country_id in preferred_ids or label in preferred_labels
+
+    def _in_box(candidate: Mapping, box: Sequence[float] | None) -> bool:
+        if box is None:
+            return False
         center_lat, center_lon = candidate["center"]
-        best: tuple | None = None
-        for index, box in enumerate(place_boxes):
-            fraction = _bbox_overlap_fraction(candidate["bbox"], box)
-            center_inside = _point_in_bbox(
-                float(center_lat), float(center_lon), box
-            )
-            if fraction < min_fraction:
-                if min_fraction > 0.0 or not center_inside:
-                    continue
-            key = (index, -(fraction * float(candidate.get("score", 0.0))))
-            if best is None or key < best:
-                best = key
-        return best
+        return bool(
+            _point_in_bbox(float(center_lat), float(center_lon), box)
+            or _bbox_overlap_fraction(candidate["bbox"], box) >= 0.5
+        )
 
-    if place_boxes and not any(
-        _place_rank(candidate) is not None for candidate in selected
-    ):
-        place_candidates = [
+    def _intersects_any_place_box(candidate: Mapping) -> bool:
+        return any(
+            _bbox_intersects(candidate["bbox"], box) for box in place_boxes
+        )
+
+    def _place_tier(candidate: Mapping) -> int | None:
+        if int(candidate.get("cells", 0)) < min_place_cells:
+            return None
+        if _is_preferred_country(candidate):
+            return 0
+        if _in_box(candidate, mekong_box):
+            return 1
+        if _in_box(candidate, southeast_box):
+            return 2
+        if _intersects_any_place_box(candidate):
+            return 3
+        return None
+
+    def _place_pool(tier: int) -> list[Mapping]:
+        return [
             candidate
             for candidate in ordered
             if _candidate_key(candidate) not in used
-            and _place_rank(candidate) is not None
+            and _place_tier(candidate) == tier
         ]
-        if not place_candidates:
-            place_candidates = [
-                candidate
-                for candidate in ordered
-                if _candidate_key(candidate) not in used
-                and _place_rank(candidate, min_fraction=0.0) is not None
-            ]
-        place_candidates.sort(
-            key=lambda candidate: (
-                _place_rank(candidate, min_fraction=0.0),
-                _rank_key(candidate),
-            )
-        )
-        if place_candidates:
-            add(place_candidates[0], "southeast-asia")
+
+    if not any(_is_preferred_country(candidate) for candidate in selected):
+        for tier in (0, 1, 2, 3):
+            if tier == 1 and any(
+                _in_box(candidate, mekong_box) for candidate in selected
+            ):
+                break
+            if tier == 2 and any(
+                _in_box(candidate, southeast_box) for candidate in selected
+            ):
+                break
+            if tier == 3 and any(
+                _intersects_any_place_box(candidate) for candidate in selected
+            ):
+                break
+            pool = _place_pool(tier)
+            if pool:
+                add(pool[0], "southeast-asia")
+                break
 
     # Fill with the best remaining distinct variable/window candidates.
     selected_pairs = {
@@ -1041,21 +1415,118 @@ def _evidence_json(stats: Mapping, variable_meta: Mapping) -> dict:
     }
 
 
-def _title(candidate: Mapping, variables: Mapping[str, Mapping]) -> str:
-    label = candidate.get("label", "the selected region")
+def _title(candidate: Mapping, variables: Mapping[str, Mapping], place: str) -> str:
+    place_phrase = f"near {place}" if "\N{DEGREE SIGN}" in place else f"across {place}"
+    if candidate.get("kind") == "caution":
+        break_year = candidate.get("break_year")
+        year_text = (
+            f"{int(round(float(break_year)))}"
+            if break_year is not None
+            else "recent"
+        )
+        return f"{place} is warming \N{EM DASH} but check the {year_text} jump"
     if candidate.get("kind") == "pattern":
         wording = _PATTERN_WORDING.get(
             int(candidate.get("pattern_code", 0)), "a combined trend pattern"
         )
-        return f"{label}: {wording}"
+        return f"{wording.capitalize()} {place_phrase}"
     variable_id = candidate["variable"]
-    variable_label = str(
+    variable_name = _plain_variable_name(variable_id, variables)
+    if variable_id == DEFAULT_PRECIPITATION_VARIABLE:
+        return f"Satellite rainfall is {_direction_verb(candidate['trend_class'])} {place_phrase}"
+    variable_name = variable_name[:1].upper() + variable_name[1:]
+    return f"{variable_name} is {_direction_verb(candidate['trend_class'])} {place_phrase}"
+
+
+def _direction_verb(trend_class: int) -> str:
+    return "rising" if trend_class == contract.TREND_INCREASE else "falling"
+
+
+def _window_phrase(window: str) -> str:
+    parts = str(window).split("-")
+    if len(parts) != 2:
+        return f"In {window}"
+    start, end = parts
+    if end == "2024":
+        return f"Since {start}"
+    return f"Between {start} and {end}"
+
+
+def _plain_variable_name(variable_id: str, variables: Mapping[str, Mapping]) -> str:
+    if variable_id == DEFAULT_PRECIPITATION_VARIABLE:
+        return "satellite rainfall"
+    if variable_id == "air_temperature":
+        return "air temperature"
+    label = str(
         variables.get(variable_id, {}).get("label", variable_id.replace("_", " "))
     )
-    direction = _direction_word(int(candidate["trend_class"]))
-    if variable_id == DEFAULT_PRECIPITATION_VARIABLE:
-        return f"{label}: satellite rainfall is {direction}"
-    return f"{label}: {variable_label.lower()} is {direction}"
+    label = label.split(" (")[0].strip()
+    return label[:1].lower() + label[1:] if label else variable_id
+
+
+def _plain_unit(unit: str) -> str:
+    text = unit.replace("mm/month", "mm per month")
+    text = text.replace("degC", "\N{DEGREE SIGN}C")
+    text = text.replace("per decade", "each decade")
+    return text
+
+
+def _slope_summary(stats: Mapping, variables: Mapping[str, Mapping]) -> str:
+    value = stats.get("sen_slope_decade")
+    if value is None:
+        return "changed"
+    unit = _plain_unit(_slope_unit(variables.get(stats["variable"], {})))
+    magnitude = f"{abs(float(value)):.2g}"
+    verb = "risen" if float(value) > 0 else "fallen"
+    return f"{verb} by about {magnitude} {unit}"
+
+
+def _summary_sentence(
+    candidate: Mapping,
+    variables: Mapping[str, Mapping],
+    place: str,
+) -> str:
+    window_phrase = _window_phrase(str(candidate["window"]))
+    cells = int(candidate.get("cells", 0))
+    evidence = candidate["evidence"]
+    place_phrase = _as_place_phrase(place)
+
+    if candidate.get("kind") == "caution":
+        stats = evidence[0]
+        share = float(candidate.get("quality_flag_share", 0.0))
+        break_year = candidate.get("break_year")
+        year_text = (
+            f"{int(round(float(break_year)))}"
+            if break_year is not None
+            else "the documented change period"
+        )
+        variable_name = _plain_variable_name(stats["variable"], variables)
+        return (
+            f"{window_phrase}, {variable_name} {place_phrase} has "
+            f"{_slope_summary(stats, variables)}, but {share:.0%} of the area "
+            f"shows a sudden shift around {year_text}, inside the documented "
+            "GLDAS 2008\N{EN DASH}2012 input change; read the trend with caution."
+        )
+
+    if candidate.get("kind") == "pattern":
+        temperature_stats, moisture_stats = evidence
+        temperature_name = _plain_variable_name(
+            temperature_stats["variable"], variables
+        )
+        moisture_name = _plain_variable_name(moisture_stats["variable"], variables)
+        return (
+            f"{window_phrase}, {temperature_name} {place_phrase} has "
+            f"{_slope_summary(temperature_stats, variables)} while "
+            f"{moisture_name} has {_slope_summary(moisture_stats, variables)} "
+            f"across {cells} grid cells."
+        )
+
+    stats = evidence[0]
+    variable_name = _plain_variable_name(stats["variable"], variables)
+    return (
+        f"{window_phrase}, {variable_name} {place_phrase} has "
+        f"{_slope_summary(stats, variables)} across {cells} grid cells."
+    )
 
 
 def _why_selected(candidate: Mapping, variables: Mapping[str, Mapping]) -> str:
@@ -1063,7 +1534,7 @@ def _why_selected(candidate: Mapping, variables: Mapping[str, Mapping]) -> str:
     role = candidate.get("role", "")
     area = float(candidate.get("area_weight", 0.0))
     cells = int(candidate.get("cells", 0))
-    flagged = float(candidate.get("flagged_fraction", 0.0))
+    flagged = float(candidate.get("quality_flag_share", 0.0))
     significant_share = float(candidate.get("significant_share", 0.0))
     window = candidate["window"]
 
@@ -1092,7 +1563,25 @@ def _why_selected(candidate: Mapping, variables: Mapping[str, Mapping]) -> str:
     stats = evidence[0]
     variable_id = candidate["variable"]
     variable_label = variables.get(variable_id, {}).get("label", variable_id)
-    if candidate.get("kind") == "country":
+    if candidate.get("kind") == "caution":
+        break_year = candidate.get("break_year")
+        year_text = (
+            f"{float(break_year):.1f}" if break_year is not None else "undefined"
+        )
+        text = (
+            f"Caution case built from the whole {candidate.get('label')} country "
+            f"domain: {cells} evaluated cells of {variable_label} in {window} "
+            f"(cos-latitude area {area:.2f}), with flagged cells NOT excluded. "
+            f"Median Sen slope {_format_slope(stats, variables)}; median q = "
+            f"{_format_number(stats.get('q_value'))}; "
+            f"{significant_share:.0%} of the evaluated country cells are "
+            f"significant; quality-flag share is {flagged:.0%}; median break "
+            f"year is {year_text}. The documented GLDAS input change is "
+            "2008\N{EN DASH}2012. "
+            f"Score = area x |standardized change| x (1 - flag share) x "
+            f"significant share = {float(candidate.get('score', 0.0)):.3f}."
+        )
+    elif candidate.get("kind") == "country":
         text = (
             f"Selected from the country domain for {candidate.get('label')}: "
             f"{cells} eligible cells of {variable_label} with a significant "
@@ -1118,7 +1607,13 @@ def _why_selected(candidate: Mapping, variables: Mapping[str, Mapping]) -> str:
             f"is {flagged:.0%}. Score = area x |standardized change| x (1 - flag share) "
             f"= {float(candidate.get('score', 0.0)):.3f}."
         )
-    if role in {"opposite-pair-increasing", "opposite-pair-decreasing"}:
+    if candidate.get("kind") == "caution":
+        text += (
+            " This is the single caution case: it shows a significant country-wide "
+            "trend whose cells are largely flagged, so the reader should check "
+            "the evidence rather than treat the trend as a clean finding."
+        )
+    elif role in {"opposite-pair-increasing", "opposite-pair-decreasing"}:
         text += (
             " It is one half of the strongest same-variable opposite-direction "
             f"pair for {variable_label}: the same variable has significant "
@@ -1134,8 +1629,14 @@ def _why_selected(candidate: Mapping, variables: Mapping[str, Mapping]) -> str:
         text += " It combines the two core variables through the pattern classes."
     elif role == "southeast-asia":
         text += (
-            " It is the strongest supported candidate whose bounding box "
-            "intersects the requested Southeast Asia / Mekong region."
+            " It is the Southeast Asia slot, chosen after preferring Vietnam, "
+            "then the Mekong box, then the remaining Southeast Asia candidates."
+        )
+    if float(candidate.get("score_adjustment", 1.0)) != 1.0:
+        text += (
+            " Score down-weighted by "
+            f"x{float(candidate['score_adjustment']):g}: "
+            f"{candidate.get('score_adjustment_reason', '')}"
         )
     return text
 
@@ -1163,7 +1664,7 @@ def _limitations(candidate: Mapping, variables: Mapping[str, Mapping]) -> list[s
             if text not in caveats:
                 caveats.append(text)
 
-    if candidate.get("kind") == "country":
+    if candidate.get("kind") in {"country", "caution"}:
         caveats.append(
             "A country domain follows a political boundary, not a climate region; "
             "the numbers aggregate cells inside that boundary."
@@ -1183,13 +1684,25 @@ def _limitations(candidate: Mapping, variables: Mapping[str, Mapping]) -> list[s
             "the case could not be screened for possible discontinuities."
         )
     else:
-        flagged = float(candidate.get("flagged_fraction", 0.0))
+        flagged = float(candidate.get("quality_flag_share", 0.0))
         if flagged > 0.0:
-            caveats.append(
-                f"{flagged:.0%} of the cells in the source component carry a "
-                "possible data-discontinuity flag (quality_flag >= 1); flagged "
-                "cells were excluded from the evidence."
-            )
+            if candidate.get("kind") == "caution":
+                caveats.append(
+                    f"{flagged:.0%} of the cells carry a sudden-shift flag; they "
+                    "are included on purpose so the reader can see the effect."
+                )
+            else:
+                caveats.append(
+                    f"{flagged:.0%} of the cells in the source component carry a "
+                    "possible data-discontinuity flag (quality_flag >= 1); flagged "
+                    "cells were excluded from the evidence."
+                )
+    quality_check_windows = list(candidate.get("quality_check_windows", []))
+    if (
+        candidate.get("window") != "2001-2024"
+        and "2001-2024" in quality_check_windows
+    ):
+        caveats.append(EARLY_WINDOW_QUALITY_LIMITATION)
     return caveats
 
 
@@ -1199,6 +1712,8 @@ def _case_from_candidate(
     registry: Mapping | Sequence,
     *,
     overrides: Mapping[str, Mapping] | None = None,
+    countries: Sequence[Mapping] = (),
+    country_grid: np.ndarray | None = None,
 ) -> dict:
     variables = {
         variable_id: _variable_meta(registry, variable_id)
@@ -1208,15 +1723,22 @@ def _case_from_candidate(
         _evidence_json(stats, variables[stats["variable"]])
         for stats in candidate["evidence"]
     ]
+    place = _place_name(candidate, countries, country_grid)
+    summary = _summary_sentence(candidate, variables, place)
+    details = _why_selected(candidate, variables)
     case = {
         "id": f"case-{index:02d}",
-        "title": _title(candidate, variables),
+        "title": _title(candidate, variables, place),
         "region": {
             "bbox": [float(value) for value in candidate["bbox"]],
-            "label": str(candidate["label"]),
+            "label": place,
         },
         "window": str(candidate["window"]),
-        "why_selected": _why_selected(candidate, variables),
+        "kind": "caution" if candidate.get("kind") == "caution" else "finding",
+        "summary": summary,
+        "details": details,
+        "why_selected": summary,
+        "quality_flag_share": _round(candidate.get("quality_flag_share", 0.0)),
         "evidence": evidence,
         "limitations": _limitations(candidate, variables),
     }
@@ -1227,7 +1749,9 @@ def _case_from_candidate(
         if isinstance(override.get("why_selected"), str) and override[
             "why_selected"
         ].strip():
-            case["why_selected"] = override["why_selected"].strip()
+            wording = override["why_selected"].strip()
+            case["summary"] = wording
+            case["why_selected"] = wording
     return case
 
 
@@ -1236,6 +1760,8 @@ def build_cases_file(
     registry: Mapping | Sequence,
     *,
     config: Mapping | None = None,
+    countries: Sequence[Mapping] = (),
+    country_grid: np.ndarray | None = None,
 ) -> dict:
     """Format selected candidates as the contract section 9 JSON object."""
 
@@ -1245,7 +1771,14 @@ def build_cases_file(
         config.get("selection_method") or DEFAULT_SELECTION_METHOD
     )
     cases = [
-        _case_from_candidate(candidate, index, registry, overrides=overrides)
+        _case_from_candidate(
+            candidate,
+            index,
+            registry,
+            overrides=overrides,
+            countries=countries,
+            country_grid=country_grid,
+        )
         for index, candidate in enumerate(selected, start=1)
     ]
     return {
@@ -1289,12 +1822,18 @@ __all__ = [
     "DEFAULT_EXPORT_DIR",
     "DEFAULT_MAX_CASES",
     "DEFAULT_MIN_CLUSTER_CELLS",
+    "DEFAULT_PREFERRED_COUNTRY_IDS",
     "DEFAULT_SELECTION_METHOD",
     "DEFAULT_TARGET_CASES",
     "DEFAULT_TRENDS_DIR",
+    "DEFAULT_WINDOW_PRIORITY_BONUS",
+    "EARLY_WINDOW_QUALITY_LIMITATION",
     "build_cases_file",
+    "build_caution_candidate",
     "cluster_components",
+    "combine_quality_flags",
     "country_candidates",
+    "dominant_country_label",
     "dumps_cases",
     "latitude_weights",
     "load_cases_config",

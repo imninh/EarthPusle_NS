@@ -43,6 +43,12 @@ export interface DataIndex {
     layers: string[]
     known_forcing_changes: Record<string, [number, number]>
   }
+  /** Schema 1.3 (§13): present only when witness layers were exported. */
+  witness?: {
+    method: string
+    layers: string[]
+    products: Record<string, WitnessProduct>
+  }
 }
 
 export interface Region {
@@ -85,6 +91,10 @@ export interface ScreenerRow {
   step_flag_area_fraction?: number | null
   /** Schema 1.2 (§12), optional */
   sig_trend_flagged_fraction?: number | null
+  /** Schema 1.3 (§13), optional */
+  witness_corroborated_fraction?: number | null
+  /** Schema 1.3 (§13), optional */
+  witness_contradicted_fraction?: number | null
 }
 
 export interface ScreenerFile {
@@ -103,6 +113,9 @@ export interface RegionSeries {
   values: (number | null)[]
   anomalies: (number | null)[]
   valid_cell_fraction: (number | null)[]
+  /** Schema 1.3 (§13), optional: independent-product anomalies, same months. */
+  witness_anomalies?: (number | null)[]
+  witness_unit?: string
 }
 
 export interface EvidenceItem {
@@ -116,6 +129,26 @@ export interface EvidenceItem {
   valid_observations: number
   coverage_fraction: number
   trend_class: number
+  /** Schema 1.3 (§13), optional */
+  witness?: WitnessEvidence
+}
+
+export interface WitnessEvidence {
+  product: string
+  variable: string
+  sen_slope_decade: number
+  slope_unit: string
+  q_value: number
+  /** witness_agreement code (§13) */
+  agreement: number
+}
+
+export interface WitnessProduct {
+  product: string
+  version: string
+  source_variable: string
+  doi: string
+  label: string
 }
 
 export interface DetectiveCase {
@@ -126,6 +159,14 @@ export interface DetectiveCase {
   why_selected: string
   evidence: EvidenceItem[]
   limitations: string[]
+  /** Schema 1.2 additive (contract §9): "finding" (default) or "caution" (a trend to read with care). */
+  kind?: 'finding' | 'caution'
+  /** Schema 1.2 additive: one plain-language sentence for a non-specialist. */
+  summary?: string
+  /** Schema 1.2 additive: technical selection details (score, thresholds). */
+  details?: string
+  /** Schema 1.2 additive: area share of the case's source cells with quality_flag >= 1. */
+  quality_flag_share?: number
 }
 
 export interface CasesFile {
@@ -141,4 +182,4 @@ export type Selection =
   | { kind: 'bbox'; bbox: [number, number, number, number] }
   | null
 
-export type Page = 'home' | 'screener' | 'discovery' | 'region' | 'story'
+export type Page = 'home' | 'screener' | 'discovery' | 'region' | 'story' | 'method'
