@@ -431,7 +431,10 @@ def verify_raw_coverage(raw_root: Path, registry: dict) -> dict[str, list[str]]:
         gaps = []
         for year, month in expected_months():
             directory = raw_root / RAW_SUBDIRS[product]
-            if len(directory.glob(raw_file_pattern(product, year, month))) != 1:
+            matches = list(
+                directory.glob(raw_file_pattern(product, year, month))
+            )
+            if len(matches) != 1:
                 gaps.append(f"{year:04d}-{month:02d}")
         missing[product] = gaps
     return missing
