@@ -8,13 +8,12 @@ change looks like a data discontinuity rather than a climate trend.
 Built for the NASA Space Apps Challenge 2026, challenge *Be An Earth System Trend Detective!*
 (<https://www.spaceappschallenge.org/2026/challenges/earth-system-trend-detective/>).
 
-> **Status (2026-11-09):** the app and pipeline work end to end on real data. The published
-> export is schema **1.2**: **3,558 files, 290.2 MB**, validated with `--release`, no synthetic
+> **Status (2026-11-10):** the app and pipeline work end to end on real data. The published
+> export is schema **1.3**: **3,600 files, 299.1 MB**, validated with `--release`, no synthetic
 > flag. It includes the Greenland/snow-ice mask (**14,250** cells), data-quality layers,
-> **143 country domains** and five P06d Detective Cases: China/Mongolia and Southern/Eastern
-> Africa soil moisture, South America rainfall, Algeria/Morocco warming + drying, and the
-> **Vietnam caution case** (“Vietnam is warming — but check the 2012 jump”). The cases use the
-> 2001–2024 quality cross-check and the Finding 1 flag wording.
+> **143 country domains**, five Detective Cases and the **second witness** — the same trend test
+> on an independent NASA product (MERRA-2 / GPCP). The local climax is the **Vietnam caution
+> case**: two NASA datasets, one disagreement, a documented cause.
 
 ## What it does
 
@@ -35,21 +34,26 @@ Built for the NASA Space Apps Challenge 2026, challenge *Be An Earth System Tren
   caution.” **Code 1:** “Sudden shift around {year}: this could be a real jump in the climate
   or a data artefact. The trend is still significant; a step fits slightly better than a
   straight line.” A flag is a warning to read the evidence, never “wrong” or “error”.
+- **Checks with a second witness.** Every significant trend is compared with the same test on
+  an independent NASA product. Agreement is corroboration, not ground truth: MERRA-2 is a
+  reanalysis and GPCP shares gauge inputs with IMERG.
 - **Tells a story.** Detective Cases are selected from computed results, and Story mode walks
   through the evidence. Findings exclude flagged cells; the Vietnam caution case includes them
-  on purpose so the local warming trend can be read with its warning attached.
+  on purpose so the warming trend can be read with its warning and witness disagreement attached.
 
-## At a glance (2001–2024, published schema 1.2)
+## At a glance (2001–2024, published schema 1.3)
 
 - **Air temperature:** **58.4%** of land shows a significant increase and **4.0%** a significant
   decrease; **35.1%** of the area carries a quality flag (49% of the significant area), so the
   warming map is evidence to inspect, not a finished finding.
 - **Precipitation (IMERG):** **5.7%** significant increase vs **6.2%** significant decrease,
   regional contrast **0.479** — the challenge's “same process, opposite trends” pattern.
-- **Vietnam caution case (30 cells):** air temperature rises **+0.42 °C per decade**
+- **Vietnam caution case (30 cells):** GLDAS air temperature rises **+0.42 °C per decade**
   (q = **1.70e-3**), but **53.6%** of the area is flagged with a median break at **≈ 2012**,
-  inside the documented GLDAS **2008–2012** input change. The country screen also shows
-  **63.5%** significant warming and **86.9%** significant evapotranspiration increase.
+  inside the documented GLDAS **2008–2012** input change. MERRA-2 agrees on direction but is
+  **+0.07 °C/decade, p = 0.28** in the region check (**+0.14 °C/decade, q = 0.08** in the
+  case); the lasting 2012 shift is **+0.73 °C** vs **+0.12 °C**. **Two NASA datasets, one
+  disagreement, a documented cause:** warming in both, direction agreed, size uncertain.
 
 Every figure comes from `web/public/data/screener/2001-2024/global.json` and
 `country_704.json`; see `docs/submission/PROJECT_SUMMARY.md` for the full table.
@@ -77,7 +81,7 @@ NASA GES DISC files
   → monthly anomalies against the 2001–2020 baseline
   → Sen slope + Hamed–Rao modified Mann–Kendall + BH-FDR
   → data-quality flags (Pettitt + ΔBIC)
-  → validated static export (schema 1.2)
+  → validated static export (schema 1.3)
   → React + TypeScript app (Screener, Discovery, Region, Story)
 ```
 
@@ -105,7 +109,7 @@ npm run dev
 ```
 
 Open the URL printed by Vite. The app serves the dataset in `web/public/data/`; the current
-folder contains the real schema-1.2 export. To regenerate synthetic mock data for UI work:
+folder contains the real schema-1.3 export. To regenerate synthetic mock data for UI work:
 
 ```bash
 .venv/Scripts/python scripts/make_mock_data.py
@@ -158,7 +162,7 @@ NASA product.
 |---|---|
 | `docs/SCIENTIFIC_METHODOLOGY.md` | Scope, data, harmonization, anomalies, trends, FDR, quality flags, Screener, patterns, validation, reproducibility, AI use, references |
 | `docs/LIMITATIONS.md` | What each limitation is and how it changes the reading of a result |
-| `docs/DATA_CONTRACT.md` | The producer/consumer contract (grid, files, schema 1.2) |
+| `docs/DATA_CONTRACT.md` | The producer/consumer contract (grid, files, schema 1.3) |
 | `docs/DATA_PROVENANCE.md` | Verified product, collection, file and checksum facts |
 | `docs/DATA_DICTIONARY.md` | Variable-level units, fill values and semantics |
 | `docs/submission/` | Project summary, demo script, slide outline, checklist, requirements verification |

@@ -25,6 +25,11 @@ import {
   TREND_DECREASE,
   TREND_INCREASE,
   TREND_NOT_SIGNIFICANT,
+  WITNESS_CONTRADICTED,
+  WITNESS_CORROBORATED,
+  WITNESS_MAIN_NOT_SIGNIFICANT,
+  WITNESS_OPPOSITE_SIGN,
+  WITNESS_SAME_SIGN,
   cellIndex,
   colToLon,
   latToRow,
@@ -40,6 +45,8 @@ import {
   loadQualityFlag,
   loadRegions,
   loadTrendClass,
+  loadWitnessAgreement,
+  loadWitnessStdChange,
 } from '../../data/loaders'
 import type { Country, DataIndex, Region, Selection } from '../../data/types'
 import { PlaceSearch } from '../../components/PlaceSearch'
@@ -61,6 +68,12 @@ import {
   renderContinuousImage,
   renderQualityImage,
 } from '../../maps/renderGrid'
+import {
+  combinedQualityWitness,
+  WITNESS_PALETTE,
+  witnessColour,
+  witnessWords,
+} from '../../maps/witness'
 import {
   applyBasemapTheme,
   buildBasemapStyle,
@@ -90,8 +103,9 @@ const BASE_LAYERS = [
   { id: 'coverage', label: 'Coverage' },
 ] as const
 const QUALITY_LAYER = { id: 'quality', label: 'Data quality' } as const
+const WITNESS_LAYER = { id: 'witness', label: 'Second witness' } as const
 
-type LayerId = (typeof BASE_LAYERS)[number]['id'] | 'quality'
+type LayerId = (typeof BASE_LAYERS)[number]['id'] | 'quality' | 'witness'
 type Projection = 'globe' | 'mercator'
 type BasemapState = 'loading' | 'ready' | 'error'
 type LoadState = 'loading' | 'ready' | 'error'
@@ -115,6 +129,8 @@ interface GridBundle {
   pattern: Int8Array
   quality: Int8Array | null
   breakYear: Float32Array | null
+  witness: Int8Array | null
+  witnessStd: Float32Array | null
 }
 
 interface CellPick {
@@ -164,8 +180,10 @@ const FALLBACK_PALETTE: Palette = {
 const CANVAS_CACHE_LIMIT = 8
 
 export default function DiscoveryPage() {
-  const { index, variable, variableId, windowId, navigate, selection } = useApp()
-  const [layer, setLayer] = useState<LayerId>('trend')
+  const { index, variable, variableId, windowId, navigate, selection, mapLayer } = useApp()
+  const [layer, setLayer] = useState<LayerId>(() =>
+    mapLayer === 'witness' && index.witness ? 'witness' : 'trend',
+  )
   const [projection, setProjection] = useState<Projection>('globe')
   const [showRegions, setShowRegions] = useState(false)
   const [regions, setRegions] = useState<Region[]>([])
@@ -207,7 +225,11 @@ export default function DiscoveryPage() {
   clickState.current = { regions, showRegions, navigate, setCell }
   interaction.current = {
     grids,
-    layer: layer === 'quality' && grids?.quality == null ? 'trend' : layer,
+    layer:
+      (layer === 'quality' && grids?.quality == null) ||
+      (layer === 'witness' && grids?.witness == null)
+        ? 'trend'
+        : layer,
     variable,
     qThreshold: index.q_threshold,
   }
@@ -217,8 +239,16 @@ export default function DiscoveryPage() {
   const moistureLabel = variableLabel(index, index.pattern_pair.moisture)
   const rateLimit = useMemo(() => (grids ? finiteAbsPercentile(grids.slope, 0.98) : null), [grids])
   const qualityAvailable = Boolean(index.quality) && grids?.quality != null
-  const activeLayer: LayerId = layer === 'quality' && !qualityAvailable ? 'trend' : layer
-  const layers = qualityAvailable ? [...BASE_LAYERS, QUALITY_LAYER] : [...BASE_LAYERS]
+  const witnessAvailable = Boolean(index.witness) && grids?.witness != null
+  const activeLayer: LayerId =
+    (layer === 'quality' && !qualityAvailable) || (layer === 'witness' && !witnessAvailable)
+      ? 'trend'
+      : layer
+  const layers = [
+    ...BASE_LAYERS,
+    ...(qualityAvailable ? [QUALITY_LAYER] : []),
+    ...(witnessAvailable ? [WITNESS_LAYER] : []),
+  ]
   const layerLabel = layers.find((item) => item.id === activeLayer)?.label ?? activeLayer
 
   function pickPlace(place: { kind: 'region'; regionId: string }): void {
@@ -302,6 +332,10 @@ export default function DiscoveryPage() {
       loadQualityFlag(variableId, windowId),
       loadBreakpointYear(variableId, windowId),
     ]).catch(() => [null, null] as const)
+    const witness = Promise.all([
+      loadWitnessAgreement(variableId, windowId),
+      loadWitnessStdChange(variableId, windowId),
+    ]).catch(() => [null, null] as const)
     Promise.all([
       loadTrendClass(variableId, windowId),
       loadFloatLayer(variableId, windowId, 'sen_slope_decade'),
@@ -313,10 +347,12 @@ export default function DiscoveryPage() {
       loadFloatLayer(variableId, windowId, 'coverage'),
       loadPatternClass(windowId),
       quality,
+      witness,
     ])
-      .then(([trend, slope, stdChange, pValue, qValue, tau, nValid, coverage, pattern, extraQuality]) => {
+      .then(([trend, slope, stdChange, pValue, qValue, tau, nValid, coverage, pattern, extraQuality, extraWitness]) => {
         if (cancelled) return
         const [qualityFlag, breakYear] = extraQuality
+        const [witnessAgreement, witnessStd] = extraWitness
         setGrids({
           key,
           trend,
@@ -330,6 +366,8 @@ export default function DiscoveryPage() {
           pattern,
           quality: qualityFlag,
           breakYear,
+          witness: witnessAgreement,
+          witnessStd,
         })
         setLoadState('ready')
       })
@@ -447,7 +485,11 @@ export default function DiscoveryPage() {
       if (map.getLayer('grid-raster')) map.setLayoutProperty('grid-raster', 'visibility', 'none')
       return
     }
-    const usedLayer: LayerId = layer === 'quality' && grids.quality == null ? 'trend' : layer
+    const usedLayer: LayerId =
+      (layer === 'quality' && grids.quality == null) ||
+      (layer === 'witness' && grids.witness == null)
+        ? 'trend'
+        : layer
     const key = `${grids.key}|${usedLayer}|${dark}`
     let canvas = canvasCache.current.get(key)
     if (!canvas) {
@@ -485,6 +527,7 @@ export default function DiscoveryPage() {
 
   return (
     <section className="discovery" ref={rootRef}>
+      <h1 className="sr-only">Global Discovery</h1>
       <div className="discovery-body">
         <div className="discovery-map">
           <div ref={mapNodeRef} className="discovery-map-canvas" aria-label="World map of the selected variable" />
@@ -627,6 +670,7 @@ export default function DiscoveryPage() {
             qThreshold={index.q_threshold}
             temperatureLabel={temperatureLabel}
             moistureLabel={moistureLabel}
+            witnessLabel={index.witness?.products[variableId]?.label ?? variable.product}
             onInspect={() => {
               if (!cell) return
               navigate('region', { selection: { kind: 'cell', row: cell.row, col: cell.col } })
@@ -706,6 +750,7 @@ function Legend({
         {layer === 'trend' ? ' Trend classes describe direction, not a rate.' : null}
         {layer === 'pattern' ? ` Pattern classes compare ${temperatureLabel} and ${moistureLabel}.` : null}
         {layer === 'quality' ? ' Hatching marks a sudden shift. A code-1 shift could be a real climate jump or a data artefact; a code-2 shift falls during a documented GLDAS input change (2008–2012).' : null}
+        {layer === 'witness' ? ' A second, independent NASA dataset checks the sign and significance of each trend.' : null}
       </p>
       {layer === 'trend' ? (
         <ul>
@@ -770,6 +815,17 @@ function Legend({
           </li>
         </ul>
       ) : null}
+      {layer === 'witness' ? (
+        <ul>
+          <Swatch colour={witnessColour(WITNESS_CORROBORATED)} text={witnessWords(WITNESS_CORROBORATED)} />
+          <Swatch colour={witnessColour(WITNESS_SAME_SIGN)} text={witnessWords(WITNESS_SAME_SIGN)} />
+          <Swatch colour={witnessColour(WITNESS_OPPOSITE_SIGN)} text={witnessWords(WITNESS_OPPOSITE_SIGN)} />
+          <Swatch colour={witnessColour(WITNESS_CONTRADICTED)} text={witnessWords(WITNESS_CONTRADICTED)} />
+          <Swatch colour={witnessColour(WITNESS_MAIN_NOT_SIGNIFICANT)} text={witnessWords(WITNESS_MAIN_NOT_SIGNIFICANT)} />
+          <Swatch hatch={palette} text={witnessWords(INSUFFICIENT_DATA)} />
+          <Swatch text="Outside domain (transparent)" />
+        </ul>
+      ) : null}
       <p>FDR-adjusted q {'<'} 0.05</p>
       <p>not significant ≠ no change</p>
     </section>
@@ -832,6 +888,7 @@ function CellPanel({
   qThreshold,
   temperatureLabel,
   moistureLabel,
+  witnessLabel,
   onInspect,
 }: {
   cell: CellPick | null
@@ -843,6 +900,7 @@ function CellPanel({
   qThreshold: number
   temperatureLabel: string
   moistureLabel: string
+  witnessLabel: string
   onInspect: () => void
 }) {
   const values = cell && grids ? readCell(grids, cell) : null
@@ -899,6 +957,18 @@ function CellPanel({
               <>
                 <dt>Data quality</dt>
                 <dd>{qualityNote(values.quality, values.breakYear, variable.product)}</dd>
+              </>
+            ) : null}
+            {values && values.witness != null ? (
+              <>
+                <dt>Second witness</dt>
+                <dd>{witnessLine(values.witness, values.witnessStd, witnessLabel)}</dd>
+                {combinedQualityWitness(values.quality, values.witness, witnessLabel) ? (
+                  <>
+                    <dt>Combined reading</dt>
+                    <dd>{combinedQualityWitness(values.quality, values.witness, witnessLabel)}</dd>
+                  </>
+                ) : null}
               </>
             ) : null}
           </dl>
@@ -1045,6 +1115,18 @@ function buildLayerImage(
       { coastalFill: true },
     )
   }
+  if (layer === 'witness') {
+    return renderClassImage(
+      grids.witness ?? new Int8Array(N_ROWS * N_COLS),
+      (value, index) => witnessColour(value, WITNESS_PALETTE, index),
+      undefined,
+      {
+        coastalFill: true,
+        isStippled: (value) => value === WITNESS_MAIN_NOT_SIGNIFICANT,
+        isValid: (value) => value !== OUTSIDE_DOMAIN,
+      },
+    )
+  }
   return renderQualityImage(
     grids.trend,
     grids.quality ?? new Int8Array(N_ROWS * N_COLS),
@@ -1105,7 +1187,27 @@ function readCell(grids: GridBundle, cell: CellPick) {
     pattern: grids.pattern[index],
     quality: grids.quality ? grids.quality[index] : null,
     breakYear: grids.breakYear ? grids.breakYear[index] : null,
+    witness: grids.witness ? grids.witness[index] : null,
+    witnessStd: grids.witnessStd ? grids.witnessStd[index] : null,
   }
+}
+
+function witnessLine(code: number, standardizedChange: number | null, label: string): string {
+  const change =
+    standardizedChange != null && Number.isFinite(standardizedChange)
+      ? `, standardized change ${formatStat(standardizedChange)}/decade`
+      : ''
+  const result =
+    code === WITNESS_CORROBORATED
+      ? 'agrees'
+      : code === WITNESS_CONTRADICTED
+        ? 'disagrees'
+        : code === WITNESS_SAME_SIGN
+          ? 'same direction, not significant'
+          : code === WITNESS_OPPOSITE_SIGN
+            ? 'opposite direction, not significant'
+            : witnessWords(code).toLowerCase()
+  return `Second witness (${label}): ${result}${change}`
 }
 
 function hoverDetail(
@@ -1119,6 +1221,10 @@ function hoverDetail(
     return `${patternWords(grids.pattern[index], 'Temperature', 'Moisture')} · ${formatStat(grids.slope[index])} ${variable.display_unit}/decade`
   }
   if (layer === 'quality') return `${qualityWords(grids.quality ? grids.quality[index] : null)} · ${formatStat(grids.slope[index])} ${variable.display_unit}/decade`
+  if (layer === 'witness') {
+    const std = grids.witnessStd ? grids.witnessStd[index] : Number.NaN
+    return `${witnessWords(grids.witness ? grids.witness[index] : OUTSIDE_DOMAIN)} · ${formatStat(std)}/decade`
+  }
   if (layer === 'rate') return `Sen slope ${formatStat(grids.slope[index])} ${variable.display_unit}/decade`
   if (layer === 'std') return `Standardized change ${formatStat(grids.stdChange[index])} per decade`
   if (layer === 'significance') return `q ${formatStat(grids.qValue[index])}`

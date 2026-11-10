@@ -41,11 +41,11 @@ def test_pettitt_and_delta_bic_step_vs_linear() -> None:
     result = pettitt_test(step)
     assert result["change_index"] == 9  # last year before the 2011 step
     assert result["p"] < 0.05
-    assert delta_bic(step, int(result["change_index"])) >= 2.0
+    assert delta_bic(step, int(result["change_index"]), YEARS) >= 2.0
 
     linear = linear_series()
     result = pettitt_test(linear)
-    assert delta_bic(linear, int(result["change_index"])) < 2.0
+    assert delta_bic(linear, int(result["change_index"]), YEARS) < 2.0
 
 
 def test_noise_is_flagged_at_most_5_percent() -> None:
@@ -56,7 +56,7 @@ def test_noise_is_flagged_at_most_5_percent() -> None:
         result = pettitt_test(values)
         if (
             result["p"] < contract.QUALITY_FDR_Q
-            and delta_bic(values, int(result["change_index"]))
+            and delta_bic(values, int(result["change_index"]), YEARS)
             >= contract.QUALITY_MIN_DELTA_BIC
         ):
             hits += 1
@@ -73,6 +73,30 @@ def _quality_fixture() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     trend_class[0, 2] = contract.INSUFFICIENT_DATA
     mask = np.array([[True, True, True, False]])
     return annual, trend_class, mask
+
+
+def test_gapped_linear_series_uses_calendar_years() -> None:
+    """A missing year is a two-year gap in the linear fit, not a single step.
+
+    Regression for P17 finding 2: with index time the same series looked like a
+    code-2 step; calendar time keeps ΔBIC below 2 and the flag at 0.
+    """
+    rng = np.random.default_rng(23)
+    years = np.array(
+        [2001, 2002, 2003, 2004, 2005, 2006, 2008, 2009, 2010, 2011, 2012],
+        dtype=int,
+    )
+    values = 0.3 * (years - 2001) + rng.normal(0, 0.4, years.size)
+    result = pettitt_test(values)
+    change_index = int(result["change_index"])
+    assert result["p"] < 0.05
+    assert delta_bic(values, change_index, years) < contract.QUALITY_MIN_DELTA_BIC
+
+    annual = values.reshape(-1, 1, 1)
+    trend_class = np.array([[contract.TREND_NOT_SIGNIFICANT]], dtype=np.int8)
+    mask = np.array([[True]])
+    quality = quality_grid(annual, years, trend_class, mask, "GLDAS_NOAH10_M")
+    assert quality["quality_flag"][0, 0] == contract.QUALITY_NONE
 
 
 def test_quality_grid_gldas_known_forcing_period() -> None:

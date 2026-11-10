@@ -23,6 +23,23 @@
   margin-top: 8px;
 }
 
+.chart-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.chart-toggle input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
 .chart-swatch {
   color: var(--text);
   font-size: 0.85rem;

@@ -7,15 +7,28 @@ export const MAGNITUDE_TOOLTIP = 'standard deviations per decade, median over si
 /** Coverage below this fraction shows a warning. The spec threshold is 70%. */
 export const COVERAGE_WARN_BELOW = 0.7
 
-export type SortKey = 'significantArea' | 'magnitude' | 'contrast' | 'coverage'
+export type SortKey = 'significantArea' | 'magnitude' | 'contrast' | 'coverage' | 'witness'
 export type SortDirection = 'asc' | 'desc'
 
-export const SORT_COLUMNS: readonly { id: SortKey; label: string }[] = [
+export interface ScreenerSortColumn {
+  id: SortKey
+  label: string
+}
+
+export const SORT_COLUMNS: readonly ScreenerSortColumn[] = [
   { id: 'significantArea', label: 'Area with significant change (increase + decrease)' },
   { id: 'magnitude', label: 'Typical change' },
   { id: 'contrast', label: 'Opposite trends' },
   { id: 'coverage', label: 'Coverage' },
 ]
+
+/** Schema 1.3 (A15): appended only when the export carries witness fields. */
+export const WITNESS_SORT_COLUMN: ScreenerSortColumn = {
+  id: 'witness',
+  label: 'Second witness',
+}
+
+const ALL_SORT_COLUMNS: readonly ScreenerSortColumn[] = [...SORT_COLUMNS, WITNESS_SORT_COLUMN]
 
 export interface ScreenerViewRow {
   variableId: string
@@ -35,6 +48,10 @@ export interface ScreenerViewRow {
   stepFlag: number | null
   /** Schema 1.2 §12: flagged fraction of the significant-trend area. */
   sigTrendFlagged: number | null
+  /** Schema 1.3 §13: of significant area, the fraction a second dataset confirms. */
+  witnessCorroborated: number | null
+  /** Schema 1.3 §13: of significant area, the fraction a second dataset contradicts. */
+  witnessContradicted: number | null
 }
 
 type VariableFields = Pick<
@@ -123,11 +140,12 @@ export function metricValue(row: ScreenerViewRow, key: SortKey): number | null {
   if (key === 'significantArea') return row.significantArea
   if (key === 'magnitude') return row.magnitude
   if (key === 'contrast') return row.contrast
+  if (key === 'witness') return row.witnessCorroborated
   return row.coverage
 }
 
 export function sortDescription(key: SortKey, direction: SortDirection): string {
-  const label = SORT_COLUMNS.find((column) => column.id === key)?.label ?? key
+  const label = ALL_SORT_COLUMNS.find((column) => column.id === key)?.label ?? key
   const phrase = label.charAt(0).toLowerCase() + label.slice(1)
   const order = direction === 'desc' ? 'largest first' : 'smallest first'
   return `Sorted by ${phrase}, ${order}.`
@@ -180,6 +198,8 @@ export function buildViewRows(variables: readonly VariableFields[], rows: readon
       nCells: row ? finiteOrNull(row.n_cells_evaluated) : null,
       stepFlag: row ? finiteOrNull(row.step_flag_area_fraction) : null,
       sigTrendFlagged: row ? finiteOrNull(row.sig_trend_flagged_fraction) : null,
+      witnessCorroborated: row ? finiteOrNull(row.witness_corroborated_fraction) : null,
+      witnessContradicted: row ? finiteOrNull(row.witness_contradicted_fraction) : null,
     }
   })
 }
@@ -187,6 +207,27 @@ export function buildViewRows(variables: readonly VariableFields[], rows: readon
 /** True only when the export actually contains schema-1.2 quality fields. */
 export function hasDiscontinuityFields(rows: readonly ScreenerViewRow[]): boolean {
   return rows.some((row) => row.stepFlag != null || row.sigTrendFlagged != null)
+}
+
+/** True only when the export actually contains schema-1.3 witness fields. */
+export function hasWitnessFields(rows: readonly ScreenerViewRow[]): boolean {
+  return rows.some((row) => row.witnessCorroborated != null || row.witnessContradicted != null)
+}
+
+/** A contradicted share above this fraction gets a warning chip. */
+export const WITNESS_CONTRADICTION_THRESHOLD = 0.2
+
+export function witnessConfirmedText(row: ScreenerViewRow): string | null {
+  if (row.witnessCorroborated == null || !Number.isFinite(row.witnessCorroborated)) return null
+  return `${formatPercent(row.witnessCorroborated)} of significant area confirmed`
+}
+
+export function witnessContradictionWarning(row: ScreenerViewRow): boolean {
+  return (
+    row.witnessContradicted != null &&
+    Number.isFinite(row.witnessContradicted) &&
+    row.witnessContradicted > WITNESS_CONTRADICTION_THRESHOLD
+  )
 }
 
 /** Display rule for the headline, not a data result. */

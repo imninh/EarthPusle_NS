@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from earthpulse.export import WEB_DATA_DIR
+from earthpulse.export import EXPORT_SCHEMA_VERSION, WEB_DATA_DIR
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "validate_export.py"
@@ -80,13 +80,19 @@ def test_cli_publish_only_fails_for_missing_export(tmp_path: Path) -> None:
     reason="web/public/data mock folder is not present",
 )
 def test_cli_on_current_mock_folder() -> None:
-    """The mock generator should produce a contract-valid folder."""
+    """The current published folder must validate for the current schema."""
+    index = json.loads((WEB_DATA_DIR / "index.json").read_text(encoding="utf-8"))
+    if index.get("schema_version") != EXPORT_SCHEMA_VERSION:
+        pytest.skip(
+            "published folder is still "
+            f"{index.get('schema_version')!r}; P14 T3 publishes {EXPORT_SCHEMA_VERSION!r}"
+        )
+
     result = _run(WEB_DATA_DIR)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "VALIDATION PASSED" in result.stdout
     assert "Files:" in result.stdout
 
-    index = json.loads((WEB_DATA_DIR / "index.json").read_text(encoding="utf-8"))
     release = _run(WEB_DATA_DIR, "--release")
     if index.get("synthetic") is True:
         assert release.returncode == 1

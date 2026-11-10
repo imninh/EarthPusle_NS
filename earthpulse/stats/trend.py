@@ -8,6 +8,9 @@ Methods (fixed by docs/packages/specs/P03_statistical_engine.md section 3):
   not used because it assumes the valid points are evenly spaced in time.
 - Mann-Kendall: primary p-value from the Hamed-Rao modified test
   (autocorrelation-aware); the unmodified test is kept as a comparison layer.
+  When the modified test returns a non-finite p-value for an otherwise
+  evaluated cell (degenerate autocorrelation variance), the primary p falls
+  back to the unmodified Mann-Kendall p so the cell keeps trend evidence.
   The tests run on the valid points only, in time order (pymannkendall does
   not take explicit time positions); see the P03 report for the measured
   effect of 10% random gaps.
@@ -27,6 +30,7 @@ from earthpulse.contract import (
     MIN_VALID_FRACTION,
     MIN_YEARS,
     OUTSIDE_DOMAIN,
+    Q_THRESHOLD,
     TREND_DECREASE,
     TREND_INCREASE,
     TREND_NOT_SIGNIFICANT,
@@ -117,6 +121,13 @@ def analyse_series(x: np.ndarray, t_years: np.ndarray | None = None) -> dict:
         p_org, tau_org = float(res_org.p), float(res_org.Tau)
     except Exception:  # pragma: no cover - degenerate/constant input guard
         p_mod, tau, p_org, tau_org = 1.0, 0.0, 1.0, 0.0
+
+    # Degenerate autocorrelation variance can make the Hamed-Rao p non-finite.
+    # For an evaluated cell, fall back to the unmodified MK p (documented in
+    # the method notes and P03 report section 3.3).
+    if not np.isfinite(p_mod):
+        p_mod = p_org
+        tau = tau_org
 
     std_change = (10.0 * slope) / residual_sd if residual_sd > 0 else np.nan
 
@@ -216,14 +227,17 @@ def trend_grid(
         cc = np.asarray(evaluated_cols)
         p_map = np.full((n_lat, n_lon), np.nan)
         p_map[rr, cc] = p_list
-        q_map, rejected_map = bh_fdr(p_map)
+        q_map, _ = bh_fdr(p_map)
         layers["q_value"] = q_map
-        rejected = rejected_map[rr, cc]
+        # The class follows the contract wording strictly: q < 0.05. The
+        # multiplier reject mask is not used directly because it can reject at
+        # q == 0.05.
+        significant = q_map[rr, cc] < Q_THRESHOLD
         slopes = layers["sen_slope"][rr, cc]
         trend_class[rr, cc] = np.where(
-            rejected & (slopes > 0),
+            significant & (slopes > 0),
             TREND_INCREASE,
-            np.where(rejected & (slopes < 0), TREND_DECREASE, TREND_NOT_SIGNIFICANT),
+            np.where(significant & (slopes < 0), TREND_DECREASE, TREND_NOT_SIGNIFICANT),
         )
         extras["p_value"] = p_map
     else:

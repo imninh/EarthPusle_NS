@@ -41,11 +41,13 @@ export function CaseMiniMap({
   windowId,
   bbox,
   label,
+  caption = 'Approximate case box. Not a country boundary.',
 }: {
   variableId: string
   windowId: string
   bbox: [number, number, number, number]
   label: string
+  caption?: string | null
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -81,13 +83,17 @@ export function CaseMiniMap({
         width={N_COLS}
         height={N_ROWS}
         role="img"
-        aria-label={`Global trend map for ${label}, with the approximate case box outlined.`}
+        aria-label={
+          caption
+            ? `Global trend map for ${label}, with the approximate case box outlined.`
+            : `Global trend map for ${label}, with the case area outlined.`
+        }
       />
       {status === 'loading' ? <figcaption>Loading case map…</figcaption> : null}
       {status === 'error' ? (
         <figcaption role="alert">{error ?? 'Could not draw the case map.'}</figcaption>
       ) : null}
-      <figcaption>Approximate case box. Not a country boundary.</figcaption>
+      {caption ? <figcaption>{caption}</figcaption> : null}
     </figure>
   )
 }

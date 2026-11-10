@@ -13,6 +13,7 @@ import {
   cellsInsideBbox,
   correlationPairId,
   perDecadeUnit,
+  rangeColSegments,
   senTrendSeries,
   spearmanInWindow,
   spearmanLabel,
@@ -68,6 +69,23 @@ describe('cells and tiles', () => {
 
   it('returns null when no cell centre falls inside', () => {
     expect(cellsInsideBbox([10.1, 10.1, 10.2, 10.2])).toBeNull()
+  })
+
+  it('crosses the dateline with two column segments', () => {
+    const range = cellsInsideBbox([170, -10, -170, 10])
+    expect(range).not.toBeNull()
+    expect(range!.row0).toBe(80)
+    expect(range!.row1).toBe(99)
+    expect(rangeColSegments(range!)).toEqual([
+      [0, 9],
+      [350, 359],
+    ])
+    expect(tileIdsForRange(range!)).toEqual([
+      'r080_c000',
+      'r080_c350',
+      'r090_c000',
+      'r090_c350',
+    ])
   })
 })
 
@@ -226,6 +244,8 @@ describe('comparison helpers', () => {
     expect(rho).toEqual({ rho: 1, n: 3 })
     expect(spearmanLabel('computed', rho.rho, rho.n)).toBe('computed here: Spearman ρ = 1.000 (n = 3)')
     expect(spearmanLabel('precomputed', 0.5, 10)).toBe('precomputed Spearman ρ = 0.500 (n = 10)')
+    expect(spearmanLabel('computed', null, 0)).toBe('—')
+    expect(spearmanLabel('precomputed', null, 12)).toBe('—')
   })
 
   it('aligns a shorter series onto the calendar and leaves holes null', () => {

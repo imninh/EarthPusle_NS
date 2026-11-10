@@ -9,11 +9,15 @@ import {
   domainHasNoEvaluatedCells,
   formatPercent,
   hasDiscontinuityFields,
+  hasWitnessFields,
+  metricValue,
   screenerHeadline,
   significantArea,
   sortByMetric,
   sortDescription,
   sourceBadge,
+  witnessConfirmedText,
+  witnessContradictionWarning,
 } from './metrics'
 
 interface Sample {
@@ -275,6 +279,66 @@ describe('screener headline', () => {
     const rows = buildViewRows([variable], [row('a', 0.02, 0.02)])
     expect(screenerHeadline(rows, 'Mekong')).toBe(
       'No variable shows significant change over more than 10% of Mekong in this period.',
+    )
+  })
+})
+
+describe('schema 1.3 second-witness fields', () => {
+  const variable = {
+    id: 'example',
+    label: 'Example variable',
+    category: 'water',
+    source_type: 'model' as const,
+    display_unit: 'mm/month',
+    increase_means: 'wetter',
+  }
+  const base: ScreenerRow = {
+    variable: 'example',
+    valid_area_fraction: 0.9,
+    sig_increase_area_fraction: 0.2,
+    sig_decrease_area_fraction: 0.1,
+    median_abs_std_change_decade: 0.4,
+    median_sen_slope_decade_sig: 1,
+    regional_contrast: 0.2,
+    n_cells_evaluated: 100,
+  }
+
+  it('maps the optional witness fractions and detects their presence', () => {
+    const [without] = buildViewRows([variable], [base])
+    expect(hasWitnessFields([without!])).toBe(false)
+
+    const [withWitness] = buildViewRows(
+      [variable],
+      [{ ...base, witness_corroborated_fraction: 0.64, witness_contradicted_fraction: 0.21 }],
+    )
+    expect(withWitness?.witnessCorroborated).toBeCloseTo(0.64)
+    expect(withWitness?.witnessContradicted).toBeCloseTo(0.21)
+    expect(hasWitnessFields([withWitness!])).toBe(true)
+  })
+
+  it('formats confirmation and warns only above 20% contradiction', () => {
+    const [row] = buildViewRows(
+      [variable],
+      [{ ...base, witness_corroborated_fraction: 0.64, witness_contradicted_fraction: 0.2 }],
+    )
+    expect(witnessConfirmedText(row!)).toBe('64.0% of significant area confirmed')
+    expect(witnessContradictionWarning(row!)).toBe(false)
+
+    const [high] = buildViewRows(
+      [variable],
+      [{ ...base, witness_corroborated_fraction: 0.64, witness_contradicted_fraction: 0.201 }],
+    )
+    expect(witnessContradictionWarning(high!)).toBe(true)
+  })
+
+  it('sorts by the confirmed share and names the witness column', () => {
+    const [row] = buildViewRows(
+      [variable],
+      [{ ...base, witness_corroborated_fraction: 0.64, witness_contradicted_fraction: 0.1 }],
+    )
+    expect(metricValue(row!, 'witness')).toBeCloseTo(0.64)
+    expect(sortDescription('witness', 'desc')).toBe(
+      'Sorted by second witness, largest first.',
     )
   })
 })

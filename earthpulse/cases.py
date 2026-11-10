@@ -23,6 +23,11 @@ Selection follows ``docs/packages/specs/P06_detective_cases.md``:
    variable/window candidates.
 5. Country-level candidates are evaluated when a schema 1.2 country grid is
    available.
+6. When a witness agreement grid is supplied (or can be computed from a
+   witness trend grid), each evidence item gains a ``witness`` object
+   (contract section 13).  Finding scores are multiplied by
+   ``0.5 + 0.5 × corroborated share``.  A finding whose cells are mostly
+   contradicted (code −2 share above 50%) is not selected.
 
 Every number in the output comes from the input grids.  ``config/cases.yaml``
 may only change wording (titles and ``why_selected``), never numbers.
@@ -58,6 +63,7 @@ DEFAULT_PLACE_REGION_IDS = ("mekong", "southeast_asia")
 DEFAULT_PREFERRED_COUNTRY_IDS = ("country_704",)  # Vietnam (Natural Earth ISO 704)
 DEFAULT_WINDOW_PRIORITY_BONUS = 1.25  # prefer 2001-2024 when raw scores are within 20%
 DEFAULT_SPECIFIC_HUMIDITY_WEIGHT = 0.5  # documented early-period drop (REAL_RUN_REVIEW)
+DEFAULT_PAIR_MAX_CONTRADICTED_SHARE = 0.20  # P06f witness pair requirement
 EARLY_WINDOW_QUALITY_LIMITATION = (
     "12-year windows have little power to detect sudden shifts; the "
     "2001\u20132024 check was used instead"
@@ -90,12 +96,41 @@ DEFAULT_SELECTION_METHOD = (
     "case preferring Vietnam, then the Mekong box, then the rest; remaining "
     "slots are filled with the highest-scoring distinct variable/window "
     "candidates. Country-level candidates are added when a schema 1.2 country "
-    "grid is present. Exactly one caution case is added when Vietnam's "
-    "air_temperature 2001\u20132024 country domain has a significant warming trend: "
-    "it uses all country cells without excluding flagged cells and reports the "
-    "flagged share; otherwise the algorithm falls back to the normal Southeast "
-    "Asia rule. Every evidence number is an area-weighted aggregate of "
-    "the underlying cell grids."
+    "grid is present. Two caution cases are emitted: the local Vietnam "
+    "air-temperature case when that country domain has a significant warming "
+    "trend (all country cells included, flagged share reported), and the global "
+    "specific-humidity witness-disagreement case. Every evidence number is an "
+    "area-weighted aggregate of "
+    "the underlying cell grids. When a second-witness agreement layer is "
+    "available, finding scores are multiplied by (0.5 + 0.5 x corroborated "
+    "share) so corroborated clusters win ties, and a finding whose cells are "
+    "mostly contradicted (agreement code -2 share above 50%) is never selected. "
+    "P06f: the opposite pair is used only when both sides have witness majority "
+    "code 2 and contradicted area below 20%, with preference for precipitation, "
+    "then 2001\u20132024, then other variables; the two sides must have different "
+    "place labels, otherwise the pair is skipped and the reason is printed. "
+    "Two caution cases are emitted: the local Vietnam air-temperature case and "
+    "one global specific-humidity witness-disagreement case."
+)
+
+# Slope-unit labels for the witness product after the conversions documented
+# in spec P13.  GWETTOP / GWETROOT stay wetness fractions, not kg m-2.
+_WITNESS_SLOPE_UNITS = {
+    "air_temperature": "degC per decade",
+    "surface_skin_temperature": "degC per decade",
+    "specific_humidity": "g kg-1 per decade",
+    "evapotranspiration": "mm/month per decade",
+    "surface_soil_moisture": "fraction per decade",
+    "root_zone_soil_moisture": "fraction per decade",
+    "precipitation": "mm/month per decade",
+}
+_MERRA_WITNESS_LIMITATION = (
+    "MERRA-2 is also a model (reanalysis); a witness is corroboration, "
+    "not ground truth."
+)
+_GPCP_WITNESS_LIMITATION = (
+    "GPCP shares rain-gauge inputs with IMERG; a witness is corroboration, "
+    "not ground truth."
 )
 
 _EVALUATED_CLASSES = (
@@ -592,6 +627,290 @@ def _layer_stats(
     }
 
 
+def witness_metadata(variable_id: str) -> dict:
+    """Product, source variable, slope unit and limitation for one witness.
+
+    Names and versions come from ``contract.WITNESSES``.  The human label
+    matches contract section 13 ("MERRA-2 reanalysis" / "GPCP satellite\u2013gauge").
+    """
+
+    spec = contract.WITNESSES.get(variable_id)
+    if spec is None:
+        return {
+            "product": variable_id,
+            "variable": variable_id,
+            "label": "an independent NASA dataset",
+            "slope_unit": "per decade",
+            "limitation": (
+                "A witness is corroboration, not ground truth."
+            ),
+        }
+    short_name, version, source_variable = spec
+    if str(short_name).startswith("M2"):
+        family = "MERRA-2"
+        label = "MERRA-2 reanalysis"
+        limitation = _MERRA_WITNESS_LIMITATION
+    else:
+        family = "GPCP"
+        label = "GPCP satellite\u2013gauge"
+        limitation = _GPCP_WITNESS_LIMITATION
+    return {
+        "product": f"{family} {short_name} {version}",
+        "variable": str(source_variable),
+        "label": label,
+        "slope_unit": _WITNESS_SLOPE_UNITS.get(variable_id, "per decade"),
+        "limitation": limitation,
+    }
+
+
+def witness_agreement_grid(
+    main: Mapping[str, np.ndarray],
+    witness: Mapping[str, np.ndarray],
+    mask: np.ndarray | None = None,
+) -> np.ndarray:
+    """Contract section 13 agreement codes from main and witness trend grids.
+
+    Sign comes from each product's Sen slope.  Significance is that product's
+    own BH-FDR ``q < Q_THRESHOLD``.  Codes are 2 / 1 / -1 / -2 / 0 / -9 / -99.
+    """
+
+    main_class = _require_contract_shape("trend_class", main["trend_class"])
+    witness_class = _require_contract_shape(
+        "witness trend_class", witness["trend_class"]
+    )
+    main_slope = np.asarray(main["sen_slope_decade"], dtype=float)
+    witness_slope = np.asarray(witness["sen_slope_decade"], dtype=float)
+    main_q = np.asarray(main["q_value"], dtype=float)
+    witness_q = np.asarray(witness["q_value"], dtype=float)
+    if main_slope.shape != main_class.shape or witness_slope.shape != main_class.shape:
+        raise ValueError("witness trend grids must match the contract grid shape")
+    if main_q.shape != main_class.shape or witness_q.shape != main_class.shape:
+        raise ValueError("witness q grids must match the contract grid shape")
+
+    if mask is None:
+        inside = np.ones(main_class.shape, dtype=bool)
+    else:
+        inside = _require_contract_shape("mask", mask).astype(bool, copy=False)
+
+    result = np.full(main_class.shape, contract.INSUFFICIENT_DATA, dtype=np.int8)
+    outside = (
+        ~inside
+        | (main_class == contract.OUTSIDE_DOMAIN)
+        | (witness_class == contract.OUTSIDE_DOMAIN)
+    )
+    result[outside] = contract.OUTSIDE_DOMAIN
+
+    not_evaluated = ~outside & (
+        (main_class == contract.INSUFFICIENT_DATA)
+        | (witness_class == contract.INSUFFICIENT_DATA)
+        | ~np.isfinite(main_slope)
+        | ~np.isfinite(witness_slope)
+        | ~np.isfinite(main_q)
+        | ~np.isfinite(witness_q)
+    )
+    result[not_evaluated] = contract.INSUFFICIENT_DATA
+
+    usable = ~outside & ~not_evaluated
+    main_sign = np.sign(main_slope)
+    witness_sign = np.sign(witness_slope)
+    main_significant = usable & (main_q < contract.Q_THRESHOLD) & (main_sign != 0)
+    witness_significant = (
+        usable & (witness_q < contract.Q_THRESHOLD) & (witness_sign != 0)
+    )
+    same_sign = usable & (main_sign == witness_sign) & (main_sign != 0)
+
+    result[usable & ~main_significant] = contract.WITNESS_MAIN_NOT_SIGNIFICANT
+    result[main_significant & same_sign & witness_significant] = (
+        contract.WITNESS_CORROBORATED
+    )
+    result[main_significant & same_sign & ~witness_significant] = (
+        contract.WITNESS_SAME_SIGN
+    )
+    result[main_significant & ~same_sign & ~witness_significant] = (
+        contract.WITNESS_OPPOSITE_SIGN
+    )
+    result[main_significant & ~same_sign & witness_significant] = (
+        contract.WITNESS_CONTRADICTED
+    )
+    return result
+
+
+def _majority_agreement_code(codes: np.ndarray, weights: np.ndarray) -> int:
+    """Area-weighted mode.  Equal weights break toward the lower code."""
+
+    totals: dict[int, float] = {}
+    for code, weight in zip(codes.tolist(), weights.tolist()):
+        key = int(code)
+        totals[key] = totals.get(key, 0.0) + float(weight)
+    return min(totals.items(), key=lambda item: (-item[1], item[0]))[0]
+
+
+def _resolve_witness_agreement(
+    main_layers: Mapping[str, np.ndarray],
+    witness_layers: Mapping[str, np.ndarray],
+) -> np.ndarray:
+    """Use a supplied agreement grid, or compute one from witness trends."""
+
+    agreement = witness_layers.get("agreement")
+    if agreement is not None:
+        return _require_contract_shape("witness_agreement", agreement).astype(
+            np.int8, copy=False
+        )
+    required = ("trend_class", "sen_slope_decade", "q_value")
+    missing = [name for name in required if name not in witness_layers]
+    if missing:
+        raise KeyError(
+            "witness layers need 'agreement' or trend fields "
+            f"({', '.join(missing)} missing)"
+        )
+    return witness_agreement_grid(main_layers, witness_layers)
+
+
+def _aggregate_witness(
+    main_layers: Mapping[str, np.ndarray],
+    witness_layers: Mapping[str, np.ndarray],
+    cells: np.ndarray,
+    weights: np.ndarray,
+    variable_id: str,
+) -> dict:
+    """Median witness slope, median q and majority agreement over ``cells``."""
+
+    agreement = _resolve_witness_agreement(main_layers, witness_layers)
+    rows, cols = np.nonzero(cells)
+    cell_weights = weights[rows]
+    codes = np.asarray(agreement)[rows, cols]
+    evaluated = (codes != contract.OUTSIDE_DOMAIN) & (
+        codes != contract.INSUFFICIENT_DATA
+    )
+    meta = witness_metadata(variable_id)
+    slope_grid = witness_layers.get("sen_slope_decade")
+    q_grid = witness_layers.get("q_value")
+    if slope_grid is None:
+        slope_values = np.full(rows.shape, np.nan)
+    else:
+        slope_values = np.asarray(slope_grid, dtype=float)[rows, cols]
+    if q_grid is None:
+        q_values = np.full(rows.shape, np.nan)
+    else:
+        q_values = np.asarray(q_grid, dtype=float)[rows, cols]
+
+    if not np.any(evaluated):
+        return {
+            **meta,
+            "sen_slope_decade": weighted_median(slope_values, cell_weights),
+            "q_value": weighted_median(q_values, cell_weights),
+            "agreement": int(contract.INSUFFICIENT_DATA),
+            "corroborated_share": None,
+            "contradicted_share": None,
+        }
+
+    eval_weights = cell_weights[evaluated]
+    eval_codes = codes[evaluated]
+    total = float(eval_weights.sum())
+    corroborated = float(
+        eval_weights[eval_codes == contract.WITNESS_CORROBORATED].sum() / total
+    )
+    contradicted = float(
+        eval_weights[eval_codes == contract.WITNESS_CONTRADICTED].sum() / total
+    )
+    return {
+        **meta,
+        "sen_slope_decade": weighted_median(slope_values, cell_weights),
+        "q_value": weighted_median(q_values, cell_weights),
+        "agreement": _majority_agreement_code(eval_codes, eval_weights),
+        "corroborated_share": corroborated,
+        "contradicted_share": contradicted,
+    }
+
+
+def _apply_witness(
+    *,
+    kind: str,
+    evidence: list[dict],
+    score: float,
+    layers_by_variable: Mapping[str, Mapping[str, np.ndarray]],
+    witness_by_variable: Mapping[str, Mapping[str, np.ndarray]] | None,
+    eligible: np.ndarray,
+    weights: np.ndarray,
+) -> tuple[float, float | None, float | None, float]:
+    """Attach witness aggregates and scale a finding score.
+
+    Returns ``(score, corroborated_share, contradicted_share, factor)``.
+    Corroborated share is the lowest across the case's variables; contradicted
+    share is the highest, so one contradicted variable can reject the finding.
+    """
+
+    if not witness_by_variable:
+        return score, None, None, 1.0
+
+    corroborated_shares: list[float] = []
+    contradicted_shares: list[float] = []
+    for stats in evidence:
+        variable_id = stats["variable"]
+        witness_layers = witness_by_variable.get(variable_id)
+        if not witness_layers:
+            continue
+        record = _aggregate_witness(
+            layers_by_variable[variable_id],
+            witness_layers,
+            eligible,
+            weights,
+            variable_id,
+        )
+        stats["witness"] = record
+        if record["corroborated_share"] is not None:
+            corroborated_shares.append(float(record["corroborated_share"]))
+        if record["contradicted_share"] is not None:
+            contradicted_shares.append(float(record["contradicted_share"]))
+
+    corroborated = min(corroborated_shares) if corroborated_shares else None
+    contradicted = max(contradicted_shares) if contradicted_shares else None
+    factor = 1.0
+    if kind != "caution" and corroborated is not None:
+        factor = 0.5 + 0.5 * corroborated
+        score *= factor
+    return score, corroborated, contradicted, factor
+
+
+def _finding_mostly_contradicted(candidate: Mapping) -> bool:
+    """True when a finding's cells are mostly agreement code -2."""
+
+    if candidate.get("kind") == "caution":
+        return False
+    share = candidate.get("witness_contradicted_share")
+    if share is None:
+        return False
+    # Area weights can land an ulp above an exact half.  One extra cell on the
+    # contract grid is about 1e-5, so 1e-9 still means "more than 50%".
+    value = float(share)
+    return value > 0.5 and not math.isclose(value, 0.5, rel_tol=0.0, abs_tol=1e-9)
+
+
+def _pair_witness_check(
+    candidate: Mapping, max_contradicted_share: float
+) -> tuple[bool, str]:
+    """P06f: both pair sides need witness majority code 2 and low contradiction."""
+
+    evidence = candidate.get("evidence") or []
+    if not evidence:
+        return False, "no evidence"
+    witness = evidence[0].get("witness")
+    if not witness:
+        return False, "no witness agreement layer"
+    agreement = int(witness.get("agreement", contract.INSUFFICIENT_DATA))
+    if agreement != contract.WITNESS_CORROBORATED:
+        return False, f"witness majority code {agreement}, not 2"
+    share = candidate.get("witness_contradicted_share")
+    if share is None:
+        return False, "witness contradiction share unavailable"
+    if float(share) >= max_contradicted_share:
+        return False, (
+            f"witness contradicted share {float(share):.0%} is not below "
+            f"{max_contradicted_share:.0%}"
+        )
+    return True, ""
+
+
 def _make_candidate(
     *,
     kind: str,
@@ -611,6 +930,7 @@ def _make_candidate(
     pattern_code: int | None = None,
     country: Mapping | None = None,
     evidence_classes: Mapping[str, int] | None = None,
+    witness_by_variable: Mapping[str, Mapping[str, np.ndarray]] | None = None,
 ) -> dict | None:
     eligible_cells = int(eligible.sum())
     if eligible_cells == 0:
@@ -672,6 +992,19 @@ def _make_candidate(
             "REAL_RUN_REVIEW documents an early-period drop in this GLDAS field."
         )
 
+    score_before_witness = float(score)
+    score, witness_corroborated_share, witness_contradicted_share, witness_factor = (
+        _apply_witness(
+            kind=kind,
+            evidence=evidence,
+            score=score,
+            layers_by_variable=layers_by_variable,
+            witness_by_variable=witness_by_variable,
+            eligible=eligible,
+            weights=weights,
+        )
+    )
+
     candidate = {
         "kind": kind,
         "variable": variable,
@@ -693,8 +1026,12 @@ def _make_candidate(
         "center": center,
         "label": label,
         "score": float(score),
+        "score_before_witness": score_before_witness,
         "score_adjustment": score_adjustment,
         "score_adjustment_reason": score_adjustment_reason,
+        "witness_corroborated_share": witness_corroborated_share,
+        "witness_contradicted_share": witness_contradicted_share,
+        "witness_score_factor": float(witness_factor),
         "significant_share": significant_share,
         "evidence": evidence,
         "candidate_id": (
@@ -716,6 +1053,7 @@ def trend_candidates(
     quality_check_windows: Sequence[str] = (),
     min_cluster_cells: int = DEFAULT_MIN_CLUSTER_CELLS,
     regions: Sequence[Mapping] = (),
+    witness_layers: Mapping[str, np.ndarray] | None = None,
 ) -> list[dict]:
     """Build scored candidates from one variable x window trend grid."""
 
@@ -771,6 +1109,9 @@ def trend_candidates(
                 regions=regions,
                 quality_available=quality is not None,
                 quality_check_windows=quality_check_windows,
+                witness_by_variable=(
+                    {variable: witness_layers} if witness_layers else None
+                ),
             )
             if candidate is not None and candidate["cells"] >= min_cluster_cells:
                 candidates.append(candidate)
@@ -806,6 +1147,7 @@ def pattern_candidates(
     ),
     min_cluster_cells: int = DEFAULT_MIN_CLUSTER_CELLS,
     regions: Sequence[Mapping] = (),
+    witness_by_variable: Mapping[str, Mapping[str, np.ndarray]] | None = None,
 ) -> list[dict]:
     """Build multi-variable candidates from the core pattern classes."""
 
@@ -891,6 +1233,7 @@ def pattern_candidates(
                         layers_by_variable[moisture_variable], eligible
                     ),
                 },
+                witness_by_variable=witness_by_variable,
             )
             if candidate is not None and candidate["cells"] >= min_cluster_cells:
                 candidates.append(candidate)
@@ -908,6 +1251,7 @@ def country_candidates(
     quality_check_windows: Sequence[str] = (),
     min_cells: int = DEFAULT_MIN_CLUSTER_CELLS,
     regions: Sequence[Mapping] = (),
+    witness_by_variable: Mapping[str, Mapping[str, np.ndarray]] | None = None,
 ) -> list[dict]:
     """Aggregate candidates for schema 1.2 country domains.
 
@@ -981,9 +1325,13 @@ def country_candidates(
                 quality_available=quality is not None,
                 quality_check_windows=quality_check_windows,
                 country=country,
+                witness_by_variable=witness_by_variable,
             )
             if candidate is not None:
                 candidate["score"] *= significant_share
+                candidate["score_before_witness"] = (
+                    float(candidate["score_before_witness"]) * significant_share
+                )
                 candidates.append(candidate)
     return candidates
 
@@ -1000,6 +1348,7 @@ def build_caution_candidate(
     breakpoint_year: np.ndarray | None = None,
     min_cells: int = DEFAULT_MIN_CLUSTER_CELLS,
     regions: Sequence[Mapping] = (),
+    witness_layers: Mapping[str, np.ndarray] | None = None,
 ) -> tuple[dict | None, str]:
     """Build the single Vietnam-style caution case without flag exclusion.
 
@@ -1078,6 +1427,9 @@ def build_caution_candidate(
         quality_available=True,
         quality_check_windows=(window,),
         country=country,
+        witness_by_variable=(
+            {variable: witness_layers} if witness_layers else None
+        ),
     )
     if candidate is None:
         return None, "the country domain produced no usable evidence"
@@ -1090,6 +1442,8 @@ def build_caution_candidate(
             break_year = float(np.median(breaks))
     candidate["break_year"] = break_year
     candidate["significant_share"] = float(significant_share)
+    candidate["caution_type"] = "vietnam_temperature"
+    candidate["region_id"] = str(country.get("id") or "")
     candidate["caution_reason"] = (
         "Caution case: the country domain includes every evaluated cell, "
         "including cells with quality_flag >= 1."
@@ -1100,6 +1454,133 @@ def build_caution_candidate(
 # ---------------------------------------------------------------------------
 # Selection and case formatting
 # ---------------------------------------------------------------------------
+
+
+def build_global_caution_candidate(
+    layers: Mapping[str, np.ndarray],
+    variable: str,
+    window: str,
+    mask: np.ndarray,
+    *,
+    quality_flag: np.ndarray | None = None,
+    witness_layers: Mapping[str, np.ndarray] | None = None,
+    regions: Sequence[Mapping] = (),
+    min_cells: int = DEFAULT_MIN_CLUSTER_CELLS,
+    screener_contradicted_fraction: float | None = None,
+) -> tuple[dict | None, str]:
+    """Build the global "the second witness disagrees" caution case.
+
+    The case covers the significant decreasing area of one variable over the
+    global common mask (specific humidity, 2001-2024). It reports the GLDAS
+    decreasing area, the witness increasing area and the witness contradicted
+    share; it is not a ranking finding.
+    """
+
+    classes = _require_contract_shape("trend_class", layers["trend_class"])
+    domain = _require_contract_shape("mask", mask).astype(bool, copy=False)
+    evaluated = domain & np.isin(classes, _EVALUATED_CLASSES)
+    decreasing = domain & (classes == contract.TREND_DECREASE)
+    if int(decreasing.sum()) < min_cells:
+        return None, (
+            f"only {int(decreasing.sum())} significant decreasing cells "
+            f"(minimum {min_cells})"
+        )
+    if witness_layers is None or "trend_class" not in witness_layers:
+        return None, "no witness trend class is available for the disagreement case"
+
+    witness_class = _require_contract_shape(
+        "witness trend_class", witness_layers["trend_class"]
+    )
+    witness_evaluated = domain & np.isin(witness_class, _EVALUATED_CLASSES)
+    weights = latitude_weights()
+    evaluated_rows, _ = np.nonzero(evaluated)
+    decreasing_rows, _ = np.nonzero(decreasing)
+    witness_rows, _ = np.nonzero(witness_evaluated)
+    witness_increasing = domain & (witness_class == contract.TREND_INCREASE)
+    witness_increasing_rows, _ = np.nonzero(witness_increasing)
+    evaluated_area = float(weights[evaluated_rows].sum())
+    witness_area = float(weights[witness_rows].sum())
+    main_decreasing_share = (
+        float(weights[decreasing_rows].sum() / evaluated_area)
+        if evaluated_area > 0
+        else None
+    )
+    witness_increasing_share = (
+        float(weights[witness_increasing_rows].sum() / witness_area)
+        if witness_area > 0
+        else None
+    )
+
+    quality = (
+        _require_contract_shape("quality_flag", quality_flag)
+        if quality_flag is not None
+        else None
+    )
+    flagged = (
+        decreasing & (quality >= 1)
+        if quality is not None
+        else np.zeros_like(decreasing)
+    )
+    candidate = _make_candidate(
+        kind="caution",
+        variable=variable,
+        variables=(variable,),
+        window=window,
+        trend_class=contract.TREND_DECREASE,
+        component=decreasing,
+        eligible=decreasing,
+        flagged=flagged,
+        layers_by_variable={variable: layers},
+        evaluated=evaluated,
+        weights=weights,
+        regions=regions,
+        quality_available=quality is not None,
+        quality_check_windows=(window,),
+        country={"label": "Global land"},
+        witness_by_variable=(
+            {variable: witness_layers} if witness_layers else None
+        ),
+    )
+    if candidate is None:
+        return None, "the global decreasing area produced no usable evidence"
+
+    # The summary's contradicted share is over *all* significant main-trend
+    # area (both directions), matching the P14 Screener definition.
+    significant = domain & np.isin(classes, (-1, 1))
+    significant_rows, significant_cols = np.nonzero(significant)
+    agreement = _resolve_witness_agreement(layers, witness_layers)
+    codes = np.asarray(agreement)[significant_rows, significant_cols]
+    usable = (codes != contract.OUTSIDE_DOMAIN) & (
+        codes != contract.INSUFFICIENT_DATA
+    )
+    if usable.any():
+        cell_weights = weights[significant_rows][usable]
+        global_contradicted = float(
+            cell_weights[codes[usable] == contract.WITNESS_CONTRADICTED].sum()
+            / cell_weights.sum()
+        )
+    else:
+        global_contradicted = None
+    candidate["caution_type"] = "witness_disagreement"
+    candidate["main_decrease_fraction"] = main_decreasing_share
+    candidate["witness_increase_fraction"] = witness_increasing_share
+    candidate["witness_contradicted_share"] = (
+        float(screener_contradicted_fraction)
+        if screener_contradicted_fraction is not None
+        else global_contradicted
+    )
+    candidate["screener_contradicted_fraction"] = (
+        float(screener_contradicted_fraction)
+        if screener_contradicted_fraction is not None
+        else None
+    )
+    candidate["region_id"] = "global"
+    candidate["bbox"] = [-180.0, -60.0, 180.0, 90.0]
+    candidate["caution_reason"] = (
+        "Global caution case: GLDAS shows a significant decreasing area while "
+        "the independent witness largely increases."
+    )
+    return candidate, ""
 
 
 def _candidate_key(candidate: Mapping) -> tuple:
@@ -1164,6 +1645,10 @@ def select_cases(
     preferred_country_labels: Sequence[str] = ("vietnam",),
     min_place_cells: int = DEFAULT_MIN_CLUSTER_CELLS,
     window_priority_bonus: float = DEFAULT_WINDOW_PRIORITY_BONUS,
+    max_pair_contradicted_share: float = DEFAULT_PAIR_MAX_CONTRADICTED_SHARE,
+    countries: Sequence[Mapping] = (),
+    country_grid: np.ndarray | None = None,
+    selection_notes: list[str] | None = None,
 ) -> list[dict]:
     """Select a deterministic, contrasting set of cases from candidates."""
 
@@ -1171,11 +1656,16 @@ def select_cases(
         raise ValueError("max_cases must be at least 1")
     if target_cases > max_cases:
         target_cases = max_cases
+    notes = selection_notes if selection_notes is not None else []
 
     def rank(candidate: Mapping) -> tuple:
         return _rank_key(candidate, window_priority_bonus)
 
-    ordered = sorted(candidates, key=rank)
+    ordered = [
+        candidate
+        for candidate in sorted(candidates, key=rank)
+        if not _finding_mostly_contradicted(candidate)
+    ]
     selected: list[dict] = []
     used: set[tuple] = set()
 
@@ -1192,6 +1682,8 @@ def select_cases(
         return True
 
     # (b) strongest same-variable opposite-direction pair.
+    # P06f: both sides must be corroborated by the witness (majority code 2,
+    # contradicted area < 20%) and must not carry the same place label.
     groups: dict[tuple[str, str], dict[int, Mapping]] = {}
     for candidate in ordered:
         if candidate.get("kind") != "global":
@@ -1221,16 +1713,64 @@ def select_cases(
             pairs.append((strength, variable, window, directions))
     pairs.sort(
         key=lambda item: (
-            -item[0],
             0 if item[1] == precipitation_variable else 1,
+            0 if item[2] == "2001-2024" else 1,
+            -item[0],
             item[1],
             item[2],
         )
     )
-    if pairs:
-        _, _, _, directions = pairs[0]
-        add(directions[contract.TREND_INCREASE], "opposite-pair-increasing")
-        add(directions[contract.TREND_DECREASE], "opposite-pair-decreasing")
+
+    if not pairs:
+        notes.append(
+            "Opposite pair skipped: no same-variable pair with both "
+            "significant directions exists."
+        )
+    else:
+        pair_added = False
+        rejection_notes: list[str] = []
+        for _, variable, window, directions in pairs:
+            increasing = directions[contract.TREND_INCREASE]
+            decreasing = directions[contract.TREND_DECREASE]
+            ok_inc, why_inc = _pair_witness_check(
+                increasing, max_pair_contradicted_share
+            )
+            ok_dec, why_dec = _pair_witness_check(
+                decreasing, max_pair_contradicted_share
+            )
+            if not (ok_inc and ok_dec):
+                rejection_notes.append(
+                    f"{variable}/{window}: increasing side "
+                    f"{why_inc or 'ok'}; decreasing side {why_dec or 'ok'}"
+                )
+                continue
+            inc_place = _place_name(increasing, countries, country_grid)
+            dec_place = _place_name(decreasing, countries, country_grid)
+            if inc_place == dec_place:
+                rejection_notes.append(
+                    f"{variable}/{window}: both sides are labelled "
+                    f"{inc_place!r}"
+                )
+                continue
+            if len(selected) + 2 > max_cases:
+                rejection_notes.append(
+                    f"{variable}/{window}: not enough case slots for both sides"
+                )
+                continue
+            if add(increasing, "opposite-pair-increasing") and add(
+                decreasing, "opposite-pair-decreasing"
+            ):
+                pair_added = True
+                break
+        if not pair_added:
+            detail = "; ".join(rejection_notes[:4])
+            notes.append(
+                "Opposite pair skipped: no pair met both witness code-2 / "
+                f"contradicted < {max_pair_contradicted_share:.0%} and "
+                f"distinct-place rules"
+                + (f" ({detail})" if detail else "")
+                + "."
+            )
 
     # (a) an IMERG precipitation case.
     has_precipitation = any(
@@ -1397,7 +1937,7 @@ def _slope_unit(variable_meta: Mapping) -> str:
 
 def _evidence_json(stats: Mapping, variable_meta: Mapping) -> dict:
     valid = stats.get("valid_observations")
-    return {
+    payload = {
         "variable": stats["variable"],
         "product": str(variable_meta.get("product", "")),
         "doi": str(variable_meta.get("doi", "")),
@@ -1413,11 +1953,33 @@ def _evidence_json(stats: Mapping, variable_meta: Mapping) -> dict:
         # additive field; consumers that only know contract section 9 ignore it.
         "quality_flag_fraction": _round(stats.get("quality_flag_fraction")),
     }
+    witness = _witness_json(stats)
+    if witness is not None:
+        payload["witness"] = witness
+    return payload
+
+
+def _witness_json(stats: Mapping) -> dict | None:
+    """Contract section 13 witness object, or None when no witness was read."""
+
+    witness = stats.get("witness")
+    if not witness:
+        return None
+    return {
+        "product": str(witness.get("product", "")),
+        "variable": str(witness.get("variable", "")),
+        "sen_slope_decade": _round(witness.get("sen_slope_decade")),
+        "slope_unit": str(witness.get("slope_unit", "")),
+        "q_value": _round(witness.get("q_value"), 8),
+        "agreement": int(witness.get("agreement", contract.INSUFFICIENT_DATA)),
+    }
 
 
 def _title(candidate: Mapping, variables: Mapping[str, Mapping], place: str) -> str:
     place_phrase = f"near {place}" if "\N{DEGREE SIGN}" in place else f"across {place}"
     if candidate.get("kind") == "caution":
+        if candidate.get("caution_type") == "witness_disagreement":
+            return "Is the air drying? The second witness says no"
         break_year = candidate.get("break_year")
         year_text = (
             f"{int(round(float(break_year)))}"
@@ -1481,6 +2043,65 @@ def _slope_summary(stats: Mapping, variables: Mapping[str, Mapping]) -> str:
     return f"{verb} by about {magnitude} {unit}"
 
 
+def _caution_witness_ending(candidate: Mapping) -> str:
+    """Section 13 combined reading for the Vietnam caution summary.
+
+    Code 2: the independent dataset shows the same warming, so the trend is
+    more likely real.  Any weaker or opposing code: the sudden shift was not
+    confirmed, so the trend is more likely a data artefact.  With no witness
+    layer the original caution close is kept.
+    """
+
+    evidence = candidate.get("evidence") or []
+    witness = evidence[0].get("witness") if evidence else None
+    if not witness:
+        return "read the trend with caution."
+    label = str(witness.get("label") or "an independent NASA dataset")
+    if int(witness.get("agreement", 0)) == contract.WITNESS_CORROBORATED:
+        return (
+            f"{label} shows the same warming, so the trend is more likely real."
+        )
+    return (
+        f"{label} does not show the same warming, so the trend is more likely "
+        "a data artefact."
+    )
+
+
+def _formula_score(candidate: Mapping) -> float:
+    """Score that matches the written formula, before the witness factor."""
+
+    if candidate.get("score_before_witness") is not None:
+        return float(candidate["score_before_witness"])
+    return float(candidate.get("score", 0.0))
+
+
+def _witness_rule_sentence(candidate: Mapping) -> str:
+    """One sentence explaining the witness ranking rule for ``details``."""
+
+    corroborated = candidate.get("witness_corroborated_share")
+    contradicted = candidate.get("witness_contradicted_share")
+    if corroborated is None and contradicted is None:
+        return (
+            "Witness rule: no witness agreement layer was available, so the "
+            "score was not multiplied by (0.5 + 0.5 x corroborated share) and "
+            "the finding was not rejected for contradiction."
+        )
+    corroborated_text = (
+        "unavailable" if corroborated is None else f"{float(corroborated):.0%}"
+    )
+    contradicted_text = (
+        "unavailable" if contradicted is None else f"{float(contradicted):.0%}"
+    )
+    factor = float(candidate.get("witness_score_factor", 1.0))
+    return (
+        "Witness rule: finding scores are multiplied by (0.5 + 0.5 x "
+        f"corroborated share of {corroborated_text}, factor {factor:.2f}) so "
+        "corroborated clusters win ties, and a finding is never selected when "
+        "its contradicted share (agreement code -2) is above 50% "
+        f"(here {contradicted_text})."
+    )
+
+
 def _summary_sentence(
     candidate: Mapping,
     variables: Mapping[str, Mapping],
@@ -1493,6 +2114,33 @@ def _summary_sentence(
 
     if candidate.get("kind") == "caution":
         stats = evidence[0]
+        if candidate.get("caution_type") == "witness_disagreement":
+            main_share = candidate.get("main_decrease_fraction")
+            witness_share = candidate.get("witness_increase_fraction")
+            contradicted = candidate.get("witness_contradicted_share")
+            witness = evidence[0].get("witness") or {}
+            witness_label = str(
+                witness.get("label") or "the independent NASA dataset"
+            )
+            witness_variable = str(witness.get("variable") or "witness")
+            if (
+                main_share is None
+                or witness_share is None
+                or contradicted is None
+            ):
+                return (
+                    "The second witness disagrees with the GLDAS trend; read "
+                    "the evidence with caution."
+                )
+            return (
+                f"{window_phrase}, GLDAS {_plain_variable_name(stats['variable'], variables)} "
+                f"falls across {float(main_share):.1%} of global land, while "
+                f"{witness_label} {witness_variable} rises across "
+                f"{float(witness_share):.1%}; {float(contradicted):.1%} of "
+                "GLDAS's significant area is contradicted by the witness."
+            )
+
+        stats = evidence[0]
         share = float(candidate.get("quality_flag_share", 0.0))
         break_year = candidate.get("break_year")
         year_text = (
@@ -1501,11 +2149,42 @@ def _summary_sentence(
             else "the documented change period"
         )
         variable_name = _plain_variable_name(stats["variable"], variables)
+        shift = candidate.get("lasting_shift") or {}
+        witness = stats.get("witness") or {}
+        main_slope = stats.get("sen_slope_decade")
+        witness_slope = witness.get("sen_slope_decade")
+        witness_q = witness.get("q_value")
+        witness_label = str(witness.get("label") or "an independent NASA dataset")
+        if (
+            candidate.get("caution_type") == "vietnam_temperature"
+            and shift.get("main") is not None
+            and shift.get("witness") is not None
+            and main_slope is not None
+            and witness_slope is not None
+        ):
+            significance = (
+                "not significant"
+                if witness_q is not None and float(witness_q) >= contract.Q_THRESHOLD
+                else "significant"
+            )
+            return (
+                f"Since 2001, GLDAS shows {place} warming by about "
+                f"{float(main_slope):.2f} \N{DEGREE SIGN}C per decade, but "
+                f"{share:.0%} of the area jumps around {year_text} inside a "
+                "documented GLDAS input change. The independent "
+                f"{witness_label} sees the same year-to-year swings yet only "
+                f"{float(witness_slope):+.2f} \N{DEGREE SIGN}C per decade "
+                f"({significance}) and almost no lasting shift after "
+                f"{year_text} ({float(shift['witness']):+.2f} \N{DEGREE SIGN}C "
+                f"vs {float(shift['main']):+.2f} \N{DEGREE SIGN}C), so much of "
+                "this warming is more likely a data artefact."
+            )
         return (
             f"{window_phrase}, {variable_name} {place_phrase} has "
             f"{_slope_summary(stats, variables)}, but {share:.0%} of the area "
             f"shows a sudden shift around {year_text}, inside the documented "
-            "GLDAS 2008\N{EN DASH}2012 input change; read the trend with caution."
+            "GLDAS 2008\N{EN DASH}2012 input change; "
+            f"{_caution_witness_ending(candidate)}"
         )
 
     if candidate.get("kind") == "pattern":
@@ -1568,19 +2247,52 @@ def _why_selected(candidate: Mapping, variables: Mapping[str, Mapping]) -> str:
         year_text = (
             f"{float(break_year):.1f}" if break_year is not None else "undefined"
         )
-        text = (
-            f"Caution case built from the whole {candidate.get('label')} country "
-            f"domain: {cells} evaluated cells of {variable_label} in {window} "
-            f"(cos-latitude area {area:.2f}), with flagged cells NOT excluded. "
-            f"Median Sen slope {_format_slope(stats, variables)}; median q = "
-            f"{_format_number(stats.get('q_value'))}; "
-            f"{significant_share:.0%} of the evaluated country cells are "
-            f"significant; quality-flag share is {flagged:.0%}; median break "
-            f"year is {year_text}. The documented GLDAS input change is "
-            "2008\N{EN DASH}2012. "
-            f"Score = area x |standardized change| x (1 - flag share) x "
-            f"significant share = {float(candidate.get('score', 0.0)):.3f}."
-        )
+        if candidate.get("caution_type") == "witness_disagreement":
+            main_share = candidate.get("main_decrease_fraction")
+            witness_share = candidate.get("witness_increase_fraction")
+            contradicted = candidate.get("witness_contradicted_share")
+            witness = stats.get("witness") or {}
+            text = (
+                f"Global caution case for {variable_label} in {window}: "
+                f"{cells} significant decreasing GLDAS cells "
+                f"(cos-latitude area {area:.2f}); median Sen slope "
+                f"{_format_slope(stats, variables)}; median q = "
+                f"{_format_number(stats.get('q_value'))}; quality-flag share "
+                f"is {flagged:.0%}. GLDAS decreasing area is "
+                f"{float(main_share or 0.0):.1%} of evaluated land; the "
+                f"independent {witness.get('label', 'witness')} "
+                f"{witness.get('variable', '')} increases over "
+                f"{float(witness_share or 0.0):.1%}; contradicted share is "
+                f"{float(contradicted or 0.0):.1%}. Witness majority code = "
+                f"{int(witness.get('agreement', contract.INSUFFICIENT_DATA))}."
+            )
+        else:
+            text = (
+                f"Caution case built from the whole {candidate.get('label')} country "
+                f"domain: {cells} evaluated cells of {variable_label} in {window} "
+                f"(cos-latitude area {area:.2f}), with flagged cells NOT excluded. "
+                f"Median Sen slope {_format_slope(stats, variables)}; median q = "
+                f"{_format_number(stats.get('q_value'))}; "
+                f"{significant_share:.0%} of the evaluated country cells are "
+                f"significant; quality-flag share is {flagged:.0%}; median break "
+                f"year is {year_text}. The documented GLDAS input change is "
+                "2008\N{EN DASH}2012. "
+                f"Score = area x |standardized change| x (1 - flag share) x "
+                f"significant share = {_formula_score(candidate):.3f}."
+            )
+            shift = candidate.get("lasting_shift") or {}
+            if shift.get("main") is not None and shift.get("witness") is not None:
+                text += (
+                    f" Lasting shift at {year_text}: main "
+                    f"{float(shift['main']):+.2f} \N{DEGREE SIGN}C vs witness "
+                    f"{float(shift['witness']):+.2f} \N{DEGREE SIGN}C"
+                )
+                if shift.get("annual_correlation") is not None:
+                    text += (
+                        f"; annual-series correlation "
+                        f"{float(shift['annual_correlation']):.2f}"
+                    )
+                text += "."
     elif candidate.get("kind") == "country":
         text = (
             f"Selected from the country domain for {candidate.get('label')}: "
@@ -1594,7 +2306,7 @@ def _why_selected(candidate: Mapping, variables: Mapping[str, Mapping]) -> str:
             f"The country domain aggregates every majority-direction significant "
             "cell inside the country polygon, not only one connected cluster. "
             f"Score = area x |standardized change| x (1 - flag share) x "
-            f"significant share = {float(candidate.get('score', 0.0)):.3f}."
+            f"significant share = {_formula_score(candidate):.3f}."
         )
     else:
         text = (
@@ -1605,14 +2317,21 @@ def _why_selected(candidate: Mapping, variables: Mapping[str, Mapping]) -> str:
             f"{_format_number(stats.get('q_value'))}; {significant_share:.0%} of the "
             f"evaluated cells in its bounding box are significant; quality-flag share "
             f"is {flagged:.0%}. Score = area x |standardized change| x (1 - flag share) "
-            f"= {float(candidate.get('score', 0.0)):.3f}."
+            f"= {_formula_score(candidate):.3f}."
         )
     if candidate.get("kind") == "caution":
-        text += (
-            " This is the single caution case: it shows a significant country-wide "
-            "trend whose cells are largely flagged, so the reader should check "
-            "the evidence rather than treat the trend as a clean finding."
-        )
+        if candidate.get("caution_type") == "witness_disagreement":
+            text += (
+                " This is one of two caution cases: the significant GLDAS "
+                "decrease is not corroborated by the independent witness, so "
+                "read the evidence rather than treat the trend as a clean finding."
+            )
+        else:
+            text += (
+                " This is the local caution case: it shows a significant country-wide "
+                "trend whose cells are largely flagged, so the reader should check "
+                "the evidence rather than treat the trend as a clean finding."
+            )
     elif role in {"opposite-pair-increasing", "opposite-pair-decreasing"}:
         text += (
             " It is one half of the strongest same-variable opposite-direction "
@@ -1638,6 +2357,8 @@ def _why_selected(candidate: Mapping, variables: Mapping[str, Mapping]) -> str:
             f"x{float(candidate['score_adjustment']):g}: "
             f"{candidate.get('score_adjustment_reason', '')}"
         )
+    if candidate.get("kind") != "caution":
+        text += " " + _witness_rule_sentence(candidate)
     return text
 
 
@@ -1658,18 +2379,31 @@ def _format_number(value: float | None) -> str:
 
 def _limitations(candidate: Mapping, variables: Mapping[str, Mapping]) -> list[str]:
     caveats: list[str] = []
+    is_global_caution = (
+        candidate.get("kind") == "caution"
+        and candidate.get("caution_type") == "witness_disagreement"
+    )
     for stats in candidate["evidence"]:
         for caveat in variables.get(stats["variable"], {}).get("caveats", []) or []:
             text = str(caveat)
+            if is_global_caution and text == (
+                "Meteorological forcing field used to drive the GLDAS model."
+            ):
+                text = (
+                    "Specific humidity is a GLDAS forcing input, so the documented "
+                    "2008\N{EN DASH}2012 input change acts on it directly."
+                )
             if text not in caveats:
                 caveats.append(text)
 
-    if candidate.get("kind") in {"country", "caution"}:
+    if candidate.get("kind") == "country" or (
+        candidate.get("kind") == "caution" and not is_global_caution
+    ):
         caveats.append(
             "A country domain follows a political boundary, not a climate region; "
             "the numbers aggregate cells inside that boundary."
         )
-    else:
+    elif not is_global_caution:
         caveats.append(
             "A cluster is a descriptive grouping of cells with the same significant "
             "trend class, not a formal region boundary."
@@ -1703,6 +2437,10 @@ def _limitations(candidate: Mapping, variables: Mapping[str, Mapping]) -> list[s
         and "2001-2024" in quality_check_windows
     ):
         caveats.append(EARLY_WINDOW_QUALITY_LIMITATION)
+    for stats in candidate["evidence"]:
+        note = str((stats.get("witness") or {}).get("limitation") or "")
+        if note and note not in caveats:
+            caveats.append(note)
     return caveats
 
 
@@ -1726,13 +2464,30 @@ def _case_from_candidate(
     place = _place_name(candidate, countries, country_grid)
     summary = _summary_sentence(candidate, variables, place)
     details = _why_selected(candidate, variables)
+    bbox = [float(value) for value in candidate["bbox"]]
+    region_id = candidate.get("region_id")
+    if bbox[0] > bbox[2] and region_id != "global":
+        cols = candidate.get("cols")
+        if cols is not None and len(cols):
+            longitudes = contract.LON_WEST_CENTER + np.asarray(cols) * contract.RESOLUTION_DEG
+            crosses = bool((longitudes > 150.0).any() and (longitudes < -150.0).any())
+            if not crosses:
+                bbox = [
+                    float(np.min(longitudes) - 0.5),
+                    bbox[1],
+                    float(np.max(longitudes) + 0.5),
+                    bbox[3],
+                ]
+    region = {
+        "bbox": bbox,
+        "label": place,
+    }
+    if isinstance(region_id, str) and region_id:
+        region["id"] = region_id
     case = {
         "id": f"case-{index:02d}",
         "title": _title(candidate, variables, place),
-        "region": {
-            "bbox": [float(value) for value in candidate["bbox"]],
-            "label": place,
-        },
+        "region": region,
         "window": str(candidate["window"]),
         "kind": "caution" if candidate.get("kind") == "caution" else "finding",
         "summary": summary,
@@ -1841,5 +2596,7 @@ __all__ = [
     "place_label",
     "select_cases",
     "trend_candidates",
+    "witness_agreement_grid",
+    "witness_metadata",
     "write_cases",
 ]

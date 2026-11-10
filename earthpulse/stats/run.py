@@ -44,7 +44,7 @@ _FLOAT_LAYER_META = {
     "sen_slope": ("unit year-1 (variable display unit)", "Sen's slope of the anomaly series per year"),
     "sen_slope_decade": ("unit decade-1 (variable display unit)", "Sen's slope per decade (10 x sen_slope)"),
     "std_change_decade": ("1", "Sen slope per decade divided by the std of the residuals from the Sen line"),
-    "p_value": ("1", "Hamed-Rao modified Mann-Kendall test p-value (autocorrelation-aware)"),
+    "p_value": ("1", "Hamed-Rao modified Mann-Kendall p-value (autocorrelation-aware; falls back to the unmodified p when the modified p is non-finite)"),
     "p_value_original": ("1", "Unmodified Mann-Kendall test p-value (comparison only)"),
     "q_value": ("1", "Benjamini-Hochberg FDR adjusted p-value over the evaluated cells"),
     "mk_tau": ("1", "Kendall tau of the Hamed-Rao modified Mann-Kendall test"),
@@ -221,7 +221,9 @@ def run_trends(
                 "Sen's slope (median pairwise slope at real time positions); "
                 "Hamed-Rao modified Mann-Kendall (p_value) and unmodified "
                 "Mann-Kendall (p_value_original) on valid months in time order; "
-                "BH-FDR (q_value) over evaluated cells; constants from "
+                "a non-finite Hamed-Rao p for an evaluated cell falls back to "
+                "the unmodified Mann-Kendall p; BH-FDR (q_value) over evaluated "
+                "cells, and trend_class uses q < 0.05 strictly; constants from "
                 "earthpulse/contract.py"
             ),
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

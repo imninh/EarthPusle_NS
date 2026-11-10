@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "node scripts/deploy.mjs",
+    "preview:demo": "node scripts/preview-demo.mjs",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "maplibre-gl": "^6.17.0",

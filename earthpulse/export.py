@@ -31,6 +31,13 @@ from earthpulse.patterns import pattern_class
 from earthpulse.quality import annual_means, quality_grid
 from earthpulse.regions import build_country_grid, country_cells_in_mask
 from earthpulse.screener import domain_mask, screener_table
+from earthpulse.witness_agreement import (
+    WITNESS_AGREEMENT_CODES,
+    index_products,
+    read_trend_layers,
+    witness_layers,
+    witness_screener_fields,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = PROJECT_ROOT / "config" / "variables.yaml"
@@ -40,10 +47,13 @@ INTERIM_DIR = PROJECT_ROOT / "data" / "interim" / "harmonized_monthly"
 ANOMALY_DIR = PROJECT_ROOT / "data" / "processed" / "anomalies"
 TRENDS_DIR = PROJECT_ROOT / "data" / "processed" / "trends"
 CORRELATIONS_DIR = PROJECT_ROOT / "data" / "processed" / "correlations"
+WITNESS_DIR = PROJECT_ROOT / "data" / "processed" / "witness"
+WITNESS_TRENDS_DIR = WITNESS_DIR / "trends"
+WITNESS_ANOMALY_DIR = WITNESS_DIR / "anomalies"
 EXPORT_DIR = PROJECT_ROOT / "data" / "export" / "web_data"
 WEB_DATA_DIR = PROJECT_ROOT / "web" / "public" / "data"
 
-# Shared constant (architect bumped contract.py/contract.ts to 1.2 after P08).
+# Shared constant (P14 bumps contract.py/contract.ts to 1.3 for the second witness).
 EXPORT_SCHEMA_VERSION = contract.SCHEMA_VERSION
 
 FLOAT_DTYPE = np.dtype("<f4")
@@ -94,6 +104,8 @@ REGIONS_FILE_KEYS = {"regions"}
 SCREENER_ROW_OPTIONAL_KEYS = {
     "step_flag_area_fraction",
     "sig_trend_flagged_fraction",
+    "witness_corroborated_fraction",
+    "witness_contradicted_fraction",
 }
 REGIONS_FILE_OPTIONAL_KEYS = {"countries", "country_grid", "synthetic"}
 
@@ -147,7 +159,7 @@ SCREENER_ROW_KEYS = {
     "regional_contrast",
     "n_cells_evaluated",
 }
-INDEX_OPTIONAL_KEYS = {"quality"}
+INDEX_OPTIONAL_KEYS = {"quality", "witness"}
 REGION_SERIES_KEYS = {
     "region",
     "variable",
@@ -157,6 +169,14 @@ REGION_SERIES_KEYS = {
     "values",
     "anomalies",
     "valid_cell_fraction",
+}
+REGION_SERIES_OPTIONAL_KEYS = {"witness_anomalies", "witness_unit"}
+WITNESS_PRODUCT_KEYS = {
+    "product",
+    "version",
+    "source_variable",
+    "doi",
+    "label",
 }
 CASE_FILE_KEYS = {"synthetic", "selection_method", "cases"}
 
@@ -455,7 +475,12 @@ def export_grids(
                         values,
                         FLOAT_DTYPE,
                     )
-                    if layer in ("std_change_decade", "sen_slope_decade"):
+                    if layer in (
+                        "std_change_decade",
+                        "sen_slope",
+                        "sen_slope_decade",
+                        "q_value",
+                    ):
                         kept[layer] = values
                 classes = _load_grid(ds, "trend_class", label, dtype=np.int8)
                 _check_class_codes(classes, TREND_CLASS_CODES, f"{label}/trend_class")
@@ -526,6 +551,55 @@ def export_quality(
             )
             layers["quality_flag"] = result["quality_flag"]
             layers["breakpoint_year"] = result["breakpoint_year"]
+
+
+def export_witness(
+    cache: dict[tuple[str, str], dict[str, np.ndarray]],
+    witness_trends_dir: Path,
+    out_dir: Path,
+    variables: Sequence[dict],
+    window_ids: Sequence[str],
+    mask: np.ndarray,
+) -> dict:
+    """Write schema-1.3 witness agreement layers and return index.witness."""
+    for variable in variables:
+        variable_id = variable["id"]
+        for window_id in window_ids:
+            path = witness_trends_dir / variable_id / f"{window_id}.nc"
+            if not path.is_file():
+                raise FileNotFoundError(f"P13 witness trend file missing: {path}")
+            witness = read_trend_layers(path)
+            layers = witness_layers(
+                cache[(variable_id, window_id)],
+                witness,
+                mask,
+            )
+            _write_binary(
+                out_dir
+                / "grids"
+                / variable_id
+                / window_id
+                / "witness_agreement.i8",
+                layers["witness_agreement"],
+                CLASS_DTYPE,
+            )
+            _write_binary(
+                out_dir
+                / "grids"
+                / variable_id
+                / window_id
+                / "witness_std_change.f32",
+                layers["witness_std_change"],
+                FLOAT_DTYPE,
+            )
+            cache[(variable_id, window_id)].update(layers)
+    return {
+        "method": (
+            "same Sen + Hamed–Rao MK + BH-FDR test on an independent NASA product"
+        ),
+        "layers": list(contract.WITNESS_LAYERS),
+        "products": index_products([variable["id"] for variable in variables]),
+    }
 
 
 def export_countries(
@@ -739,6 +813,16 @@ def export_screener(
                 else:
                     row["step_flag_area_fraction"] = None
                     row["sig_trend_flagged_fraction"] = None
+                agreement = layers.get("witness_agreement")
+                if agreement is not None:
+                    row.update(
+                        witness_screener_fields(
+                            layers["trend_class"], agreement, region_mask
+                        )
+                    )
+                else:
+                    row["witness_corroborated_fraction"] = None
+                    row["witness_contradicted_fraction"] = None
             _write_json(
                 out_dir / "screener" / window_id / f"{domain_id}.json",
                 {
@@ -781,6 +865,7 @@ def export_region_series(
     months: Sequence[str],
     countries: Sequence[dict] = (),
     country_grid: np.ndarray | None = None,
+    witness_anomaly_dir: Path | None = None,
 ) -> None:
     region_masks = {
         region["id"]: domain_mask(tuple(region["bbox"]), mask)
@@ -818,6 +903,26 @@ def export_region_series(
                 "units"
             )
 
+        witness_anomalies: np.ndarray | None = None
+        witness_unit: str | None = None
+        if witness_anomaly_dir is not None:
+            witness_path = witness_anomaly_dir / f"{variable_id}.nc"
+            if not witness_path.is_file():
+                raise FileNotFoundError(
+                    f"P13 witness anomaly cube missing: {witness_path}"
+                )
+            with xr.open_dataset(witness_path, engine="netcdf4") as ds:
+                witness_anomalies = _load_monthly(
+                    ds, "anomaly", f"{variable_id} witness anomalies", months
+                )
+                witness_unit = ds.attrs.get("units") or ds["anomaly"].attrs.get(
+                    "units"
+                )
+            if not witness_unit:
+                raise ValueError(
+                    f"{variable_id} witness anomalies: missing a units attribute"
+                )
+
         variable = next(
             candidate for candidate in variables
             if candidate["id"] == variable_id
@@ -834,22 +939,29 @@ def export_region_series(
             region_mask = region_masks[region["id"]]
             mean_values, fractions = _weighted_region_series(values, region_mask)
             mean_anomalies, _ = _weighted_region_series(anomalies, region_mask)
+            entry = {
+                "region": region["id"],
+                "variable": variable_id,
+                "synthetic": False,
+                "unit": expected_unit,
+                "months": list(months),
+                "values": _json_values(mean_values),
+                "anomalies": _json_values(mean_anomalies),
+                "valid_cell_fraction": _json_values(fractions),
+            }
+            if witness_anomalies is not None:
+                mean_witness, _ = _weighted_region_series(
+                    witness_anomalies, region_mask
+                )
+                entry["witness_anomalies"] = _json_values(mean_witness)
+                entry["witness_unit"] = witness_unit
             _write_json(
                 out_dir
                 / "series"
                 / "regions"
                 / region["id"]
                 / f"{variable_id}.json",
-                {
-                    "region": region["id"],
-                    "variable": variable_id,
-                    "synthetic": False,
-                    "unit": expected_unit,
-                    "months": list(months),
-                    "values": _json_values(mean_values),
-                    "anomalies": _json_values(mean_anomalies),
-                    "valid_cell_fraction": _json_values(fractions),
-                },
+                entry,
             )
 
 
@@ -948,6 +1060,7 @@ def build_index(
     tile_ids: Sequence[str],
     generated_at: str | None = None,
     quality_info: dict | None = None,
+    witness_info: dict | None = None,
 ) -> dict:
     products = registry.get("products", {})
     variables = verified_variables(registry, variable_ids)
@@ -989,6 +1102,8 @@ def build_index(
     }
     if quality_info is not None:
         index["quality"] = quality_info
+    if witness_info is not None:
+        index["witness"] = witness_info
     return index
 
 
@@ -1039,6 +1154,8 @@ def export_all(
     anomaly_dir: str | Path | None = None,
     trends_dir: str | Path | None = None,
     correlations_dir: str | Path | None = None,
+    witness_trends_dir: str | Path | None = None,
+    witness_anomaly_dir: str | Path | None = None,
     mask_path: str | Path | None = None,
     variable_ids: Sequence[str] | None = None,
     window_ids: Sequence[str] | None = None,
@@ -1055,6 +1172,16 @@ def export_all(
     trends = Path(trends_dir) if trends_dir is not None else TRENDS_DIR
     correlations = (
         Path(correlations_dir) if correlations_dir is not None else CORRELATIONS_DIR
+    )
+    witness_trends = (
+        Path(witness_trends_dir)
+        if witness_trends_dir is not None
+        else WITNESS_TRENDS_DIR
+    )
+    witness_anomalies = (
+        Path(witness_anomaly_dir)
+        if witness_anomaly_dir is not None
+        else WITNESS_ANOMALY_DIR
     )
 
     registry = load_registry(registry_path)
@@ -1115,6 +1242,9 @@ def export_all(
     countries, country_grid = export_countries(countries_path, output, mask)
 
     cache = export_grids(trends, output, variable_ids, windows, mask)
+    witness_info = export_witness(
+        cache, witness_trends, output, variables, windows, mask
+    )
     export_quality(cache, anomalies, output, variables, windows, mask)
     export_patterns(cache, output, windows, mask)
     export_correlations(correlations, output, pair_ids, windows, mask)
@@ -1139,6 +1269,7 @@ def export_all(
         months,
         countries=countries,
         country_grid=country_grid,
+        witness_anomaly_dir=witness_anomalies,
     )
     export_climatology(anomalies, output, variable_ids, mask)
     tile_ids = export_tiles(
@@ -1166,6 +1297,7 @@ def export_all(
             tile_ids,
             generated_at=generated_at,
             quality_info=quality_info,
+            witness_info=witness_info,
         ),
     )
     _write_json(
@@ -1441,6 +1573,62 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                     "index.json: quality.known_forcing_changes must be an object"
                 )
 
+    witness_obj = index.get("witness")
+    witness_present = witness_obj is not None
+    if witness_present:
+        if _check_keys(
+            witness_obj,
+            {"method", "layers", "products"},
+            "index.json witness",
+            errors,
+        ):
+            if witness_obj["layers"] != list(contract.WITNESS_LAYERS):
+                errors.append(
+                    "index.json: witness.layers do not match the contract"
+                )
+            method = witness_obj["method"]
+            if not isinstance(method, str) or "Sen" not in method:
+                errors.append(
+                    "index.json: witness.method must describe the trend test"
+                )
+            products = witness_obj["products"]
+            if not isinstance(products, dict):
+                errors.append(
+                    "index.json: witness.products must be an object"
+                )
+            else:
+                missing = sorted(set(variable_ids) - set(products))
+                if missing:
+                    errors.append(
+                        f"index.json: witness.products missing variables {missing}"
+                    )
+                unknown = sorted(set(products) - set(variable_ids))
+                if unknown:
+                    errors.append(
+                        f"index.json: witness.products has unknown variables {unknown}"
+                    )
+                for variable_id, entry in products.items():
+                    if not _check_keys(
+                        entry,
+                        WITNESS_PRODUCT_KEYS,
+                        f"index.json witness product {variable_id}",
+                        errors,
+                    ):
+                        continue
+                    expected = contract.WITNESSES.get(variable_id)
+                    if expected is None:
+                        continue
+                    product, version, source_variable = expected
+                    if (
+                        entry["product"] != product
+                        or entry["version"] != version
+                        or entry["source_variable"] != source_variable
+                    ):
+                        errors.append(
+                            f"index.json witness product {variable_id!r} "
+                            "does not match contract.WITNESSES"
+                        )
+
     correlation_pairs = index.get("correlation_pairs", [])
     if not isinstance(correlation_pairs, list) or not all(
         isinstance(pair, str) for pair in correlation_pairs
@@ -1606,6 +1794,48 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                         if bad:
                             errors.append(f"{flag_rel}: illegal quality codes {bad}")
 
+    if witness_present:
+        for variable_id in variable_ids:
+            for window_id in window_ids:
+                agreement_rel = (
+                    f"grids/{variable_id}/{window_id}/witness_agreement.i8"
+                )
+                agreement_path = _check_file(
+                    root, agreement_rel, grid_class_bytes, errors
+                )
+                std_rel = (
+                    f"grids/{variable_id}/{window_id}/witness_std_change.f32"
+                )
+                std_path = _check_file(root, std_rel, grid_float_bytes, errors)
+                if agreement_path is not None:
+                    agreement = _read_class(
+                        agreement_path, GRID_VALUE_COUNT, errors
+                    )
+                    if agreement is not None:
+                        bad = sorted(
+                            set(int(code) for code in np.unique(agreement))
+                            - WITNESS_AGREEMENT_CODES
+                        )
+                        if bad:
+                            errors.append(
+                                f"{agreement_rel}: illegal witness codes {bad}"
+                            )
+                        if std_path is not None:
+                            std = _read_float(std_path, errors)
+                            if std is not None:
+                                invalid = np.isin(
+                                    agreement,
+                                    (
+                                        contract.INSUFFICIENT_DATA,
+                                        contract.OUTSIDE_DOMAIN,
+                                    ),
+                                )
+                                if np.any(~np.isnan(std[invalid])):
+                                    errors.append(
+                                        f"{std_rel}: NaN required where "
+                                        "witness_agreement is -9 or -99"
+                                    )
+
     for window_id in window_ids:
         pattern_path = _check_file(
             root,
@@ -1673,6 +1903,21 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                         errors.append(
                             f"{relative}: sig_trend_flagged_fraction must be numeric or null"
                         )
+                for field in (
+                    "witness_corroborated_fraction",
+                    "witness_contradicted_fraction",
+                ):
+                    if witness_present and field not in row:
+                        errors.append(f"{relative}: missing {field}")
+                        continue
+                    if field in row:
+                        value = row[field]
+                        if value is not None and not isinstance(
+                            value, (int, float)
+                        ):
+                            errors.append(
+                                f"{relative}: {field} must be numeric or null"
+                            )
             if len(seen) != len(set(seen)):
                 errors.append(f"{relative}: duplicate variable rows")
             if set(seen) != set(variable_ids):
@@ -1690,7 +1935,13 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                 errors.append(f"missing file: {relative}")
                 continue
             data = _read_json(path, errors)
-            if not _check_keys(data, REGION_SERIES_KEYS, relative, errors):
+            if not _check_keys(
+                data,
+                REGION_SERIES_KEYS,
+                relative,
+                errors,
+                optional=REGION_SERIES_OPTIONAL_KEYS,
+            ):
                 continue
             if data["region"] != region_id or data["variable"] != variable_id:
                 errors.append(f"{relative}: region/variable do not match the path")
@@ -1704,6 +1955,25 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                         f"{relative}: {field} has {len(data[field])} entries, "
                         f"expected {len(expected_months)}"
                     )
+            if witness_present and "witness_anomalies" not in data:
+                errors.append(f"{relative}: missing witness_anomalies")
+            if "witness_anomalies" in data:
+                if not isinstance(data["witness_anomalies"], list):
+                    errors.append(
+                        f"{relative}: witness_anomalies must be a list"
+                    )
+                elif len(data["witness_anomalies"]) != len(expected_months):
+                    errors.append(
+                        f"{relative}: witness_anomalies has "
+                        f"{len(data['witness_anomalies'])} entries, "
+                        f"expected {len(expected_months)}"
+                    )
+            if witness_present and "witness_unit" not in data:
+                errors.append(f"{relative}: missing witness_unit")
+            if "witness_unit" in data and not isinstance(
+                data["witness_unit"], str
+            ):
+                errors.append(f"{relative}: witness_unit must be a string")
 
     # Climatology is a schema 1.1 file: one [12, 180, 360] layer per variable.
     climatology_bytes = CLIMATOLOGY_VALUE_COUNT * 4

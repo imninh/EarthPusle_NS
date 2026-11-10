@@ -36,6 +36,25 @@ max_cases: 6
 #   using the whole country domain and including flagged cells. It is only
 #   built when that trend is significantly warming; otherwise the normal
 #   Southeast Asia rule is used.
+# P06e:
+# - When a witness agreement layer exists, finding scores are multiplied by
+#   (0.5 + 0.5 x corroborated share) so corroborated clusters win ties.
+# - A finding is never selected when more than half of its cells are
+#   contradicted (agreement code -2).
+# - The Vietnam air-temperature caution summary adds the witness verdict
+#   from the section 13 combined reading. Real cases are rebuilt only after
+#   P14 publishes the witness grids.
+# P06f (WAVE3_REVIEW round 1):
+# - The opposite-direction pair requires witness majority code 2 and a
+#   contradicted area share below 20% on both sides. Pair preference is
+#   precipitation, then 2001-2024, then other variables; the two sides must
+#   have different place labels. If no pair qualifies, skip it and print the
+#   reason.
+# - The Vietnam caution summary reports both slopes, the flagged area share,
+#   the break year and the lasting shift (mean after the break minus mean
+#   before it) for GLDAS and MERRA-2; the lasting shift is also in details.
+# - A second global caution case for specific humidity 2001-2024 reports the
+#   GLDAS decreasing area, MERRA-2 increasing area and contradicted share.
 
 # Wording-only overrides, for example:
 # overrides:

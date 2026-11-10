@@ -123,6 +123,73 @@ def _write_trend_file(path: Path, variable_id: str, mask: np.ndarray) -> None:
     ds.close()
 
 
+def _write_witness_trend_file(
+    path: Path, variable_id: str, mask: np.ndarray
+) -> None:
+    """Synthetic P13 witness trend file for the export fixture."""
+    shape = (contract.N_ROWS, contract.N_COLS)
+    outside = ~mask
+    base = {
+        "sen_slope": np.full(shape, 0.2, dtype=float),
+        "sen_slope_decade": np.full(shape, 2.0, dtype=float),
+        "std_change_decade": np.full(shape, 0.7, dtype=float),
+        "p_value": np.full(shape, 0.5, dtype=float),
+        "p_value_original": np.full(shape, 0.5, dtype=float),
+        "q_value": np.full(shape, 0.5, dtype=float),
+        "mk_tau": np.full(shape, 0.1, dtype=float),
+        "n_valid": np.full(shape, float(contract.N_MONTHS), dtype=float),
+        "coverage": np.full(shape, 1.0, dtype=float),
+    }
+    classes = np.zeros(shape, dtype=np.int8)
+    for name in base:
+        base[name][outside] = np.nan
+        base[name][INSUFFICIENT] = np.nan
+    classes[outside] = contract.OUTSIDE_DOMAIN
+    classes[INSUFFICIENT] = contract.INSUFFICIENT_DATA
+
+    # Temperature witness agrees with the main warming marker (code 2).
+    # Moisture witness warms while the main moisture marker dries (code -2).
+    base["sen_slope"][MARKER] = 1.0
+    base["sen_slope_decade"][MARKER] = 10.0
+    base["q_value"][MARKER] = 0.001
+    classes[MARKER] = contract.TREND_INCREASE
+
+    ds = _dataset_grid()
+    for name, values in base.items():
+        ds[name] = xr.DataArray(
+            values.astype(np.float32),
+            dims=("lat", "lon"),
+            attrs={"units": "1", "description": f"synthetic witness {name}"},
+        )
+    ds["trend_class"] = xr.DataArray(
+        classes,
+        dims=("lat", "lon"),
+        attrs={"description": "synthetic witness trend class"},
+    )
+    ds.attrs.update(
+        {
+            "schema_version": contract.SCHEMA_VERSION,
+            "variable_id": variable_id,
+            "window_id": WINDOW,
+            "synthetic": 1,
+        }
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ds.to_netcdf(
+        path,
+        engine="netcdf4",
+        encoding={
+            name: {
+                "dtype": "int8" if name == "trend_class" else "float32",
+                "zlib": True,
+                "complevel": 1,
+            }
+            for name in ds.data_vars
+        },
+    )
+    ds.close()
+
+
 def _monthly_values(
     mask: np.ndarray, marker_value: float, offset: float
 ) -> np.ndarray:
@@ -219,6 +286,8 @@ def _build_fixture(root: Path) -> dict:
     anomalies = root / "anomalies"
     trends = root / "trends"
     correlations = root / "correlations"
+    witness_trends = root / "witness" / "trends"
+    witness_anomalies = root / "witness" / "anomalies"
     regions_path = root / "regions.yaml"
 
     mask_ds = _dataset_grid()
@@ -235,9 +304,10 @@ def _build_fixture(root: Path) -> dict:
 
     values_by_variable: dict[str, np.ndarray] = {}
     anomalies_by_variable: dict[str, np.ndarray] = {}
-    for variable_id, marker, unit in (
-        (TEMPERATURE, 5.0, "degC"),
-        (MOISTURE, 7.0, "kg m-2"),
+    witness_by_variable: dict[str, np.ndarray] = {}
+    for variable_id, marker, unit, witness_unit in (
+        (TEMPERATURE, 5.0, "degC", "K"),
+        (MOISTURE, 7.0, "kg m-2", "wetness fraction"),
     ):
         values = _monthly_values(mask, marker, 0.0)
         anomaly_values = values - 4.0
@@ -260,6 +330,19 @@ def _build_fixture(root: Path) -> dict:
             include_climatology=True,
         )
         _write_trend_file(trends / variable_id / f"{WINDOW}.nc", variable_id, mask)
+        _write_witness_trend_file(
+            witness_trends / variable_id / f"{WINDOW}.nc", variable_id, mask
+        )
+        witness_values = anomaly_values * 0.5 + 0.25
+        witness_by_variable[variable_id] = witness_values
+        _write_monthly_cube(
+            witness_anomalies / f"{variable_id}.nc",
+            "anomaly",
+            witness_values,
+            mask,
+            witness_unit,
+            include_climatology=False,
+        )
 
     _write_correlation_file(correlations / PAIR / f"{WINDOW}.nc", mask)
 
@@ -308,10 +391,13 @@ def _build_fixture(root: Path) -> dict:
         "anomalies": anomalies,
         "trends": trends,
         "correlations": correlations,
+        "witness_trends": witness_trends,
+        "witness_anomalies": witness_anomalies,
         "regions_path": regions_path,
         "countries_path": countries_path,
         "values": values_by_variable,
         "anomalies_values": anomalies_by_variable,
+        "witness_values": witness_by_variable,
         "region_bbox": region_bbox,
     }
 
@@ -327,6 +413,8 @@ def exported(tmp_path_factory: pytest.TempPathFactory) -> SimpleNamespace:
         anomaly_dir=info["anomalies"],
         trends_dir=info["trends"],
         correlations_dir=info["correlations"],
+        witness_trends_dir=info["witness_trends"],
+        witness_anomaly_dir=info["witness_anomalies"],
         regions_path=info["regions_path"],
         country_geojson_path=info["countries_path"],
         variable_ids=[TEMPERATURE, MOISTURE],
@@ -348,7 +436,7 @@ def test_index_follows_contract(exported: SimpleNamespace) -> None:
 
     assert index["synthetic"] is False
     assert index["schema_version"] == EXPORT_SCHEMA_VERSION
-    assert index["schema_version"] == "1.2"
+    assert index["schema_version"] == "1.3"
     assert index["generated_at"].endswith("Z")
     assert index["months"] == month_labels()
     assert index["baseline"] == list(contract.BASELINE)
@@ -383,6 +471,16 @@ def test_index_follows_contract(exported: SimpleNamespace) -> None:
     assert index["quality"]["layers"] == list(contract.QUALITY_LAYERS)
     assert "Pettitt" in index["quality"]["method"]
     assert index["quality"]["known_forcing_changes"]["GLDAS_NOAH10_M"] == [2008, 2012]
+    assert index["witness"]["layers"] == list(contract.WITNESS_LAYERS)
+    assert "Sen" in index["witness"]["method"]
+    assert index["witness"]["products"][TEMPERATURE] == {
+        "product": "M2TMNXSLV",
+        "version": "5.12.4",
+        "source_variable": "TS",
+        "doi": "10.5067/AP1B0BA5PD2K",
+        "label": "MERRA-2 reanalysis",
+    }
+    assert index["witness"]["products"][MOISTURE]["product"] == "M2TMNXLND"
 
 
 def test_grid_roundtrip_marker_at_contract_row_col(
@@ -448,6 +546,31 @@ def test_quality_layers_are_exported(exported: SimpleNamespace) -> None:
     assert np.isnan(breakpoint[INSUFFICIENT])
 
 
+def test_witness_layers_are_exported(exported: SimpleNamespace) -> None:
+    folder = exported.out / "grids" / TEMPERATURE / WINDOW
+    agreement_path = folder / "witness_agreement.i8"
+    std_path = folder / "witness_std_change.f32"
+    assert agreement_path.stat().st_size == contract.N_ROWS * contract.N_COLS
+    assert std_path.stat().st_size == contract.N_ROWS * contract.N_COLS * 4
+
+    agreement = np.fromfile(agreement_path, dtype=np.int8).reshape(
+        contract.N_ROWS, contract.N_COLS
+    )
+    std = _read_grid(std_path)
+    assert agreement[MARKER] == contract.WITNESS_CORROBORATED
+    assert std[MARKER] == pytest.approx(0.7)
+    assert agreement[INSUFFICIENT] == contract.INSUFFICIENT_DATA
+    assert np.isnan(std[INSUFFICIENT])
+    assert agreement[0, 0] == contract.OUTSIDE_DOMAIN
+    assert np.isnan(std[0, 0])
+
+    moisture = np.fromfile(
+        exported.out / "grids" / MOISTURE / WINDOW / "witness_agreement.i8",
+        dtype=np.int8,
+    ).reshape(contract.N_ROWS, contract.N_COLS)
+    assert moisture[MARKER] == contract.WITNESS_CONTRADICTED
+
+
 def test_country_domains_are_exported(exported: SimpleNamespace) -> None:
     regions = _read_json(exported.out / "regions.json")
     assert regions["regions"][0]["kind"] == "box"
@@ -499,11 +622,14 @@ def test_region_series_matches_hand_computed_weighted_mean(
         "values",
         "anomalies",
         "valid_cell_fraction",
+        "witness_anomalies",
+        "witness_unit",
     }
     assert series["synthetic"] is False
     assert series["unit"] == "degC"
     assert series["months"] == month_labels()
     assert len(series["values"]) == contract.N_MONTHS
+    assert len(series["witness_anomalies"]) == contract.N_MONTHS
 
     west, south, east, north = exported.region_bbox
     region_mask = (
@@ -525,6 +651,14 @@ def test_region_series_matches_hand_computed_weighted_mean(
         assert series["anomalies"][month] == pytest.approx(
             round(expected_anomaly, 4)
         )
+        witness = exported.witness_values[TEMPERATURE][month]
+        expected_witness = float(
+            np.sum(witness[region_mask] * weights[region_mask]) / weights.sum()
+        )
+        assert series["witness_anomalies"][month] == pytest.approx(
+            round(expected_witness, 4)
+        )
+        assert series["witness_unit"] == "K"
         assert series["valid_cell_fraction"][month] == pytest.approx(1.0)
 
     empty = _read_json(
@@ -532,6 +666,7 @@ def test_region_series_matches_hand_computed_weighted_mean(
     )
     assert set(empty["values"]) == {None}
     assert set(empty["anomalies"]) == {None}
+    assert set(empty["witness_anomalies"]) == {None}
     assert set(empty["valid_cell_fraction"]) == {None}
 
 
@@ -593,13 +728,23 @@ def test_screener_covers_every_variable_and_domain(
                 "n_cells_evaluated",
                 "step_flag_area_fraction",
                 "sig_trend_flagged_fraction",
+                "witness_corroborated_fraction",
+                "witness_contradicted_fraction",
             }
             if domain_id == "empty_ocean":
                 assert row["step_flag_area_fraction"] is None
                 assert row["sig_trend_flagged_fraction"] is None
+                assert row["witness_corroborated_fraction"] is None
+                assert row["witness_contradicted_fraction"] is None
             else:
                 assert row["step_flag_area_fraction"] == 0.0
                 assert row["sig_trend_flagged_fraction"] == 0.0
+                if row["variable"] == TEMPERATURE:
+                    assert row["witness_corroborated_fraction"] == 1.0
+                    assert row["witness_contradicted_fraction"] == 0.0
+                else:
+                    assert row["witness_corroborated_fraction"] == 0.0
+                    assert row["witness_contradicted_fraction"] == 1.0
 
     empty_rows = _read_json(
         exported.out / "screener" / WINDOW / "empty_ocean.json"
@@ -611,7 +756,7 @@ def test_screener_covers_every_variable_and_domain(
 def test_validator_passes_on_generated_export(exported: SimpleNamespace) -> None:
     result = validate_export(exported.out)
     assert result["ok"], result["errors"]
-    assert result["schema_version"] == "1.2"
+    assert result["schema_version"] == "1.3"
     assert result["synthetic"] is False
     assert result["files"] > 0
     assert result["bytes"] > 0
@@ -680,6 +825,33 @@ def test_validator_detects_missing_quality_layer(
     result = validate_export(folder)
     assert not result["ok"]
     assert any("quality_flag" in error for error in result["errors"])
+
+
+def test_validator_detects_wrong_witness_code(
+    exported: SimpleNamespace, tmp_path: Path
+) -> None:
+    folder = _copy_export(exported, tmp_path)
+    path = folder / "grids" / TEMPERATURE / WINDOW / "witness_agreement.i8"
+    values = np.fromfile(path, dtype=np.int8)
+    values[MARKER[0] * contract.N_COLS + MARKER[1]] = 7
+    values.tofile(path)
+
+    result = validate_export(folder)
+    assert not result["ok"]
+    assert any("illegal witness codes" in error for error in result["errors"])
+
+
+def test_validator_detects_missing_witness_file(
+    exported: SimpleNamespace, tmp_path: Path
+) -> None:
+    folder = _copy_export(exported, tmp_path)
+    (
+        folder / "grids" / TEMPERATURE / WINDOW / "witness_agreement.i8"
+    ).unlink()
+
+    result = validate_export(folder)
+    assert not result["ok"]
+    assert any("witness_agreement.i8" in error for error in result["errors"])
 
 
 def test_validator_detects_unknown_country_index(

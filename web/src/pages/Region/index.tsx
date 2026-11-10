@@ -7,6 +7,7 @@ import { useApp } from '../../data/AppState'
 import { loadCountries, loadRegions } from '../../data/loaders'
 import type { Country, Region, Selection } from '../../data/types'
 import { CountryLocator } from './CountryLocator'
+import { buildCitation, buildRegionCsv, copyText, downloadTextFile } from './download'
 import { loadAnomalies, loadCellSpearman, loadPlace, type PlaceData } from './loadPlace'
 import {
   annualMeanSeries,
@@ -20,6 +21,7 @@ import {
 } from './model'
 import { qualityBannerText, qualityDetailText, type QualitySummary } from './quality'
 import { summarySentence } from './summary'
+import { witnessAgreementText, type WitnessInfo } from './witness'
 import './region.css'
 
 type RhoState = 'idle' | 'loading' | 'missing' | { rho: number; n: number | null }
@@ -174,6 +176,13 @@ export default function RegionPage() {
         : [],
     [place, windowMeta, secondAnomalies],
   )
+  const zWitness = useMemo(
+    () =>
+      place && windowMeta && place.witness
+        ? zScoresInWindow(place.months, place.witness.anomalies, windowMeta.start, windowMeta.end)
+        : [],
+    [place, windowMeta],
+  )
 
   const trendSeries =
     place?.trend && windowMeta ? senTrendSeries(place.months, windowMeta.start, windowMeta.end, place.trend) : null
@@ -199,6 +208,7 @@ export default function RegionPage() {
           windowEnd: windowMeta.end,
           quality: place.quality,
           knownForcingPeriod,
+          witness: place.witness ? { label: place.witness.label, agreement: place.witness.agreement } : null,
         })
       : null
   const others = index.variables.filter((item) => item.id !== variableId)
@@ -207,7 +217,7 @@ export default function RegionPage() {
   return (
     <section className="region-page">
       <div className="region-heading">
-        <h2>{selection ? (place?.title ?? 'Region Explorer') : 'Choose a place'}</h2>
+        <h1>{selection ? (place?.title ?? 'Region Explorer') : 'Choose a place'}</h1>
         {selection && (
           <button type="button" className="region-button secondary" onClick={() => setSelection(null)}>
             Choose a different place
@@ -252,6 +262,9 @@ export default function RegionPage() {
           onSecond={setSecondId}
           zPrimary={zPrimary}
           zSecond={zSecond}
+          witnessZ={zWitness}
+          witnessLabel={place?.witness?.label ?? null}
+          witnessUnit={place?.witness?.unit ?? null}
           secondAnomalies={secondAnomalies}
           secondError={secondError}
           loadingSecond={loadingSecond}
@@ -261,6 +274,7 @@ export default function RegionPage() {
           annualMeans={annualMeans}
           summary={summary}
           qualityBanner={qualityBanner}
+          witnessMethod={index.witness?.method ?? null}
         />
       )}
     </section>
@@ -419,6 +433,9 @@ function Explorer({
   onSecond,
   zPrimary,
   zSecond,
+  witnessZ,
+  witnessLabel,
+  witnessUnit,
   secondAnomalies,
   secondError,
   loadingSecond,
@@ -428,6 +445,7 @@ function Explorer({
   annualMeans,
   summary,
   qualityBanner,
+  witnessMethod,
 }: {
   place: PlaceData | null
   placeError: string | null
@@ -443,6 +461,9 @@ function Explorer({
   onSecond: (id: string) => void
   zPrimary: (number | null)[]
   zSecond: (number | null)[]
+  witnessZ: (number | null)[]
+  witnessLabel: string | null
+  witnessUnit: string | null
   secondAnomalies: (number | null)[] | null
   secondError: string | null
   loadingSecond: boolean
@@ -452,6 +473,7 @@ function Explorer({
   annualMeans: { x: string[]; y: number[] } | null
   summary: string | null
   qualityBanner: string | null
+  witnessMethod: string | null
 }) {
   const caption =
     place?.evidence.source === 'precomputed'
@@ -474,12 +496,19 @@ function Explorer({
         <>
           {place.note && <p className="region-warn">{place.note}</p>}
           {summary && <p className="plain-summary">{summary}</p>}
+          <DownloadActions
+            place={place}
+            variableLabel={variableLabel}
+            windowStart={windowStart}
+            windowEnd={windowEnd}
+            witnessMethod={witnessMethod}
+          />
           {place.country && (
             <article className="region-card">
               <CountryLocator key={place.country.id} country={place.country} />
             </article>
           )}
-          <EvidenceCard evidence={place.evidence} quality={place.quality} qualityBanner={qualityBanner} />
+          <EvidenceCard evidence={place.evidence} quality={place.quality} qualityBanner={qualityBanner} witness={place.witness} />
           <article className="region-card">
             <MonthlyValuesChart months={place.months} values={place.values} unit={place.unit} label={variableLabel} />
           </article>
@@ -495,6 +524,10 @@ function Explorer({
               trendY={trendY}
               annualMeans={annualMeans}
               breakYear={place.quality?.breakYear ?? null}
+              witnessZ={witnessZ}
+              witnessLabel={witnessLabel}
+              witnessUnit={witnessUnit}
+              mainZ={zPrimary}
               caption={trendY ? caption : `${caption} Not enough valid months to draw a Sen line.`}
             />
           </article>
@@ -553,10 +586,12 @@ function EvidenceCard({
   evidence,
   quality,
   qualityBanner,
+  witness,
 }: {
   evidence: EvidenceModel
   quality: QualitySummary | null
   qualityBanner: string | null
+  witness: WitnessInfo | null
 }) {
   const qualityDetail = qualityDetailText(quality)
   return (
@@ -623,6 +658,24 @@ function EvidenceCard({
             <dd>{qualityDetail}</dd>
           </>
         )}
+        {witness && (
+          <>
+            <dt>Second witness</dt>
+            <dd>
+              {witness.label} · {witness.product} {witness.version}
+            </dd>
+            <dt>Witness trend</dt>
+            <dd>
+              {witness.trend == null
+                ? 'Not available'
+                : `${witness.trend.slopeDecade == null ? '—' : `${formatSlope(witness.trend.slopeDecade)} ${witness.unit ?? ''} per decade`}; p = ${formatStat(
+                    witness.trend.p,
+                  )}; ${witness.trend.trendClass} (browser Sen/MK on the witness anomalies)`}
+            </dd>
+            <dt>Agreement</dt>
+            <dd>{witnessAgreementText(witness.agreement)}</dd>
+          </>
+        )}
         {evidence.cellsUsed != null && (
           <>
             <dt>Cells used</dt>
@@ -650,6 +703,77 @@ function EvidenceCard({
         </ul>
       )}
     </article>
+  )
+}
+
+function DownloadActions({
+  place,
+  variableLabel,
+  windowStart,
+  windowEnd,
+  witnessMethod,
+}: {
+  place: PlaceData
+  variableLabel: string
+  windowStart: string
+  windowEnd: string
+  witnessMethod: string | null
+}) {
+  const [status, setStatus] = useState<string | null>(null)
+  const safeTitle = place.title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase()
+  const filename = `${safeTitle || 'earthpulse-region'}-${place.evidence.product}-${windowStart}-${windowEnd}.csv`
+
+  const onDownload = () => {
+    const csv = buildRegionCsv({
+      months: place.months,
+      values: place.values,
+      anomalies: place.anomalies,
+      witnessAnomalies: place.witness?.anomalies ?? null,
+      validFraction: place.validFraction,
+    })
+    downloadTextFile(filename, csv)
+    setStatus('CSV downloaded')
+  }
+
+  const onCopy = async () => {
+    const citation = buildCitation({
+      url: typeof window === 'undefined' ? 'https://earthpulse.example' : window.location.href,
+      place: place.title,
+      variableLabel,
+      windowLabel: place.evidence.windowLabel,
+      product: place.evidence.product,
+      productVersion: place.evidence.productVersion,
+      doi: place.evidence.doi,
+      witness: place.witness
+        ? {
+            label: place.witness.label,
+            product: place.witness.product,
+            version: place.witness.version,
+            doi: place.witness.doi,
+          }
+        : null,
+      method: place.evidence.method,
+      witnessMethod,
+    })
+    const ok = await copyText(citation)
+    setStatus(ok ? 'Citation copied' : 'Could not copy automatically; the citation is in the browser console')
+    if (!ok && typeof console !== 'undefined') console.info(citation)
+  }
+
+  return (
+    <div className="region-download">
+      <div className="region-actions">
+        <button type="button" className="region-button secondary" onClick={onDownload}>
+          Download CSV
+        </button>
+        <button type="button" className="region-button secondary" onClick={onCopy}>
+          Copy citation
+        </button>
+      </div>
+      <p className="region-status" role="status">
+        {status ?? 'CSV includes months, values, anomalies, witness anomalies and valid-cell fraction.'}
+      </p>
+    </div>
   )
 }
 

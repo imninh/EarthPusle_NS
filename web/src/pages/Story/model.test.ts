@@ -2,20 +2,32 @@ import { describe, expect, it } from 'vitest'
 import type { CasesFile, DataIndex, DetectiveCase } from '../../data/types'
 import {
   caseDetails,
+  caseDestination,
+  caseEvidenceActionLabel,
   caseIdForStep,
   caseLead,
+  caseMapCaption,
   casePlaceLabel,
+  caseRegionId,
+  caseRegionNote,
   caseWindowYears,
   cautionShare,
+  cautionCaseForVariable,
+  cautionCases,
+  combinedQualityWitnessText,
   evidenceVariableId,
   formatBbox,
+  formatSignedSlope,
   formatSlope,
   hasCases,
   isCautionCase,
+  qualityBreakYearLead,
   significanceCopy,
   stepFromCaseId,
   stepTitle,
   trendClassWords,
+  witnessAgreementWords,
+  witnessProductLabel,
   yearPosition,
 } from './model'
 
@@ -120,7 +132,78 @@ describe('case lead, details and labels', () => {
   })
 })
 
+describe('case destinations and region labels', () => {
+  const withId = (id: string | undefined, variable = 'air_temperature'): DetectiveCase => {
+    const item = detectiveCase('case-x', variable)
+    return { ...item, region: { ...item.region, ...(id == null ? {} : { id }) } } as DetectiveCase
+  }
+
+  it('keeps an exact country domain for both buttons', () => {
+    const item = withId('country_704')
+    expect(caseRegionId(item)).toBe('country_704')
+    expect(caseRegionNote(item)).toBe('country boundary')
+    expect(caseEvidenceActionLabel(item)).toBe('Open evidence')
+    expect(caseDestination(item, 'map')).toEqual({
+      page: 'discovery',
+      selection: { kind: 'region', regionId: 'country_704' },
+    })
+    expect(caseDestination(item, 'evidence')).toEqual({
+      page: 'region',
+      selection: { kind: 'region', regionId: 'country_704' },
+    })
+  })
+
+  it('uses the witness layer or Screener for a global case', () => {
+    const item = withId('global', 'specific_humidity')
+    expect(caseRegionNote(item)).toBe('all evaluated land')
+    expect(caseEvidenceActionLabel(item)).toBe('Open in Explore variables')
+    expect(caseDestination(item, 'map')).toEqual({ page: 'discovery', mapLayer: 'witness' })
+    expect(caseDestination(item, 'evidence')).toEqual({ page: 'screener' })
+  })
+
+  it('falls back to the bbox when region.id is absent', () => {
+    const item = withId(undefined)
+    expect(caseRegionId(item)).toBeNull()
+    expect(caseRegionNote(item)).toBe('approximate box [1, 2, 3, 4]')
+    expect(caseMapCaption(item)).toBe('Approximate case box. Not a country boundary.')
+    expect(caseEvidenceActionLabel(item)).toBe('Open evidence')
+    expect(caseDestination(item, 'map')).toEqual({
+      page: 'discovery',
+      selection: { kind: 'bbox', bbox: [1, 2, 3, 4] },
+    })
+    expect(caseDestination(item, 'evidence')).toEqual({
+      page: 'region',
+      selection: { kind: 'bbox', bbox: [1, 2, 3, 4] },
+    })
+  })
+
+  it('hides the approximate-box caption when region.id exists', () => {
+    expect(caseMapCaption(withId('country_704'))).toBeNull()
+    expect(caseMapCaption(withId('global'))).toBeNull()
+  })
+
+  it('uses cell wording for the quality break year', () => {
+    expect(qualityBreakYearLead(2012)).toBe('The median break year across these cells is 2012')
+    expect(qualityBreakYearLead(2012)).not.toContain('case box')
+  })
+
+  it('formats the witness slope with a sign', () => {
+    expect(formatSignedSlope(0.131)).toBe('+0.131')
+    expect(formatSignedSlope(-1.27)).toBe('-1.270')
+    expect(formatSignedSlope(Number.NaN)).toBe('—')
+  })
+})
+
 describe('caution chart helpers', () => {
+  it('supports more than one caution case and finds one by variable', () => {
+    const first = { ...detectiveCase('case-a', 'air_temperature'), kind: 'caution' as const }
+    const second = { ...detectiveCase('case-b', 'specific_humidity'), kind: 'caution' as const }
+    const finding = detectiveCase('case-c', 'specific_humidity')
+    expect(cautionCases([first, finding, second]).map((item) => item.id)).toEqual(['case-a', 'case-b'])
+    expect(cautionCaseForVariable([first, finding, second], 'specific_humidity')?.id).toBe('case-b')
+    expect(cautionCaseForVariable([first], 'specific_humidity')).toBeNull()
+  })
+
   it('prefers the case flagged share and clamps the fallback', () => {
     expect(cautionShare({ ...detectiveCase('a'), quality_flag_share: 0.536 }, 0.2)).toBe(0.536)
     expect(cautionShare(detectiveCase('a'), 0.2)).toBe(0.2)
@@ -137,5 +220,56 @@ describe('caution chart helpers', () => {
     expect(yearPosition(1990, '2001-2024')).toBe(0)
     expect(yearPosition(2030, '2001-2024')).toBe(100)
     expect(yearPosition(2005, 'nope')).toBeNull()
+  })
+})
+
+describe('second-witness wording', () => {
+  it('maps agreement codes to §13 language', () => {
+    expect(witnessAgreementWords(2)).toBe('a second, independent NASA dataset agrees')
+    expect(witnessAgreementWords(-2)).toContain('disagrees')
+    expect(witnessAgreementWords(1)).toContain('same direction')
+    expect(witnessAgreementWords(-1)).toContain('opposite direction')
+    expect(witnessAgreementWords(-9)).toBe('not evaluated')
+  })
+
+  it('gives the combined caution reading only when a witness exists', () => {
+    expect(combinedQualityWitnessText(2)).toContain('more likely a real change')
+    expect(combinedQualityWitnessText(1)).toContain('more likely a data artefact')
+    expect(combinedQualityWitnessText(-1)).toContain('more likely a data artefact')
+    expect(combinedQualityWitnessText(-2)).toBe(
+      'A sudden shift is flagged, and an independent dataset shows a significant trend in the opposite direction: the trend is disputed.',
+    )
+    expect(combinedQualityWitnessText(-9)).toContain('No independent witness')
+    expect(combinedQualityWitnessText(0)).toBeNull()
+  })
+
+  it('prefers the index witness label and falls back to the evidence product', () => {
+    const item = detectiveCase('witnessed')
+    item.evidence[0]!.witness = {
+      product: 'MERRA-2 M2TMNXSLV 5.12.4',
+      variable: 'T2M',
+      sen_slope_decade: 0.2,
+      slope_unit: 'degC per decade',
+      q_value: 0.01,
+      agreement: 2,
+    }
+    expect(witnessProductLabel(item, 'precipitation', index)).toBe('MERRA-2 M2TMNXSLV 5.12.4')
+    const labelled = {
+      ...index,
+      witness: {
+        method: 'same test',
+        layers: [],
+        products: {
+          precipitation: {
+            product: 'GPCP',
+            version: '3.3',
+            source_variable: 'sat_gauge_precip',
+            doi: '10.5067/test',
+            label: 'GPCP precipitation',
+          },
+        },
+      },
+    } as unknown as DataIndex
+    expect(witnessProductLabel(item, 'precipitation', labelled)).toBe('GPCP precipitation')
   })
 })

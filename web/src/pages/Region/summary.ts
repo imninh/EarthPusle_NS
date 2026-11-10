@@ -3,6 +3,7 @@
 // phrased as "no change".
 import type { EvidenceModel } from './model'
 import { documentedInputChange, isKnownForcingShift, type QualitySummary } from './quality'
+import { witnessSummaryClause, type SummaryWitness } from './witness'
 
 export interface SummaryInput {
   evidence: EvidenceModel
@@ -13,6 +14,8 @@ export interface SummaryInput {
   quality?: QualitySummary | null
   /** Documented forcing-change period for this product, when the export defines one. */
   knownForcingPeriod?: readonly [number, number] | null
+  /** Schema 1.3 second witness, when one was exported for this series. */
+  witness?: SummaryWitness | null
 }
 
 function lowerFirst(text: string): string {
@@ -66,7 +69,13 @@ export function summarySentence(input: SummaryInput): string {
   const { evidence, placeLabel, windowStart, windowEnd } = input
   const range = windowYears(windowStart, windowEnd)
   const variable = lowerFirst(evidence.variableLabel)
-  const trail = caution(input.quality, evidence.product, input.knownForcingPeriod)
+  const witnessTrail = witnessSummaryClause({
+    mainTrendClass: evidence.trendClass,
+    warm: evidence.category === 'temperature',
+    qualityFlagged: Boolean(input.quality?.available && input.quality.flagged),
+    witness: input.witness,
+  })
+  const trail = witnessTrail ?? caution(input.quality, evidence.product, input.knownForcingPeriod)
   const subject = `${variable} ${placeLabel}`
 
   if (evidence.trendClass === 'insufficient data') {

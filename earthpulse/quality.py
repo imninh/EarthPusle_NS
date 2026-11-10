@@ -83,12 +83,14 @@ def pettitt_test(series: np.ndarray) -> dict[str, float | int]:
     return {"K": k, "p": float(p), "change_index": change_index, "n": n}
 
 
-def delta_bic(series: np.ndarray, change_index: int) -> float:
+def delta_bic(series: np.ndarray, change_index: int, years: np.ndarray) -> float:
     """``BIC(linear trend) - BIC(two-mean step)`` for one annual series.
 
     Both models have two mean parameters (slope/intercept versus two means);
     the common variance term cancels. ``change_index`` is the last year before
-    the step. A positive value favours the step; the contract requires >= 2.
+    the step. The linear trend is fitted at the real calendar ``years`` so a
+    missing year is a real two-year gap, not a single index step. A positive
+    value favours the step; the contract requires >= 2.
     """
 
     values = np.asarray(series, dtype=float)
@@ -98,7 +100,14 @@ def delta_bic(series: np.ndarray, change_index: int) -> float:
     if change_index < 0 or change_index >= n - 1:
         return float("nan")
 
-    x = np.arange(n, dtype=float)
+    time_values = np.asarray(years, dtype=float)
+    if time_values.ndim != 1 or time_values.shape != values.shape:
+        return float("nan")
+    if not np.all(np.isfinite(time_values)):
+        return float("nan")
+    # Offset only (an affine change of the time axis leaves both fits and the
+    # BIC difference unchanged); gaps between calendar years are preserved.
+    x = time_values - time_values.min()
     try:
         coefficients = np.polyfit(x, values, 1)
         linear_residual = values - np.polyval(coefficients, x)
@@ -172,7 +181,7 @@ def quality_grid(
         result = pettitt_test(values)
         change_index = int(result["change_index"])
         p_map[row, col] = float(result["p"])
-        delta_map[row, col] = delta_bic(values, change_index)
+        delta_map[row, col] = delta_bic(values, change_index, valid_years)
         break_map[row, col] = float(valid_years[change_index + 1])
 
     q_map, _ = bh_fdr(p_map)

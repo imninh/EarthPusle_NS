@@ -24,6 +24,8 @@ from earthpulse.export import (
     REGIONS_PATH,
     REGISTRY_PATH,
     TRENDS_DIR,
+    WITNESS_ANOMALY_DIR,
+    WITNESS_TRENDS_DIR,
     export_all,
     publish_export,
     validate_export,
@@ -44,6 +46,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--anomaly-dir", type=Path, default=ANOMALY_DIR)
     parser.add_argument("--trends-dir", type=Path, default=TRENDS_DIR)
     parser.add_argument("--correlations-dir", type=Path, default=CORRELATIONS_DIR)
+    parser.add_argument(
+        "--witness-trends-dir", type=Path, default=WITNESS_TRENDS_DIR
+    )
+    parser.add_argument(
+        "--witness-anomaly-dir", type=Path, default=WITNESS_ANOMALY_DIR
+    )
     parser.add_argument("--mask", type=Path, default=None)
     parser.add_argument(
         "--variables",
@@ -107,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
             anomaly_dir=args.anomaly_dir,
             trends_dir=args.trends_dir,
             correlations_dir=args.correlations_dir,
+            witness_trends_dir=args.witness_trends_dir,
+            witness_anomaly_dir=args.witness_anomaly_dir,
             mask_path=args.mask,
             variable_ids=args.variables,
             window_ids=args.windows,

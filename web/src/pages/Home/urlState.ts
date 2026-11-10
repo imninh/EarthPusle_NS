@@ -1,7 +1,7 @@
 // Hash routing for shareable app state. Kept pure so it can be unit-tested without a DOM.
 import type { Page, Selection } from '../../data/types'
 
-const PAGES: readonly Page[] = ['home', 'screener', 'discovery', 'region', 'story']
+const PAGES: readonly Page[] = ['home', 'screener', 'discovery', 'region', 'story', 'method']
 const PAGES_WITH_VARIABLE: readonly Page[] = ['screener', 'discovery', 'region']
 
 export interface RouteState {
@@ -13,6 +13,8 @@ export interface RouteState {
   domain: string | null
   /** Story step: null is the intro, otherwise a case id. */
   caseId: string | null
+  /** Discovery layer requested by a link, e.g. "witness". */
+  layer: string | null
 }
 
 export const HOME_ROUTE: RouteState = {
@@ -22,6 +24,7 @@ export const HOME_ROUTE: RouteState = {
   selection: null,
   domain: null,
   caseId: null,
+  layer: null,
 }
 
 function clean(value: string | null): string | null {
@@ -78,6 +81,7 @@ export function parseHash(hash: string): RouteState {
     selection: parseSelection(params),
     domain: clean(params.get('domain')),
     caseId: clean(params.get('case')),
+    layer: clean(params.get('layer')),
   }
 }
 
@@ -108,6 +112,7 @@ export function serializeHash(route: RouteState): string {
     params.set('domain', route.domain)
   }
   if (route.page === 'story' && route.caseId) params.set('case', route.caseId)
+  if (route.page === 'discovery' && route.layer) params.set('layer', route.layer)
   if (route.page === 'discovery' || route.page === 'region') appendSelection(params, route.selection)
   const query = params.toString().replace(/%2C/gi, ',')
   return `#/${route.page}${query ? `?${query}` : ''}`

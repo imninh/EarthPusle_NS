@@ -132,4 +132,39 @@ describe('summarySentence', () => {
     expect(sentence(base, { ...flagged, flagged: false })).not.toContain('sudden shift')
     expect(sentence(base, null)).not.toContain('sudden shift')
   })
+
+  it('appends a witness corroboration clause', () => {
+    const text = summarySentence({
+      evidence: base,
+      placeLabel: 'in Vietnam',
+      windowStart: '2001-01',
+      windowEnd: '2024-12',
+      witness: { label: 'MERRA-2 reanalysis', agreement: 2 },
+    })
+    expect(text).toContain('MERRA-2 reanalysis shows the same warming')
+    expect(text.endsWith('.')).toBe(true)
+  })
+
+  it('uses the combined quality + witness reading when both are present', () => {
+    const real = summarySentence({
+      evidence: base,
+      placeLabel: 'in Vietnam',
+      windowStart: '2001-01',
+      windowEnd: '2024-12',
+      quality: flagged,
+      witness: { label: 'MERRA-2 reanalysis', agreement: 2 },
+    })
+    expect(real).toContain('more likely a real change')
+    expect(real).not.toContain('possible data discontinuity')
+
+    const artefact = summarySentence({
+      evidence: base,
+      placeLabel: 'in Vietnam',
+      windowStart: '2001-01',
+      windowEnd: '2024-12',
+      quality: flagged,
+      witness: { label: 'MERRA-2 reanalysis', agreement: -2 },
+    })
+    expect(artefact).toContain('more likely a data artefact')
+  })
 })

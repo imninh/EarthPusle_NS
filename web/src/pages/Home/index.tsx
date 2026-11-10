@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../../data/AppState'
-import { loadCases, loadScreener, loadTrendClass } from '../../data/loaders'
-import type { CasesFile, DataIndex, ScreenerFile, WindowMeta } from '../../data/types'
+import { loadCases, loadCountries, loadScreener, loadTrendClass } from '../../data/loaders'
+import type { CasesFile, Country, DataIndex, ScreenerFile, WindowMeta } from '../../data/types'
 import { paintTrendClass, trendColoursFrom } from '../Screener/thumbnail'
 import {
   buildCautionEntry,
   buildHomeInsights,
   heroVariableId,
   qualityEvidenceText,
+  witnessEvidenceText,
   type HomeInsight,
 } from './insights'
 import './home.css'
@@ -31,6 +32,7 @@ export default function HomePage() {
   const windowMeta = homeWindow(index)
   const [screener, setScreener] = useState<ScreenerFile | null>(null)
   const [cases, setCases] = useState<CasesFile | null>(null)
+  const [countries, setCountries] = useState<Country[]>([])
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
 
@@ -52,9 +54,11 @@ export default function HomePage() {
 
   useEffect(() => {
     let cancelled = false
-    loadCases()
-      .then((file) => {
-        if (!cancelled) setCases(file)
+    Promise.all([loadCases(), loadCountries().catch(() => [] as Country[])])
+      .then(([file, countryList]) => {
+        if (cancelled) return
+        setCases(file)
+        setCountries(countryList)
       })
       .catch(() => {
         // The caution entry is optional; Home still works without cases.json.
@@ -66,16 +70,20 @@ export default function HomePage() {
 
   const rows = screener?.rows ?? []
   const insights = useMemo(
-    () => buildHomeInsights(index.variables, rows, windowMeta.start, windowMeta.end),
-    [index.variables, rows, windowMeta.start, windowMeta.end],
+    () => buildHomeInsights(index.variables, rows, windowMeta.start, windowMeta.end, cases?.cases),
+    [index.variables, rows, windowMeta.start, windowMeta.end, cases],
   )
-  const caution = useMemo(() => buildCautionEntry(cases?.cases), [cases])
+  const caution = useMemo(() => buildCautionEntry(cases?.cases, countries), [cases, countries])
   const heroId = useMemo(() => heroVariableId(index.variables, rows), [index.variables, rows])
   const hero = index.variables.find((variable) => variable.id === heroId) ?? index.variables[0]
 
   const openVariable = (variableId: string | null) => {
     if (variableId) navigate('discovery', { variableId, windowId: windowMeta.id })
     else navigate('screener', { windowId: windowMeta.id, domain: 'global' })
+  }
+  const openInsight = (insight: HomeInsight) => {
+    if (insight.caseId) navigate('story', { caseId: insight.caseId })
+    else openVariable(insight.variableId)
   }
 
   return (
@@ -162,7 +170,7 @@ export default function HomePage() {
         {insights.length > 0 ? (
           <div className="home-insights">
             {insights.map((insight) => (
-              <InsightCard key={insight.id} insight={insight} onOpen={() => openVariable(insight.variableId)} />
+              <InsightCard key={insight.id} insight={insight} onOpen={() => openInsight(insight)} />
             ))}
           </div>
         ) : null}
@@ -224,6 +232,7 @@ export default function HomePage() {
 
 function InsightCard({ insight, onOpen }: { insight: HomeInsight; onOpen: () => void }) {
   const qualityText = qualityEvidenceText(insight)
+  const witnessText = insight.id === 'witness' ? null : witnessEvidenceText(insight)
   return (
     <button type="button" className="home-insight" onClick={onOpen}>
       <span className="home-insight-kicker">{insight.kicker}</span>
@@ -234,6 +243,12 @@ function InsightCard({ insight, onOpen }: { insight: HomeInsight; onOpen: () => 
       {qualityText != null ? (
         <span className="home-insight-quality">
           {qualityText}
+          <span aria-hidden="true"> →</span>
+        </span>
+      ) : null}
+      {witnessText != null ? (
+        <span className="home-insight-witness">
+          {witnessText}
           <span aria-hidden="true"> →</span>
         </span>
       ) : null}

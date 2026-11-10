@@ -5,7 +5,7 @@ import { loadBreakpointYear, loadQualityFlag } from '../../data/loaders'
 import type { DetectiveCase } from '../../data/types'
 import { cellsInsideBbox } from '../Region/model'
 import { documentedInputChange, qualityShareForRange } from '../Region/quality'
-import { caseWindowYears, cautionShare, yearPosition } from './model'
+import { caseWindowYears, cautionShare, combinedQualityWitnessText, qualityBreakYearLead, yearPosition } from './model'
 
 type Status = 'loading' | 'ready' | 'unavailable'
 
@@ -74,6 +74,11 @@ export function QualityCaution({
     knownForcingPeriod != null &&
     breakYear >= knownForcingPeriod[0] &&
     breakYear <= knownForcingPeriod[1]
+  const witness = item.evidence.find((evidence) => evidence.variable === variableId)?.witness
+  const witnessLabel = witness
+    ? index.witness?.products?.[variableId]?.label ?? witness.product
+    : null
+  const combinedWitness = witness ? combinedQualityWitnessText(witness.agreement) : null
 
   return (
     <aside className="story-caution" aria-label="Data-quality caution">
@@ -103,10 +108,15 @@ export function QualityCaution({
         {breakYear == null
           ? 'The published quality layers do not give a break year for this case.'
           : inKnownForcing
-            ? `The median break year inside the case box is ${Math.round(breakYear)}, inside a ${documentedInputChange(product, knownForcingPeriod)}: possible data discontinuity. Read the trend with caution.`
-            : `The median break year inside the case box is ${Math.round(breakYear)}. A sudden shift can be a real jump in the climate or a data artefact. The trend is still significant; read the evidence rather than treating the flag as a verdict.`}
+            ? `${qualityBreakYearLead(breakYear)}, inside a ${documentedInputChange(product, knownForcingPeriod)}: possible data discontinuity. Read the trend with caution.`
+            : `${qualityBreakYearLead(breakYear)}. A sudden shift can be a real jump in the climate or a data artefact. The trend is still significant; read the evidence rather than treating the flag as a verdict.`}
         {status === 'loading' ? ' Checking the published quality layers…' : null}
       </p>
+      {combinedWitness != null ? (
+        <p className="story-caution-combined">
+          <strong>{witnessLabel}:</strong> {combinedWitness}
+        </p>
+      ) : null}
     </aside>
   )
 }

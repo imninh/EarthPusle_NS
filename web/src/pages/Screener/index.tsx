@@ -8,6 +8,7 @@ import { TrendThumbnail } from './TrendThumbnail'
 import {
   MAGNITUDE_TOOLTIP,
   SORT_COLUMNS,
+  WITNESS_SORT_COLUMN,
   barHalfPercent,
   buildViewRows,
   contrastLabel,
@@ -19,10 +20,14 @@ import {
   formatMagnitude,
   formatPercent,
   hasDiscontinuityFields,
+  hasWitnessFields,
   metricValue,
   screenerHeadline,
   sortByMetric,
   sortDescription,
+  witnessConfirmedText,
+  witnessContradictionWarning,
+  type ScreenerSortColumn,
   type ScreenerViewRow,
   type SortDirection,
   type SortKey,
@@ -103,6 +108,10 @@ export default function ScreenerPage() {
   )
   const empty = screener != null && domainHasNoEvaluatedCells(viewRows)
   const showQuality = hasDiscontinuityFields(viewRows)
+  const showWitness = hasWitnessFields(viewRows)
+  const sortColumns: readonly ScreenerSortColumn[] = showWitness
+    ? [...SORT_COLUMNS, WITNESS_SORT_COLUMN]
+    : SORT_COLUMNS
   const headline = screenerHeadline(viewRows, domainLabel)
 
   const onSort = (key: SortKey) => {
@@ -183,7 +192,7 @@ export default function ScreenerPage() {
           {!empty ? (
             <>
               <div className="screener-sortbar" role="group" aria-label="Sort by">
-                {SORT_COLUMNS.map((column) => (
+                {sortColumns.map((column) => (
                   <SortButton key={column.id} column={column} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 ))}
               </div>
@@ -195,9 +204,16 @@ export default function ScreenerPage() {
                   <thead>
                     <tr>
                       <th scope="col">Variable</th>
-                      {SORT_COLUMNS.map((column) => (
+                      {sortColumns.map((column) => (
                         <th key={column.id} scope="col" aria-sort={ariaSort(sortKey, sortDir, column.id)}>
                           <SortButton column={column} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                          {column.id === 'witness' ? (
+                            <HelpTip label="About the second witness">
+                              A second, independent NASA dataset is tested with the same method. Confirmed means it is
+                              significant in the same direction; a high contradicted share is a warning to read the
+                              trend with caution, not a verdict.
+                            </HelpTip>
+                          ) : null}
                         </th>
                       ))}
                       {showQuality ? (
@@ -220,6 +236,7 @@ export default function ScreenerPage() {
                         row={row}
                         windowId={windowId}
                         showQuality={showQuality}
+                        showWitness={showWitness}
                         onOpen={openVariable}
                       />
                     ))}
@@ -254,6 +271,13 @@ export default function ScreenerPage() {
               real climate jump or a data artefact. Code 2 marks a shift during a documented GLDAS input change
               (2008–2012), so read the trend with caution.
             </p>
+            {showWitness ? (
+              <p>
+                The <strong>Second witness</strong> column reports the share of the significant area where an
+                independent NASA dataset is also significant in the same direction. A high contradicted share is a
+                warning to read the trend with caution, not a verdict.
+              </p>
+            ) : null}
           </Disclosure>
         </>
       ) : null}
@@ -267,7 +291,7 @@ function SortButton({
   sortDir,
   onSort,
 }: {
-  column: (typeof SORT_COLUMNS)[number]
+  column: ScreenerSortColumn
   sortKey: SortKey
   sortDir: SortDirection
   onSort: (key: SortKey) => void
@@ -286,11 +310,13 @@ function ScreenerTableRow({
   row,
   windowId,
   showQuality,
+  showWitness,
   onOpen,
 }: {
   row: ScreenerViewRow
   windowId: string
   showQuality: boolean
+  showWitness: boolean
   onOpen: (variableId: string) => void
 }) {
   const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
@@ -361,6 +387,30 @@ function ScreenerTableRow({
           ) : null}
         </span>
       </td>
+      {showWitness ? (
+        <td data-label="Second witness">
+          {row.witnessCorroborated == null ? (
+            <span className="screener-meta">No witness value</span>
+          ) : (
+            <span className="screener-witness">
+              <span>{witnessConfirmedText(row)}</span>
+              {row.witnessContradicted != null ? (
+                <span className="screener-meta">
+                  {formatPercent(row.witnessContradicted)} contradicted
+                </span>
+              ) : null}
+              {witnessContradictionWarning(row) ? (
+                <Chip
+                  tone="warn"
+                  title="A second dataset contradicts a substantial share of the significant area. Read the trend with caution; this is not a verdict."
+                >
+                  High disagreement
+                </Chip>
+              ) : null}
+            </span>
+          )}
+        </td>
+      ) : null}
       {showQuality ? (
         <td data-label="Sudden shift flag">
           {row.stepFlag == null ? (

@@ -9,6 +9,7 @@ const DiscoveryPage = lazy(() => import('./pages/Discovery'))
 const RegionPage = lazy(() => import('./pages/Region'))
 const HomePage = lazy(() => import('./pages/Home'))
 const StoryPage = lazy(() => import('./pages/Story'))
+const MethodPage = lazy(() => import('./pages/Method'))
 
 function CurrentPage() {
   const { page } = useApp()
@@ -16,6 +17,7 @@ function CurrentPage() {
   if (page === 'region') return <RegionPage />
   if (page === 'home') return <HomePage />
   if (page === 'story') return <StoryPage />
+  if (page === 'method') return <MethodPage />
   return <ScreenerPage />
 }
 

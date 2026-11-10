@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { ChartFrame, type ChartMarker, type ChartTrace } from './ChartFrame'
 
 interface AnomalyTrendChartProps {
@@ -11,6 +12,10 @@ interface AnomalyTrendChartProps {
   trendY: readonly number[] | null
   annualMeans?: { x: readonly string[]; y: readonly number[] } | null
   breakYear?: number | null
+  witnessZ?: readonly (number | null)[] | null
+  witnessLabel?: string | null
+  witnessUnit?: string | null
+  mainZ?: readonly (number | null)[] | null
   caption: string
 }
 
@@ -34,9 +39,37 @@ export function AnomalyTrendChart({
   trendY,
   annualMeans,
   breakYear,
+  witnessZ,
+  witnessLabel,
+  witnessUnit,
+  mainZ,
   caption,
 }: AnomalyTrendChartProps) {
+  const hasWitness = Boolean(witnessZ && witnessZ.length > 0 && witnessLabel)
+  const [showWitness, setShowWitness] = useState(hasWitness)
+  useEffect(() => {
+    setShowWitness(hasWitness)
+  }, [hasWitness])
   const traces: ChartTrace[] = [{ x: months, y: anomalies, name: label, color: 'accent' }]
+  if (showWitness && hasWitness && witnessZ) {
+    if (mainZ && mainZ.length > 0) {
+      traces.push({
+        x: months,
+        y: mainZ,
+        name: `${label} (z-score)`,
+        color: 'accent',
+        dash: 'dash',
+        axis: 'y2',
+      })
+    }
+    traces.push({
+      x: months,
+      y: witnessZ,
+      name: `${witnessLabel} (z-score)`,
+      color: 'secondary',
+      axis: 'y2',
+    })
+  }
   if (trendMonths && trendY) {
     traces.push({ x: trendMonths, y: trendY, name: 'Sen trend', color: 'text', dash: 'dash' })
   }
@@ -58,11 +91,22 @@ export function AnomalyTrendChart({
     <ChartFrame
       title={`Anomalies (${unit})`}
       yTitle={unit}
+      yTitle2={showWitness && hasWitness ? 'z-score' : undefined}
       traces={traces}
       band={{ start: windowStart, end: windowEnd }}
       markers={markers}
       footer={
         <>
+          {hasWitness ? (
+            <label className="chart-toggle">
+              <input
+                type="checkbox"
+                checked={showWitness}
+                onChange={(event) => setShowWitness(event.target.checked)}
+              />
+              Show second witness
+            </label>
+          ) : null}
           <div className="chart-swatches">
             <span className="chart-swatch">
               <span className="swatch swatch-accent" />
@@ -80,8 +124,20 @@ export function AnomalyTrendChart({
                 Annual mean
               </span>
             )}
+            {showWitness && hasWitness ? (
+              <span className="chart-swatch">
+                <span className="swatch swatch-secondary" />
+                {witnessLabel} (z-score{witnessUnit ? `, ${witnessUnit}` : ''})
+              </span>
+            ) : null}
           </div>
           <p className="chart-note">{caption}</p>
+          {showWitness && hasWitness ? (
+            <p className="chart-note">
+              Both series are standardized inside the same window on the right axis; the left axis keeps the main
+              anomaly units. Compare direction and shape, not raw height.
+            </p>
+          ) : null}
         </>
       }
     />

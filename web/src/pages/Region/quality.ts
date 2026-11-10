@@ -3,6 +3,7 @@
 // in a documented forcing-change period, −9 = not evaluated, −99 = outside domain.
 import { N_COLS, N_ROWS, QUALITY_STEP_KNOWN_FORCING, cellAreaWeight, cellIndex } from '../../data/contract'
 import type { CellRange } from './model'
+import { rangeColSegments } from './model'
 
 export type QualityScope = 'cell' | 'region'
 
@@ -134,8 +135,10 @@ export function qualityShareForRange(
   for (let row = range.row0; row <= range.row1; row++) {
     const weight = cellAreaWeight(row)
     if (weight <= 0) continue
-    for (let col = range.col0; col <= range.col1; col++) {
-      addTally(tally, flagLayer, breakLayer, cellIndex(row, col), weight)
+    for (const [col0, col1] of rangeColSegments(range)) {
+      for (let col = col0; col <= col1; col++) {
+        addTally(tally, flagLayer, breakLayer, cellIndex(row, col), weight)
+      }
     }
   }
   return finishTally(tally, 'region')

@@ -1,6 +1,6 @@
 // Mirror of earthpulse/contract.py and docs/DATA_CONTRACT.md. Change all three together.
 
-export const SCHEMA_VERSION = '1.2'
+export const SCHEMA_VERSION = '1.3'
 
 export const N_ROWS = 180
 export const N_COLS = 360

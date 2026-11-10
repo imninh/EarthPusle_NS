@@ -20,6 +20,7 @@ export interface NavigationOptions {
   selection?: Selection
   domain?: string
   caseId?: string | null
+  mapLayer?: string
 }
 
 export interface AppState {
@@ -39,6 +40,8 @@ export interface AppState {
   /** Story step: null is the intro, otherwise a case id. */
   caseId: string | null
   setCaseId: (id: string | null) => void
+  /** Discovery layer requested by a link, e.g. "witness". */
+  mapLayer: string | null
   /** Select something and open a page in one call. */
   navigate: (page: Page, opts?: NavigationOptions) => void
 }
@@ -94,6 +97,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [selection, setSelectionState] = useState<Selection>(start.selection)
   const [domain, setDomainState] = useState(start.domain ?? 'global')
   const [caseId, setCaseIdState] = useState<string | null>(start.caseId)
+  const [mapLayer, setMapLayerState] = useState<string | null>(start.layer)
 
   const stateRef = useRef<RouteState>({
     page,
@@ -102,8 +106,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     selection,
     domain,
     caseId,
+    layer: mapLayer,
   })
-  stateRef.current = { page, variableId, windowId, selection, domain, caseId }
+  stateRef.current = { page, variableId, windowId, selection, domain, caseId, layer: mapLayer }
 
   const apply = useCallback((next: RouteState) => {
     stateRef.current = next
@@ -113,11 +118,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setSelectionState(next.selection)
     setDomainState(next.domain ?? 'global')
     setCaseIdState(next.caseId)
+    setMapLayerState(next.layer)
   }, [])
 
   const commit = useCallback(
     (patch: Partial<RouteState>, mode: 'push' | 'replace' = 'push') => {
       const next: RouteState = { ...stateRef.current, ...patch }
+      if (next.page !== 'discovery') next.layer = null
       apply(next)
       writeLocation(next, mode)
     },
@@ -171,6 +178,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setDomain,
       caseId,
       setCaseId,
+      mapLayer,
       navigate: (p, opts) => {
         const patch: Partial<RouteState> = { page: p }
         if (opts?.variableId) patch.variableId = opts.variableId
@@ -178,6 +186,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         if (opts && 'selection' in opts) patch.selection = opts.selection ?? null
         if (opts?.domain) patch.domain = opts.domain
         if (opts && 'caseId' in opts) patch.caseId = opts.caseId ?? null
+        if (opts?.mapLayer) patch.layer = opts.mapLayer
         commit(patch, 'push')
       },
     }
@@ -189,6 +198,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     selection,
     domain,
     caseId,
+    mapLayer,
     setPage,
     setVariableId,
     setWindowId,

@@ -356,7 +356,8 @@ export function spearmanLabel(
   rho: number | null,
   n: number | null,
 ): string {
-  const rhoText = rho == null || !Number.isFinite(rho) ? 'undefined' : rho.toFixed(3)
+  if (n === 0 || rho == null || !Number.isFinite(rho)) return '—'
+  const rhoText = rho.toFixed(3)
   const nText = n == null || !Number.isFinite(n) ? '—' : String(Math.round(n))
   if (kind === 'precomputed') return `precomputed Spearman ρ = ${rhoText} (n = ${nText})`
   return `computed here: Spearman ρ = ${rhoText} (n = ${nText})`
@@ -399,6 +400,13 @@ export interface CellRange {
   row1: number
   col0: number
   col1: number
+  /** Disjoint column intervals for a box that crosses the antimeridian. */
+  colSegments?: number[][]
+}
+
+/** Column intervals to scan for a range (one interval for ordinary boxes). */
+export function rangeColSegments(range: CellRange): number[][] {
+  return range.colSegments ?? [[range.col0, range.col1]]
 }
 
 /** Inclusive row/column range of cell centres inside the closed box. Empty when none fall inside. */
@@ -408,22 +416,46 @@ export function cellsInsideBbox(bbox: [number, number, number, number]): CellRan
   let row1 = N_ROWS - 1
   while (row0 <= row1 && rowToLat(row0) > north) row0++
   while (row1 >= row0 && rowToLat(row1) < south) row1--
-  let col0 = 0
-  let col1 = N_COLS - 1
-  while (col0 <= col1 && colToLon(col0) < west) col0++
-  while (col1 >= col0 && colToLon(col1) > east) col1--
-  if (row0 > row1 || col0 > col1) return null
-  return { row0, row1, col0, col1 }
+  if (row0 > row1) return null
+
+  if (west <= east) {
+    let col0 = 0
+    let col1 = N_COLS - 1
+    while (col0 <= col1 && colToLon(col0) < west) col0++
+    while (col1 >= col0 && colToLon(col1) > east) col1--
+    if (col0 > col1) return null
+    return { row0, row1, col0, col1 }
+  }
+
+  // A box with west > east crosses the antimeridian: scan west..180 and
+  // -180..east as two disjoint column segments.
+  let colWest = 0
+  while (colWest < N_COLS && colToLon(colWest) < west) colWest++
+  let colEast = N_COLS - 1
+  while (colEast >= 0 && colToLon(colEast) > east) colEast--
+  const segments = []
+  if (colEast >= 0) segments.push([0, colEast])
+  if (colWest < N_COLS) segments.push([colWest, N_COLS - 1])
+  if (segments.length === 0) return null
+  return {
+    row0,
+    row1,
+    col0: segments[0][0],
+    col1: segments[segments.length - 1][1],
+    colSegments: segments,
+  }
 }
 
 export function tileIdsForRange(range: CellRange): string[] {
-  const ids: string[] = []
+  const ids = new Set<string>()
   const rowStart = Math.floor(range.row0 / TILE_SIZE) * TILE_SIZE
-  const colStart = Math.floor(range.col0 / TILE_SIZE) * TILE_SIZE
   for (let row = rowStart; row <= range.row1; row += TILE_SIZE) {
-    for (let col = colStart; col <= range.col1; col += TILE_SIZE) ids.push(tileIdFor(row, col))
+    for (const [col0, col1] of rangeColSegments(range)) {
+      const colStart = Math.floor(col0 / TILE_SIZE) * TILE_SIZE
+      for (let col = colStart; col <= col1; col += TILE_SIZE) ids.add(tileIdFor(row, col))
+    }
   }
-  return ids
+  return [...ids]
 }
 
 export interface LoadedTile {
@@ -465,39 +497,41 @@ export function aggregateBbox(args: {
 
   for (let row = range.row0; row <= range.row1; row++) {
     const weight = cellAreaWeight(row)
-    for (let col = range.col0; col <= range.col1; col++) {
-      cellsInBox++
-      const tileId = tileIdFor(row, col)
-      const tile = tiles.get(tileId)
-      if (!tile || (tile.values == null && tile.anomalies == null)) {
-        missing.add(tileId)
-        continue
+    for (const [col0, col1] of rangeColSegments(range)) {
+      for (let col = col0; col <= col1; col++) {
+        cellsInBox++
+        const tileId = tileIdFor(row, col)
+        const tile = tiles.get(tileId)
+        if (!tile || (tile.values == null && tile.anomalies == null)) {
+          missing.add(tileId)
+          continue
+        }
+        const values = tile.values ? cellSeriesFromTile(tile.values, row, col) : null
+        const anomalies = tile.anomalies ? cellSeriesFromTile(tile.anomalies, row, col) : null
+        let onMask = false
+        let contributed = false
+        for (let month = 0; month < months; month++) {
+          const value = values ? values[month] : Number.NaN
+          const anomaly = anomalies ? anomalies[month] : Number.NaN
+          const valueOk = Number.isFinite(value)
+          const anomalyOk = Number.isFinite(anomaly)
+          if (valueOk || anomalyOk) onMask = true
+          if (valueOk && weight > 0) {
+            sumValue[month] += weight * value
+            weightValue[month] += weight
+          }
+          if (anomalyOk && weight > 0) {
+            sumAnomaly[month] += weight * anomaly
+            weightAnomaly[month] += weight
+          }
+          // Coverage is about the anomaly mean used for the trend, not the values chart.
+          if (month >= args.windowStart && month <= args.windowEnd && anomalyOk) {
+            contributed = true
+          }
+        }
+        if (onMask) maskCells++
+        if (onMask && contributed) cellsUsed++
       }
-      const values = tile.values ? cellSeriesFromTile(tile.values, row, col) : null
-      const anomalies = tile.anomalies ? cellSeriesFromTile(tile.anomalies, row, col) : null
-      let onMask = false
-      let contributed = false
-      for (let month = 0; month < months; month++) {
-        const value = values ? values[month] : Number.NaN
-        const anomaly = anomalies ? anomalies[month] : Number.NaN
-        const valueOk = Number.isFinite(value)
-        const anomalyOk = Number.isFinite(anomaly)
-        if (valueOk || anomalyOk) onMask = true
-        if (valueOk && weight > 0) {
-          sumValue[month] += weight * value
-          weightValue[month] += weight
-        }
-        if (anomalyOk && weight > 0) {
-          sumAnomaly[month] += weight * anomaly
-          weightAnomaly[month] += weight
-        }
-        // Coverage is about the anomaly mean used for the trend, not the values chart.
-        if (month >= args.windowStart && month <= args.windowEnd && anomalyOk) {
-          contributed = true
-        }
-      }
-      if (onMask) maskCells++
-      if (onMask && contributed) cellsUsed++
     }
   }
 

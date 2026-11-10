@@ -245,6 +245,14 @@
   color: var(--muted);
   font-size: var(--text-xs);
 }
+.story-witness {
+  margin: var(--space-2) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--border);
+  color: var(--good);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
 .story-caution {
   display: flex;
   flex-direction: column;
@@ -319,6 +327,14 @@
 .story-caution-note {
   margin: 0;
   color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+.story-caution-combined {
+  margin: 0;
+  padding-top: var(--space-2);
+  border-top: 1px dashed color-mix(in srgb, var(--warn-text) 28%, var(--border));
+  color: var(--text);
   font-size: var(--text-xs);
   line-height: 1.5;
 }

@@ -42,6 +42,12 @@ import {
   type TrendLine,
 } from './model'
 import { cellQuality, qualityShareForCountry, qualityShareForRange, type QualitySummary } from './quality'
+import {
+  witnessAgreementCode,
+  witnessProductInfo,
+  witnessTrendFromSeries,
+  type WitnessInfo,
+} from './witness'
 
 export interface PlaceData {
   title: string
@@ -57,6 +63,10 @@ export interface PlaceData {
   trend: TrendLine | null
   quality: QualitySummary | null
   country: Country | null
+  /** Schema 1.3 second-witness series, when the export has one. */
+  witness: WitnessInfo | null
+  /** Region-series valid_cell_fraction, aligned to index.months; null for cell/box. */
+  validFraction: (number | null)[] | null
 }
 
 export interface LoadHooks {
@@ -306,6 +316,8 @@ async function loadCell(
     ),
     quality,
     country: null,
+    witness: null,
+    validFraction: null,
   }
 }
 
@@ -343,6 +355,31 @@ async function loadRegion(
   const detail = country
     ? `Country region from Natural Earth. ${country.n_cells} grid cells inside the common mask.${boxText}`
     : `Predefined region. The box is approximate.${boxText}`
+  const validFraction = alignToMonths(series.months, series.valid_cell_fraction, index.months)
+  const witnessProduct = witnessProductInfo(index, variable.id)
+  const witnessAnomalies =
+    series.witness_anomalies && series.witness_anomalies.length > 0
+      ? alignToMonths(series.months, series.witness_anomalies, index.months)
+      : null
+  const witnessTrend =
+    witnessAnomalies && witnessAnomalies.length > 0
+      ? witnessTrendFromSeries(
+          index.months,
+          witnessAnomalies,
+          calendar.months[0] ?? windowId,
+          calendar.months[calendar.months.length - 1] ?? windowId,
+        )
+      : null
+  const witness: WitnessInfo | null =
+    witnessProduct && witnessAnomalies
+      ? {
+          ...witnessProduct,
+          unit: series.witness_unit ?? null,
+          anomalies: witnessAnomalies,
+          trend: witnessTrend,
+          agreement: witnessAgreementCode(built.evidence.trendClass, witnessTrend),
+        }
+      : null
   return {
     title,
     detail,
@@ -356,6 +393,8 @@ async function loadRegion(
     trend: built.trend,
     quality,
     country,
+    witness,
+    validFraction,
   }
 }
 
@@ -398,6 +437,8 @@ async function loadBox(
       trend: null,
       quality: null,
       country: null,
+      witness: null,
+      validFraction: null,
     }
   }
   const known = new Set(index.tiles.ids)
@@ -438,5 +479,7 @@ async function loadBox(
     trend: built.trend,
     quality,
     country: null,
+    witness: null,
+    validFraction: null,
   }
 }

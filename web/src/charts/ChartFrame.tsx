@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
-import Plotly from 'plotly.js-dist-min'
+import Plotly from 'plotly.js-basic-dist-min'
 import { Plot } from './plotly'
 import { monthAfterIso, monthIso, useChartColors, withAlpha } from './theme'
 import './charts.css'
@@ -12,6 +12,8 @@ export interface ChartTrace {
   dash?: 'solid' | 'dash'
   /** Default: a line (single valid points become markers). */
   mode?: 'line' | 'markers'
+  /** Secondary axis for standardized witness series. */
+  axis?: 'y' | 'y2'
 }
 
 export interface ChartMarker {
@@ -22,13 +24,14 @@ export interface ChartMarker {
 interface ChartFrameProps {
   title: string
   yTitle: string
+  yTitle2?: string
   traces: readonly ChartTrace[]
   band?: { start: string; end: string } | null
   markers?: readonly ChartMarker[] | null
   footer?: ReactNode
 }
 
-export function ChartFrame({ title, yTitle, traces, band, markers, footer }: ChartFrameProps) {
+export function ChartFrame({ title, yTitle, yTitle2, traces, band, markers, footer }: ChartFrameProps) {
   const colors = useChartColors()
   const frameRef = useRef<HTMLDivElement>(null)
 
@@ -50,8 +53,9 @@ export function ChartFrame({ title, yTitle, traces, band, markers, footer }: Cha
   }, [])
 
   const palette = { accent: colors.accent, secondary: colors.secondary, text: colors.text, mean: colors.text }
+  const hasY2 = traces.some((trace) => trace.axis === 'y2')
   const data: PlotSegment[] = []
-  for (const trace of traces) data.push(...segmentTrace(trace, palette[trace.color]))
+  for (const trace of traces) data.push(...segmentTrace(trace, palette[trace.color], trace.axis ?? 'y'))
   const shapes: Record<string, unknown>[] = []
   if (band) {
     shapes.push({
@@ -116,6 +120,20 @@ export function ChartFrame({ title, yTitle, traces, band, markers, footer }: Cha
       tickfont: { color: colors.muted, size: 10 },
       zerolinecolor: colors.muted,
     },
+    ...(hasY2
+      ? {
+          yaxis2: {
+            title: { text: yTitle2 ?? 'z-score', font: { color: colors.muted, size: 11 }, standoff: 8 },
+            overlaying: 'y',
+            side: 'right',
+            gridcolor: 'rgba(0,0,0,0)',
+            linecolor: colors.border,
+            tickfont: { color: colors.muted, size: 10 },
+            zerolinecolor: colors.muted,
+            showgrid: false,
+          },
+        }
+      : {}),
     hoverlabel: {
       bgcolor: colors.surface,
       bordercolor: colors.border,
@@ -152,9 +170,10 @@ interface PlotSegment {
   hovertemplate?: string
   line?: { color: string; width: number; dash: 'solid' | 'dash' }
   marker?: { color: string; size: number }
+  yaxis?: 'y' | 'y2'
 }
 
-function segmentTrace(trace: ChartTrace, color: string): PlotSegment[] {
+function segmentTrace(trace: ChartTrace, color: string, axis: 'y' | 'y2'): PlotSegment[] {
   const segments: { start: number; end: number }[] = []
   let start = -1
   for (let i = 0; i < trace.y.length; i++) {
@@ -178,6 +197,7 @@ function segmentTrace(trace: ChartTrace, color: string): PlotSegment[] {
         name: trace.name,
         connectgaps: false,
         hoverinfo: 'skip',
+        yaxis: axis === 'y2' ? 'y2' : undefined,
       },
     ]
   }
@@ -200,6 +220,7 @@ function segmentTrace(trace: ChartTrace, color: string): PlotSegment[] {
       line: markerOnly ? undefined : { color, width: 1.75, dash: trace.dash ?? 'solid' },
       marker: { color, size: markerOnly ? 5 : single ? 7 : 0 },
       hovertemplate: `%{x|%Y-%m}: %{y:.4f}<extra>${trace.name}</extra>`,
+      yaxis: axis === 'y2' ? 'y2' : undefined,
     }
   })
 }

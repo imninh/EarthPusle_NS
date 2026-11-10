@@ -9,6 +9,7 @@ const VIEWS: { id: Page; label: string; short: string }[] = [
   { id: 'screener', label: 'Explore variables', short: 'Variables' },
   { id: 'discovery', label: 'Explore the map', short: 'Map' },
   { id: 'story', label: 'Follow a case', short: 'Story' },
+  { id: 'method', label: 'How it works', short: 'Method' },
 ]
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -29,7 +30,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       )}
       <header className="app-header">
-        <button type="button" className="brand" onClick={() => setPage('home')} aria-label="EarthPulse home">
+        <button type="button" className="brand" onClick={() => setPage('home')}>
           <span className="brand-mark" aria-hidden="true">
             <span className="brand-orbit" />
             <span className="brand-planet" />
@@ -82,6 +83,9 @@ export function Layout({ children }: { children: ReactNode }) {
           Hamed–Rao Mann–Kendall with FDR correction.
         </span>
         <span>Not a verdict: a significant trend is evidence to read, not proof of cause.</span>
+        <button type="button" className="button ghost" onClick={() => setPage('method')}>
+          How it works
+        </button>
       </footer>
       <CoachMark
         open={coachOpen}

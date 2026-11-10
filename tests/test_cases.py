@@ -16,6 +16,7 @@ from earthpulse.cases import (
     EARLY_WINDOW_QUALITY_LIMITATION,
     build_cases_file,
     build_caution_candidate,
+    build_global_caution_candidate,
     cluster_components,
     combine_quality_flags,
     country_candidates,
@@ -24,6 +25,7 @@ from earthpulse.cases import (
     pattern_candidates,
     select_cases,
     trend_candidates,
+    witness_agreement_grid,
 )
 from earthpulse.screener import weighted_median
 
@@ -234,9 +236,18 @@ def test_opposite_direction_pair_is_selected_for_one_variable() -> None:
     _blob(classes, row=90, col=100, height=1, width=20, value=contract.TREND_INCREASE)
     _blob(classes, row=100, col=100, height=1, width=20, value=contract.TREND_DECREASE)
     layers = _layers(classes)
-    candidates = trend_candidates(layers, "precipitation", "2001-2024", mask=_mask())
+    candidates = trend_candidates(
+        layers,
+        "precipitation",
+        "2001-2024",
+        mask=_mask(),
+        witness_layers=_witness_constant(contract.WITNESS_CORROBORATED),
+    )
 
-    selected = select_cases(candidates, max_cases=6, target_cases=4)
+    notes: list[str] = []
+    selected = select_cases(
+        candidates, max_cases=6, target_cases=4, selection_notes=notes
+    )
 
     pair = [case for case in selected if case["role"].startswith("opposite-pair")]
     assert len(pair) == 2
@@ -245,6 +256,226 @@ def test_opposite_direction_pair_is_selected_for_one_variable() -> None:
         contract.TREND_DECREASE,
     }
     assert {case["variable"] for case in pair} == {"precipitation"}
+    assert notes == []
+
+
+def test_opposite_pair_requires_witness_code_2_on_both_sides() -> None:
+    increasing_classes = _classes()
+    _blob(
+        increasing_classes,
+        row=90,
+        col=100,
+        height=1,
+        width=20,
+        value=contract.TREND_INCREASE,
+    )
+    decreasing_classes = _classes()
+    _blob(
+        decreasing_classes,
+        row=100,
+        col=100,
+        height=1,
+        width=20,
+        value=contract.TREND_DECREASE,
+    )
+    increasing = trend_candidates(
+        _layers(increasing_classes),
+        "precipitation",
+        "2001-2024",
+        mask=_mask(),
+        witness_layers=_witness_constant(contract.WITNESS_CORROBORATED),
+    )
+    decreasing = trend_candidates(
+        _layers(decreasing_classes),
+        "precipitation",
+        "2001-2024",
+        mask=_mask(),
+        witness_layers=_witness_constant(contract.WITNESS_SAME_SIGN, q=0.2),
+    )
+
+    notes: list[str] = []
+    selected = select_cases(
+        increasing + decreasing,
+        max_cases=6,
+        target_cases=4,
+        selection_notes=notes,
+    )
+
+    assert not any(case["role"].startswith("opposite-pair") for case in selected)
+    assert any("Opposite pair skipped" in note for note in notes)
+    assert any("not 2" in note or "contradicted" in note for note in notes)
+
+
+def test_opposite_pair_prefers_precipitation() -> None:
+    classes = _classes()
+    _blob(classes, row=90, col=100, height=1, width=20, value=contract.TREND_INCREASE)
+    _blob(classes, row=100, col=100, height=1, width=20, value=contract.TREND_DECREASE)
+    layers = _layers(classes)
+    witness = _witness_constant(contract.WITNESS_CORROBORATED)
+    rain = trend_candidates(
+        layers, "precipitation", "2001-2024", mask=_mask(), witness_layers=witness
+    )
+    air = trend_candidates(
+        layers, "air_temperature", "2001-2024", mask=_mask(), witness_layers=witness
+    )
+
+    selected = select_cases(rain + air, max_cases=6, target_cases=4)
+    pair = [case for case in selected if case["role"].startswith("opposite-pair")]
+    assert {case["variable"] for case in pair} == {"precipitation"}
+
+
+def test_opposite_pair_rejects_the_same_place_label() -> None:
+    def pair_side(trend_class: int, label: str) -> dict:
+        candidate = _manual_candidate(
+            "precipitation",
+            "2001-2024",
+            trend_class=trend_class,
+            label=label,
+        )
+        candidate["evidence"] = [
+            {
+                "variable": "precipitation",
+                "witness": {"agreement": contract.WITNESS_CORROBORATED},
+            }
+        ]
+        candidate["witness_contradicted_share"] = 0.05
+        return candidate
+
+    notes: list[str] = []
+    selected = select_cases(
+        [pair_side(1, "Same place"), pair_side(-1, "Same place")],
+        max_cases=6,
+        target_cases=4,
+        selection_notes=notes,
+    )
+    assert not any(case["role"].startswith("opposite-pair") for case in selected)
+    assert any("both sides are labelled" in note for note in notes)
+
+
+def test_global_humidity_caution_uses_witness_disagreement() -> None:
+    classes = _classes()
+    _blob(classes, row=90, col=100, height=1, width=20, value=contract.TREND_DECREASE)
+    layers = _layers(classes, slope=-0.2)
+    witness_classes = _classes()
+    _blob(
+        witness_classes,
+        row=90,
+        col=100,
+        height=1,
+        width=20,
+        value=contract.TREND_INCREASE,
+    )
+    quality = np.zeros(SHAPE, dtype=np.int8)
+    candidate, reason = build_global_caution_candidate(
+        layers,
+        "specific_humidity",
+        "2001-2024",
+        _mask(),
+        quality_flag=quality,
+        witness_layers={
+            "trend_class": witness_classes,
+            "agreement": np.full(SHAPE, contract.WITNESS_CONTRADICTED, dtype=np.int8),
+            "sen_slope_decade": np.full(SHAPE, 0.2),
+            "q_value": np.full(SHAPE, 0.01),
+        },
+        min_cells=15,
+        screener_contradicted_fraction=0.39327739669298556,
+    )
+    assert candidate is not None, reason
+    assert candidate["caution_type"] == "witness_disagreement"
+    assert candidate["witness_contradicted_share"] == pytest.approx(
+        0.39327739669298556
+    )
+    weights = np.cos(np.deg2rad(contract.row_to_lat(90)))
+    total_weight = (
+        np.cos(np.deg2rad(np.arange(89.5, -90.0, -1.0))).sum()
+        * contract.N_COLS
+    )
+    assert candidate["main_decrease_fraction"] == pytest.approx(
+        20 * weights / total_weight
+    )
+    assert candidate["witness_increase_fraction"] == pytest.approx(
+        20 * weights / total_weight
+    )
+
+    case = build_cases_file([candidate], _registry())["cases"][0]
+    assert case["kind"] == "caution"
+    assert case["title"] == "Is the air drying? The second witness says no"
+    assert case["region"]["id"] == "global"
+    assert case["region"]["bbox"] == [-180.0, -60.0, 180.0, 90.0]
+    assert "falls across" in case["summary"]
+    assert "rises across" in case["summary"]
+    assert "39.3%" in case["summary"]
+    assert "of GLDAS's significant area" in case["summary"]
+    limitations = " ".join(case["limitations"])
+    assert "A country domain follows" not in limitations
+    assert "Witness rule:" not in case["details"]
+
+    registry = _registry()
+    registry["variables"].append(
+        {
+            "id": "specific_humidity",
+            "label": "Specific humidity",
+            "product": "GLDAS_NOAH10_M",
+            "slope_unit": "g kg-1 per year",
+            "caveats": ["Meteorological forcing field used to drive the GLDAS model."],
+        }
+    )
+    case = build_cases_file([candidate], registry)["cases"][0]
+    limitations = " ".join(case["limitations"])
+    assert (
+        "Specific humidity is a GLDAS forcing input, so the documented "
+        "2008\N{EN DASH}2012 input change acts on it directly."
+    ) in limitations
+    assert "Meteorological forcing field used to drive the GLDAS model." not in limitations
+
+
+def test_vietnam_caution_adds_lasting_shift_to_summary_and_details() -> None:
+    layers, grid, quality, breakpoints, country = _caution_inputs()
+    candidate, reason = build_caution_candidate(
+        layers,
+        "air_temperature",
+        "2001-2024",
+        country,
+        grid,
+        mask=_mask(),
+        quality_flag=quality,
+        breakpoint_year=breakpoints,
+        min_cells=15,
+        witness_layers=_witness_constant(
+            contract.WITNESS_SAME_SIGN, slope=0.14, q=0.20
+        ),
+    )
+    assert candidate is not None, reason
+    candidate["lasting_shift"] = {
+        "break_year": 2012.0,
+        "main": 0.73,
+        "witness": 0.12,
+        "annual_correlation": 0.61,
+    }
+    case = build_cases_file([candidate], _registry())["cases"][0]
+    assert case["region"]["id"] == "country_999"
+    assert "0.50" in case["summary"]  # synthetic GLDAS slope, computed
+    assert "60%" in case["summary"]
+    assert "2012" in case["summary"]
+    assert "+0.14" in case["summary"]
+    assert "+0.12" in case["summary"]
+    assert "+0.73" in case["summary"]
+    assert "not significant" in case["summary"]
+    assert "Lasting shift at 2012" in case["details"]
+    assert "vs witness +0.12" in case["details"]
+
+
+
+def test_emitted_bbox_is_not_reversed_without_a_dateline_crossing() -> None:
+    classes = _classes()
+    _blob(classes, row=90, col=190, height=1, width=15, value=contract.TREND_INCREASE)
+    candidate = trend_candidates(
+        _layers(classes), "precipitation", "2001-2024", mask=_mask()
+    )[0]
+    candidate["bbox"] = [10.0, 0.0, -10.0, 10.0]  # deliberately wrong
+    case = build_cases_file([candidate], _registry())["cases"][0]
+    assert case["region"]["bbox"][0] <= case["region"]["bbox"][2]
 
 
 def test_pattern_candidate_uses_both_variables() -> None:
@@ -888,3 +1119,382 @@ def test_finding_limitation_says_flags_are_excluded() -> None:
 
     assert "excluded from the evidence" in limitations
     assert "included on purpose" not in limitations
+
+
+def _witness_constant(code: int, *, slope: float = 0.25, q: float = 0.01) -> dict[str, np.ndarray]:
+    return {
+        "agreement": np.full(SHAPE, code, dtype=np.int8),
+        "sen_slope_decade": np.full(SHAPE, slope, dtype=float),
+        "q_value": np.full(SHAPE, q, dtype=float),
+    }
+
+
+def _increasing_blob() -> np.ndarray:
+    classes = _classes()
+    _blob(classes, row=90, col=100, height=1, width=20, value=contract.TREND_INCREASE)
+    return classes
+
+
+def _caution_inputs() -> tuple:
+    classes = _increasing_blob()
+    layers = _layers(classes, slope=0.5)
+    grid = np.full(SHAPE, contract.COUNTRY_NONE, dtype=np.int16)
+    grid[90, 100:120] = 7
+    quality = np.zeros(SHAPE, dtype=np.int8)
+    quality[90, 100:112] = 1
+    breakpoints = np.full(SHAPE, np.nan, dtype=float)
+    breakpoints[90, 100:112] = 2012.0
+    country = {"index": 7, "id": "country_999", "label": "Testland"}
+    return layers, grid, quality, breakpoints, country
+
+
+def test_witness_agreement_codes_match_the_contract() -> None:
+    main_class = _classes()
+    witness_class = _classes()
+    main_slope = np.zeros(SHAPE, dtype=float)
+    witness_slope = np.zeros(SHAPE, dtype=float)
+    main_q = np.ones(SHAPE, dtype=float)
+    witness_q = np.ones(SHAPE, dtype=float)
+    mask = _mask()
+
+    # 2: both significant, same sign.
+    main_slope[90, 100] = 1.0
+    witness_slope[90, 100] = 0.4
+    main_q[90, 100] = 0.01
+    witness_q[90, 100] = 0.01
+    # 1: same sign, witness not significant.
+    main_slope[90, 101] = 1.0
+    witness_slope[90, 101] = 0.2
+    main_q[90, 101] = 0.01
+    witness_q[90, 101] = 0.20
+    # -1: opposite sign, witness not significant.
+    main_slope[90, 102] = 1.0
+    witness_slope[90, 102] = -0.2
+    main_q[90, 102] = 0.01
+    witness_q[90, 102] = 0.20
+    # -2: both significant, opposite sign.
+    main_slope[90, 103] = 1.0
+    witness_slope[90, 103] = -0.4
+    main_q[90, 103] = 0.01
+    witness_q[90, 103] = 0.01
+    # 0: main trend not significant.
+    main_slope[90, 104] = 1.0
+    witness_slope[90, 104] = 1.0
+    main_q[90, 104] = 0.20
+    witness_q[90, 104] = 0.01
+    # -9: main series was not evaluated.
+    main_class[90, 105] = contract.INSUFFICIENT_DATA
+    main_slope[90, 105] = np.nan
+    main_q[90, 105] = np.nan
+    # -99: outside the analysis mask.
+    mask[90, 106] = False
+    main_slope[90, 106] = 1.0
+    witness_slope[90, 106] = 1.0
+    main_q[90, 106] = 0.01
+    witness_q[90, 106] = 0.01
+
+    codes = witness_agreement_grid(
+        {
+            "trend_class": main_class,
+            "sen_slope_decade": main_slope,
+            "q_value": main_q,
+        },
+        {
+            "trend_class": witness_class,
+            "sen_slope_decade": witness_slope,
+            "q_value": witness_q,
+        },
+        mask,
+    )
+
+    assert int(codes[90, 100]) == contract.WITNESS_CORROBORATED
+    assert int(codes[90, 101]) == contract.WITNESS_SAME_SIGN
+    assert int(codes[90, 102]) == contract.WITNESS_OPPOSITE_SIGN
+    assert int(codes[90, 103]) == contract.WITNESS_CONTRADICTED
+    assert int(codes[90, 104]) == contract.WITNESS_MAIN_NOT_SIGNIFICANT
+    assert int(codes[90, 105]) == contract.INSUFFICIENT_DATA
+    assert int(codes[90, 106]) == contract.OUTSIDE_DOMAIN
+
+
+def test_agreeing_witness_uses_median_slope_median_q_and_majority_code() -> None:
+    classes = _increasing_blob()
+    layers = _layers(classes, slope=1.0, q=0.01)
+    agreement = np.full(SHAPE, contract.OUTSIDE_DOMAIN, dtype=np.int8)
+    agreement[90, 100:112] = contract.WITNESS_CORROBORATED
+    agreement[90, 112:120] = contract.WITNESS_SAME_SIGN
+    slopes = np.arange(1.0, 21.0)
+    witness_slope = np.full(SHAPE, np.nan)
+    witness_slope[90, 100:120] = slopes
+    witness_q = np.full(SHAPE, np.nan)
+    witness_q[90, 100:120] = np.linspace(0.001, 0.02, 20)
+    weights = np.full(20, np.cos(np.deg2rad(contract.row_to_lat(90))))
+
+    candidate = trend_candidates(
+        layers,
+        "air_temperature",
+        "2001-2024",
+        mask=_mask(),
+        witness_layers={
+            "agreement": agreement,
+            "sen_slope_decade": witness_slope,
+            "q_value": witness_q,
+        },
+    )[0]
+    bare = trend_candidates(
+        layers, "air_temperature", "2001-2024", mask=_mask()
+    )[0]
+    witness = candidate["evidence"][0]["witness"]
+
+    assert witness["agreement"] == contract.WITNESS_CORROBORATED
+    assert witness["sen_slope_decade"] == pytest.approx(weighted_median(slopes, weights))
+    assert witness["q_value"] == pytest.approx(
+        weighted_median(witness_q[90, 100:120], weights)
+    )
+    assert witness["product"] == "MERRA-2 M2TMNXSLV 5.12.4"
+    assert witness["variable"] == "T2M"
+    assert witness["slope_unit"] == "degC per decade"
+    assert candidate["witness_corroborated_share"] == pytest.approx(12 / 20)
+    assert candidate["witness_score_factor"] == pytest.approx(0.5 + 0.5 * 12 / 20)
+    assert candidate["score"] == pytest.approx(bare["score"] * candidate["witness_score_factor"])
+
+    case = build_cases_file([candidate], _registry())["cases"][0]
+    published = case["evidence"][0]["witness"]
+    assert set(published) == {
+        "product",
+        "variable",
+        "sen_slope_decade",
+        "slope_unit",
+        "q_value",
+        "agreement",
+    }
+    assert published["agreement"] == 2
+    assert "MERRA-2 is also a model (reanalysis)" in " ".join(case["limitations"])
+
+
+def test_witness_agreement_is_computed_when_the_export_grid_is_absent() -> None:
+    classes = _increasing_blob()
+    main = _layers(classes, slope=1.0, q=0.01)
+    witness_class = _classes()
+    _blob(
+        witness_class,
+        row=90,
+        col=100,
+        height=1,
+        width=20,
+        value=contract.TREND_INCREASE,
+    )
+    candidate = trend_candidates(
+        main,
+        "precipitation",
+        "2001-2024",
+        mask=_mask(),
+        witness_layers={
+            "trend_class": witness_class,
+            "sen_slope_decade": np.full(SHAPE, 0.25),
+            "q_value": np.full(SHAPE, 0.01),
+        },
+    )[0]
+    witness = candidate["evidence"][0]["witness"]
+
+    assert witness["agreement"] == contract.WITNESS_CORROBORATED
+    assert witness["sen_slope_decade"] == pytest.approx(0.25)
+    assert witness["product"] == "GPCP GPCPMON 3.3"
+    assert witness["variable"] == "sat_gauge_precip"
+    assert witness["slope_unit"] == "mm/month per decade"
+    limitations = " ".join(build_cases_file([candidate], _registry())["cases"][0]["limitations"])
+    assert "GPCP shares rain-gauge inputs with IMERG" in limitations
+
+
+def test_corroborated_cluster_wins_an_equal_raw_score() -> None:
+    classes = _increasing_blob()
+    layers = _layers(classes)
+    agreed = trend_candidates(
+        layers,
+        "air_temperature",
+        "2001-2024",
+        mask=_mask(),
+        witness_layers=_witness_constant(contract.WITNESS_CORROBORATED),
+    )[0]
+    uncorroborated = trend_candidates(
+        layers,
+        "surface_skin_temperature",
+        "2001-2024",
+        mask=_mask(),
+        witness_layers=_witness_constant(contract.WITNESS_SAME_SIGN, q=0.2),
+    )[0]
+
+    assert agreed["witness_score_factor"] == pytest.approx(1.0)
+    assert uncorroborated["witness_score_factor"] == pytest.approx(0.5)
+    assert agreed["score"] == pytest.approx(uncorroborated["score"] * 2.0)
+
+    selected = select_cases(
+        [uncorroborated, agreed], max_cases=1, target_cases=1
+    )
+
+    assert len(selected) == 1
+    assert selected[0]["variable"] == "air_temperature"
+
+
+def test_mostly_contradicted_finding_is_not_selected() -> None:
+    classes = _increasing_blob()
+    contradicted = trend_candidates(
+        _layers(classes, std=5.0),
+        "air_temperature",
+        "2001-2024",
+        mask=_mask(),
+        witness_layers=_witness_constant(
+            contract.WITNESS_CONTRADICTED, slope=-0.4
+        ),
+    )[0]
+    corroborated = trend_candidates(
+        _layers(classes, std=0.1),
+        "specific_humidity",
+        "2001-2024",
+        mask=_mask(),
+        witness_layers=_witness_constant(contract.WITNESS_CORROBORATED),
+    )[0]
+
+    assert contradicted["witness_contradicted_share"] == pytest.approx(1.0)
+    assert contradicted["score"] > corroborated["score"]
+
+    selected = select_cases(
+        [contradicted, corroborated], max_cases=1, target_cases=1
+    )
+
+    assert len(selected) == 1
+    assert selected[0]["variable"] == "specific_humidity"
+
+
+def test_contradicted_share_of_exactly_half_is_still_eligible() -> None:
+    classes = _increasing_blob()
+    agreement = np.full(SHAPE, contract.WITNESS_CONTRADICTED, dtype=np.int8)
+    agreement[90, 100:110] = contract.WITNESS_CORROBORATED
+    candidate = trend_candidates(
+        _layers(classes),
+        "air_temperature",
+        "2001-2024",
+        mask=_mask(),
+        witness_layers={
+            "agreement": agreement,
+            "sen_slope_decade": np.full(SHAPE, 0.2),
+            "q_value": np.full(SHAPE, 0.01),
+        },
+    )[0]
+
+    assert candidate["witness_contradicted_share"] == pytest.approx(0.5)
+    selected = select_cases([candidate], max_cases=1, target_cases=1)
+    assert len(selected) == 1
+    assert selected[0]["variable"] == "air_temperature"
+
+
+def test_missing_witness_does_not_change_the_score_or_evidence() -> None:
+    classes = _increasing_blob()
+    layers = _layers(classes)
+    candidate = trend_candidates(
+        layers, "precipitation", "2001-2024", mask=_mask()
+    )[0]
+    case = build_cases_file([candidate], _registry())
+
+    assert "witness" not in candidate["evidence"][0]
+    assert candidate["witness_corroborated_share"] is None
+    assert candidate["witness_contradicted_share"] is None
+    assert candidate["witness_score_factor"] == pytest.approx(1.0)
+    assert "witness" not in case["cases"][0]["evidence"][0]
+    assert "Witness rule: no witness agreement layer" in case["cases"][0]["details"]
+    assert "0.5 + 0.5 x corroborated share" in case["selection_method"]
+    assert "agreement code -2 share above 50%" in case["selection_method"]
+
+
+def test_caution_summary_adds_a_corroborating_witness_verdict() -> None:
+    layers, grid, quality, breakpoints, country = _caution_inputs()
+    candidate, reason = build_caution_candidate(
+        layers,
+        "air_temperature",
+        "2001-2024",
+        country,
+        grid,
+        mask=_mask(),
+        quality_flag=quality,
+        breakpoint_year=breakpoints,
+        min_cells=15,
+        witness_layers=_witness_constant(contract.WITNESS_CORROBORATED, slope=0.3, q=0.02),
+    )
+    assert candidate is not None, reason
+    case = build_cases_file([candidate], _registry())["cases"][0]
+
+    assert case["kind"] == "caution"
+    assert "sudden shift around 2012" in case["summary"]
+    assert "GLDAS 2008" in case["summary"]
+    assert (
+        "MERRA-2 reanalysis shows the same warming, so the trend is more likely real."
+        in case["summary"]
+    )
+    assert "score" not in case["summary"].lower()
+    assert case["evidence"][0]["witness"]["agreement"] == 2
+    assert case["evidence"][0]["witness"]["sen_slope_decade"] == pytest.approx(0.3)
+    assert "Witness rule:" not in case["details"]
+    assert "MERRA-2 is also a model (reanalysis)" in " ".join(case["limitations"])
+    # Caution cases are not ranking findings, so the score is not scaled.
+    assert candidate["witness_score_factor"] == pytest.approx(1.0)
+
+
+def test_caution_summary_adds_a_contradicting_witness_verdict() -> None:
+    layers, grid, quality, breakpoints, country = _caution_inputs()
+    candidate, reason = build_caution_candidate(
+        layers,
+        "air_temperature",
+        "2001-2024",
+        country,
+        grid,
+        mask=_mask(),
+        quality_flag=quality,
+        breakpoint_year=breakpoints,
+        min_cells=15,
+        witness_layers=_witness_constant(
+            contract.WITNESS_CONTRADICTED, slope=-0.2, q=0.01
+        ),
+    )
+    assert candidate is not None, reason
+    summary = build_cases_file([candidate], _registry())["cases"][0]["summary"]
+
+    assert candidate["evidence"][0]["witness"]["agreement"] == contract.WITNESS_CONTRADICTED
+    assert (
+        "MERRA-2 reanalysis does not show the same warming, so the trend is "
+        "more likely a data artefact."
+    ) in summary
+    assert "more likely real" not in summary
+
+
+def test_pattern_finding_uses_the_weakest_witness_and_can_be_rejected() -> None:
+    temperature = _classes()
+    moisture = _classes()
+    _blob(temperature, row=90, col=100, height=2, width=10, value=contract.TREND_INCREASE)
+    _blob(moisture, row=90, col=100, height=2, width=10, value=contract.TREND_DECREASE)
+    candidates = pattern_candidates(
+        {
+            "surface_skin_temperature": _layers(temperature),
+            "root_zone_soil_moisture": _layers(moisture, slope=-2.0),
+        },
+        "surface_skin_temperature",
+        "root_zone_soil_moisture",
+        "2001-2024",
+        mask=_mask(),
+        pattern_codes=(contract.PATTERN_WARMING_DRYING,),
+        min_cluster_cells=15,
+        witness_by_variable={
+            "surface_skin_temperature": _witness_constant(contract.WITNESS_CORROBORATED),
+            "root_zone_soil_moisture": _witness_constant(
+                contract.WITNESS_CONTRADICTED, slope=-0.1
+            ),
+        },
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate["witness_corroborated_share"] == pytest.approx(0.0)
+    assert candidate["witness_contradicted_share"] == pytest.approx(1.0)
+    assert [item["witness"]["agreement"] for item in candidate["evidence"]] == [
+        contract.WITNESS_CORROBORATED,
+        contract.WITNESS_CONTRADICTED,
+    ]
+    assert select_cases([candidate], max_cases=2, target_cases=1) == []

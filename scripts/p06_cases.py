@@ -36,12 +36,14 @@ from earthpulse.cases import (
     DEFAULT_WINDOW_PRIORITY_BONUS,
     build_cases_file,
     build_caution_candidate,
+    build_global_caution_candidate,
     combine_quality_flags,
     country_candidates,
     load_cases_config,
     pattern_candidates,
     select_cases,
     trend_candidates,
+    witness_agreement_grid,
     write_cases,
 )
 from earthpulse.patterns import pattern_class
@@ -50,6 +52,9 @@ REGISTRY_PATH = DEFAULT_REGISTRY_PATH
 REGIONS_PATH = DEFAULT_REGIONS_PATH
 PROJECT_ROOT = DEFAULT_TRENDS_DIR.parents[2]
 DEFAULT_MASK_PATH = PROJECT_ROOT / "data" / "interim" / "harmonized_monthly" / "common_mask.nc"
+DEFAULT_WITNESS_TRENDS_DIR = PROJECT_ROOT / "data" / "processed" / "witness" / "trends"
+DEFAULT_ANOMALY_DIR = PROJECT_ROOT / "data" / "processed" / "anomalies"
+DEFAULT_WITNESS_ANOMALY_DIR = PROJECT_ROOT / "data" / "processed" / "witness" / "anomalies"
 
 
 def _read_yaml(path: Path) -> dict:
@@ -142,6 +147,73 @@ def _load_quality(
     return _load_quality_from_export(export_dir, variable, window)
 
 
+def _load_i8_grid(path: Path, label: str) -> np.ndarray:
+    values = np.fromfile(path, dtype=np.int8)
+    if values.size != contract.N_ROWS * contract.N_COLS:
+        raise ValueError(f"{path}: unexpected {label} size {values.size}")
+    return values.reshape(contract.N_ROWS, contract.N_COLS)
+
+
+def _load_witness_trend(path: Path) -> dict[str, np.ndarray] | None:
+    """P13 witness trend file, or None when that variable/window was not run."""
+
+    if not path.is_file():
+        return None
+    required = ("trend_class", "sen_slope_decade", "q_value")
+    ds = xr.open_dataset(path, engine="netcdf4")
+    try:
+        missing = [name for name in required if name not in ds]
+        if missing:
+            raise ValueError(f"{path}: missing witness fields {missing}")
+        return {name: np.asarray(ds[name].values) for name in required}
+    finally:
+        ds.close()
+
+
+def _witness_layers_for(
+    export_dir: Path,
+    witness_trends_dir: Path,
+    variable: str,
+    window: str,
+    main_layers: dict,
+    mask: np.ndarray,
+) -> dict[str, np.ndarray] | None:
+    """Agreement from the export grid, else computed from P13 witness trends.
+
+    Sen slope and q always come from the witness trend file.  The export only
+    stores the agreement code and the standardized change, not the slope.
+    """
+
+    agreement_path = (
+        export_dir / "grids" / variable / window / "witness_agreement.i8"
+    )
+    agreement = (
+        _load_i8_grid(agreement_path, "witness_agreement")
+        if agreement_path.is_file()
+        else None
+    )
+    trend = _load_witness_trend(witness_trends_dir / variable / f"{window}.nc")
+    if agreement is None and trend is not None:
+        agreement = witness_agreement_grid(main_layers, trend, mask)
+    if agreement is None:
+        return None
+    if trend is None:
+        empty = np.full(agreement.shape, np.nan)
+        slope = empty
+        q_value = empty
+        trend_class = None
+    else:
+        slope = trend["sen_slope_decade"]
+        q_value = trend["q_value"]
+        trend_class = trend["trend_class"]
+    return {
+        "agreement": agreement,
+        "sen_slope_decade": slope,
+        "q_value": q_value,
+        "trend_class": trend_class,
+    }
+
+
 def _load_pattern_layer(
     export_dir: Path,
     window: str,
@@ -190,6 +262,28 @@ def _load_country_context(export_dir: Path) -> tuple[list[dict], np.ndarray | No
     return [], None
 
 
+def _load_screener_witness_fraction(
+    export_dir: Path,
+    window: str,
+    domain: str,
+    variable: str,
+    field: str,
+) -> float | None:
+    """Read one optional witness fraction from a Screener file."""
+
+    path = export_dir / "screener" / window / f"{domain}.json"
+    if not path.is_file():
+        return None
+    import json
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    for row in data.get("rows", []):
+        if row.get("variable") == variable:
+            value = row.get(field)
+            return float(value) if value is not None else None
+    return None
+
+
 def _mask_path(explicit: Path | None) -> Path:
     if explicit is not None:
         return explicit
@@ -211,6 +305,74 @@ def _load_mask(path: Path) -> np.ndarray:
         return values.astype(bool, copy=False)
     finally:
         ds.close()
+
+
+def _case_annual_series(
+    path: Path, rows: np.ndarray, cols: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Area-weighted annual means of monthly anomalies over the case cells."""
+
+    ds = xr.open_dataset(path, engine="netcdf4")
+    try:
+        anomaly = np.asarray(ds["anomaly"].values, dtype=float)
+        years = np.asarray(ds["time"].dt.year.values, dtype=int)
+    finally:
+        ds.close()
+    weights = np.cos(np.deg2rad(contract.row_to_lat(np.asarray(rows, dtype=int))))
+    annual_years: list[int] = []
+    annual_values: list[float] = []
+    for year in sorted(set(int(value) for value in years)):
+        block = anomaly[years == year][:, rows, cols]
+        values = block  # (months, cells)
+        valid = np.isfinite(values)
+        denominator = valid * weights[None, :]
+        denom_sum = denominator.sum(axis=1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            monthly = np.where(
+                denom_sum > 0,
+                np.nansum(np.where(valid, values, 0.0) * weights[None, :], axis=1)
+                / denom_sum,
+                np.nan,
+            )
+        annual_years.append(year)
+        annual_values.append(
+            float(np.nanmean(monthly)) if np.isfinite(monthly).any() else np.nan
+        )
+    return np.asarray(annual_years), np.asarray(annual_values)
+
+
+def _lasting_shift(
+    rows: np.ndarray, cols: np.ndarray, break_year: float
+) -> dict:
+    """P06f: mean(annual anomaly, years >= break) - mean(years < break)."""
+
+    years, main = _case_annual_series(
+        DEFAULT_ANOMALY_DIR / "air_temperature.nc", rows, cols
+    )
+    witness_years, witness = _case_annual_series(
+        DEFAULT_WITNESS_ANOMALY_DIR / "air_temperature.nc", rows, cols
+    )
+    if not np.array_equal(years, witness_years):
+        raise ValueError("main and witness anomaly year labels differ")
+
+    before = years < float(break_year)
+    after = years >= float(break_year)
+
+    def _shift(values: np.ndarray) -> float | None:
+        if np.isfinite(values[before]).any() and np.isfinite(values[after]).any():
+            return float(np.nanmean(values[after]) - np.nanmean(values[before]))
+        return None
+
+    finite = np.isfinite(main) & np.isfinite(witness)
+    correlation = None
+    if finite.sum() >= 3:
+        correlation = float(np.corrcoef(main[finite], witness[finite])[0, 1])
+    return {
+        "break_year": float(break_year),
+        "main": _shift(main),
+        "witness": _shift(witness),
+        "annual_correlation": correlation,
+    }
 
 
 def _windows(index: dict) -> list[str]:
@@ -298,6 +460,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cases-config", type=Path, default=DEFAULT_CASES_CONFIG_PATH)
     parser.add_argument("--mask", type=Path, default=None)
     parser.add_argument(
+        "--witness-trends-dir",
+        type=Path,
+        default=DEFAULT_WITNESS_TRENDS_DIR,
+        help="P13 witness trend NetCDFs (used when the export has no agreement grid)",
+    )
+    parser.add_argument(
         "--min-cluster-cells",
         type=int,
         default=None,
@@ -355,6 +523,7 @@ def main(argv: list[str] | None = None) -> int:
 
     trend_cache: dict[tuple[str, str], dict] = {}
     quality_cache: dict[tuple[str, str], np.ndarray | None] = {}
+    witness_cache: dict[tuple[str, str], dict] = {}
     quality_check_windows: dict[tuple[str, str], tuple[str, ...]] = {}
     candidates: list[dict] = []
     skipped: list[str] = []
@@ -374,6 +543,23 @@ def main(argv: list[str] | None = None) -> int:
     for (variable_id, window), layers in trend_cache.items():
         quality_cache[(variable_id, window)] = _load_quality(
             export_dir, variable_id, window, layers
+        )
+        witness = _witness_layers_for(
+            export_dir,
+            args.witness_trends_dir,
+            variable_id,
+            window,
+            layers,
+            mask,
+        )
+        if witness is not None:
+            witness_cache[(variable_id, window)] = witness
+    if witness_cache:
+        print(f"Witness layers: {len(witness_cache)} variable/window grids")
+    else:
+        print(
+            "Witness layers not available yet (export has no witness_agreement "
+            "grid and P13 witness trends are absent); evidence.witness omitted."
         )
 
     for window in windows:
@@ -402,6 +588,7 @@ def main(argv: list[str] | None = None) -> int:
                     quality_check_windows=tuple(check_windows),
                     min_cluster_cells=min_cluster_cells,
                     regions=regions,
+                    witness_layers=witness_cache.get(key),
                 )
             )
 
@@ -445,6 +632,12 @@ def main(argv: list[str] | None = None) -> int:
                 quality_check_windows=tuple(pattern_check),
                 min_cluster_cells=min_cluster_cells,
                 regions=regions,
+                witness_by_variable={
+                    variable_id: witness_cache[(variable_id, window)]
+                    for variable_id in (temperature_variable, moisture_variable)
+                    if (variable_id, window) in witness_cache
+                }
+                or None,
             )
         )
 
@@ -480,9 +673,16 @@ def main(argv: list[str] | None = None) -> int:
                     quality_check_windows=tuple(country_check),
                     min_cells=min_cluster_cells,
                     regions=regions,
+                    witness_by_variable={
+                        variable_id: witness_cache[(variable_id, window)]
+                        for variable_id in layers_by_variable
+                        if (variable_id, window) in witness_cache
+                    }
+                    or None,
                 )
             )
 
+    selection_notes: list[str] = []
     selected = select_cases(
         candidates,
         max_cases=max_cases,
@@ -492,7 +692,12 @@ def main(argv: list[str] | None = None) -> int:
         preferred_country_ids=DEFAULT_PREFERRED_COUNTRY_IDS,
         min_place_cells=min_cluster_cells,
         window_priority_bonus=DEFAULT_WINDOW_PRIORITY_BONUS,
+        countries=countries,
+        country_grid=country_grid,
+        selection_notes=selection_notes,
     )
+    for note in selection_notes:
+        print(f"Selection note: {note}")
 
     # P06c: replace the Vietnam slot with exactly one caution case built from
     # the whole Vietnam air-temperature country domain, including flagged cells.
@@ -532,9 +737,19 @@ def main(argv: list[str] | None = None) -> int:
             breakpoint_year=breakpoint_year,
             min_cells=min_cluster_cells,
             regions=regions,
+            witness_layers=witness_cache.get(("air_temperature", "2001-2024")),
         )
 
     if caution is not None:
+        if caution.get("break_year") is not None:
+            try:
+                caution["lasting_shift"] = _lasting_shift(
+                    np.asarray(caution["rows"]),
+                    np.asarray(caution["cols"]),
+                    float(caution["break_year"]),
+                )
+            except (FileNotFoundError, ValueError) as exc:
+                print(f"Warning: lasting shift could not be computed: {exc}")
         selected = [
             candidate
             for candidate in selected
@@ -561,6 +776,59 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"Caution case not built: {caution_reason}. Falling back to the "
             "current Southeast Asia rule."
+        )
+
+    # P06f: second caution case, global specific humidity 2001-2024.
+    global_caution = None
+    global_caution_reason = ""
+    humidity_layers = trend_cache.get(("specific_humidity", "2001-2024"))
+    humidity_quality = quality_cache.get(("specific_humidity", "2001-2024"))
+    humidity_witness = witness_cache.get(("specific_humidity", "2001-2024"))
+    if humidity_layers is None:
+        global_caution_reason = "specific_humidity/2001-2024 trend layers are missing"
+    elif humidity_quality is None:
+        global_caution_reason = "specific_humidity/2001-2024 quality flags are missing"
+    elif humidity_witness is None:
+        global_caution_reason = "specific_humidity witness layers are missing"
+    else:
+        screener_contradicted = _load_screener_witness_fraction(
+            export_dir,
+            "2001-2024",
+            "global",
+            "specific_humidity",
+            "witness_contradicted_fraction",
+        )
+        global_caution, global_caution_reason = build_global_caution_candidate(
+            humidity_layers,
+            "specific_humidity",
+            "2001-2024",
+            mask,
+            quality_flag=humidity_quality,
+            witness_layers=humidity_witness,
+            regions=regions,
+            min_cells=min_cluster_cells,
+            screener_contradicted_fraction=screener_contradicted,
+        )
+    if global_caution is not None:
+        selected = [
+            candidate
+            for candidate in selected
+            if not (
+                candidate.get("variable") == "specific_humidity"
+                and candidate.get("window") == "2001-2024"
+            )
+        ]
+        if len(selected) >= max_cases:
+            selected = selected[: max_cases - 1]
+        global_caution["role"] = "caution"
+        selected.append(global_caution)
+        print(
+            "Caution case: global specific humidity 2001–2024 witness "
+            "disagreement added."
+        )
+    else:
+        print(
+            f"Global humidity caution case not built: {global_caution_reason}."
         )
 
     cases_file = build_cases_file(

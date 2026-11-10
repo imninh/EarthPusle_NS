@@ -7,6 +7,7 @@ import {
   heroVariableId,
   qualityEvidenceText,
   shouldShowQualityNote,
+  witnessEvidenceText,
 } from './insights'
 
 const variable = (id: string, label: string, category = 'water'): VariableMeta => ({
@@ -32,6 +33,8 @@ const row = (
   decrease: number,
   contrast: number | null,
   sigTrendFlagged: number | null = null,
+  witnessConfirmed: number | null = null,
+  witnessContradicted: number | null = null,
 ): ScreenerRow => ({
   variable: variableId,
   valid_area_fraction: 0.99,
@@ -42,6 +45,8 @@ const row = (
   regional_contrast: contrast,
   n_cells_evaluated: 100,
   sig_trend_flagged_fraction: sigTrendFlagged,
+  witness_corroborated_fraction: witnessConfirmed,
+  witness_contradicted_fraction: witnessContradicted,
 })
 
 const variables = [
@@ -106,6 +111,27 @@ describe('loss-signal quality weighting', () => {
     const insights = buildHomeInsights(variables, rows, '2001-01', '2024-12')
     const loss = insights.find((insight) => insight.id === 'decrease')
     expect(loss?.variableId).toBe('soil')
+  })
+
+  it('uses witness corroboration when it is present', () => {
+    const candidates = [
+      variable('specific_humidity', 'Specific humidity', 'atmosphere'),
+      variable('root_zone_soil_moisture', 'Root-zone soil moisture'),
+      variable('surface_soil_moisture', 'Surface soil moisture'),
+    ]
+    const candidateRows = [
+      // 0.416 x 0.156 = 0.065: most-contradicted, so it must not lead.
+      row('specific_humidity', 0.08, 0.416, 0.16, null, 0.156, 0.394),
+      // 0.333 x 0.309 = 0.103: the witness-weighted winner.
+      row('root_zone_soil_moisture', 0.09, 0.333, 0.22, null, 0.309, 0.1),
+      // 0.281 x 0.324 = 0.091.
+      row('surface_soil_moisture', 0.09, 0.281, 0.22, null, 0.324, 0.2),
+    ]
+    const insights = buildHomeInsights(candidates, candidateRows, '2001-01', '2024-12')
+    const loss = insights.find((insight) => insight.id === 'decrease')
+    expect(loss?.variableId).toBe('root_zone_soil_moisture')
+    expect(loss?.value).toBe('33.3%')
+    expect(loss?.witnessConfirmed).toBeCloseTo(0.309)
   })
 })
 
@@ -175,5 +201,102 @@ describe('caution entry card', () => {
     expect(buildCautionEntry([])).toBeNull()
     expect(buildCautionEntry(undefined)).toBeNull()
     expect(buildCautionEntry([{ ...caution, kind: 'finding' }])).toBeNull()
+  })
+
+  it('keeps the country caution case when another global caution case exists', () => {
+    const globalCaution: DetectiveCase = {
+      ...caution,
+      id: 'case-caution-global',
+      region: { bbox: [-180, -60, 180, 90], label: 'Global land' },
+      evidence: [{ ...caution.evidence[0]!, variable: 'specific_humidity' }],
+    }
+    expect(buildCautionEntry([globalCaution, caution], [{ label: 'Vietnam' }])?.caseId).toBe(caution.id)
+    expect(buildCautionEntry([globalCaution, caution], [])?.caseId).toBe(globalCaution.id)
+  })
+})
+
+describe('second-witness disagreement card', () => {
+  const caution: DetectiveCase = {
+    id: 'case-caution-humidity',
+    title: 'Is the air drying? The second witness says no',
+    region: { bbox: [-180, -60, 180, 90], label: 'Global land' },
+    window: '2001-2024',
+    why_selected: 'Technical.',
+    summary: 'GLDAS and MERRA-2 disagree.',
+    evidence: [
+      {
+        variable: 'specific_humidity',
+        product: 'GLDAS_NOAH10_M',
+        method: 'MK',
+        sen_slope_decade: -1,
+        slope_unit: 'g kg-1 per decade',
+        p_value: 0.0001,
+        q_value: 0.0001,
+        valid_observations: 288,
+        coverage_fraction: 1,
+        trend_class: -1,
+      },
+    ],
+    limitations: [],
+    kind: 'caution',
+  }
+
+  it('uses the largest contradicted fraction and links to its caution case', () => {
+    const witnessRows = [
+      row('air_temperature', 0.57, 0.04, 0.07, null, 0.6, 0.05),
+      row('specific_humidity', 0.08, 0.416, 0.16, null, 0.156, 0.394),
+      row('root_zone_soil_moisture', 0.09, 0.333, 0.22, null, 0.309, 0.13),
+    ]
+    const insightVariables = [
+      variable('air_temperature', 'Air temperature', 'temperature'),
+      variable('specific_humidity', 'Specific humidity', 'atmosphere'),
+      variable('root_zone_soil_moisture', 'Root-zone soil moisture'),
+    ]
+    const insights = buildHomeInsights(
+      insightVariables,
+      witnessRows,
+      '2001-01',
+      '2024-12',
+      [caution],
+    )
+    const witness = insights.find((insight) => insight.id === 'witness')!
+    expect(witness.variableId).toBe('specific_humidity')
+    expect(witness.value).toBe('39.4%')
+    expect(witness.title).toBe('The second witness disagrees')
+    expect(witness.detail).toContain('independent NASA dataset')
+    expect(witness.caseId).toBe('case-caution-humidity')
+    expect(insights.some((insight) => insight.id === 'breadth')).toBe(false)
+  })
+
+  it('falls back to the Discovery witness layer when no case matches', () => {
+    const witnessRows = [row('specific_humidity', 0.08, 0.416, 0.16, null, 0.156, 0.394)]
+    const insights = buildHomeInsights(
+      [variable('specific_humidity', 'Specific humidity', 'atmosphere')],
+      witnessRows,
+      '2001-01',
+      '2024-12',
+      [],
+    )
+    const witness = insights.find((insight) => insight.id === 'witness')!
+    expect(witness.caseId).toBeNull()
+    expect(witness.variableId).toBe('specific_humidity')
+  })
+})
+
+describe('second-witness evidence line', () => {
+  it('shows the confirmed share from the screener row', () => {
+    const witnessRows = [
+      row('air_temperature', 0.57, 0.05, 0.07, null, 0.64),
+      row('soil', 0.09, 0.32, 0.22, null, null),
+      row('precipitation', 0.06, 0.06, 0.48, null, 0.51),
+    ]
+    const insights = buildHomeInsights(variables, witnessRows, '2001-01', '2024-12')
+    const warming = insights.find((insight) => insight.id === 'warming')!
+    const loss = insights.find((insight) => insight.id === 'decrease')!
+    expect(warming.witnessConfirmed).toBeCloseTo(0.64)
+    expect(witnessEvidenceText(warming)).toBe('64.0% confirmed by a second NASA dataset')
+    expect(loss.variableId).toBe('soil')
+    expect(loss.witnessConfirmed).toBeNull()
+    expect(witnessEvidenceText(loss)).toBeNull()
   })
 })

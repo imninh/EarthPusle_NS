@@ -1,0 +1,84 @@
+# P13 witness registry. Mirrors earthpulse.contract.WITNESSES.
+# Product facts verified in CMR on 2026-11-09 (README §7, DATA_CONTRACT §13).
+#
+# A witness is corroboration, not ground truth:
+# - MERRA-2 is a separate GMAO reanalysis, not the GLDAS forcing archive.
+# - GPCP and IMERG share GPCC gauge inputs, so precipitation witness
+#   independence is partial.
+
+products:
+  M2TMNXSLV:
+    version: "5.12.4"
+    doi: "10.5067/AP1B0BA5PD2K"
+    label: "MERRA-2 reanalysis (single-level monthly)"
+    short_name: M2TMNXSLV
+    raw_subdir: M2TMNXSLV
+    source_type: reanalysis
+    independence: "Separate GMAO MERRA-2 reanalysis; not the GLDAS forcing archive."
+  M2TMNXLND:
+    version: "5.12.4"
+    doi: "10.5067/8S35XF81C28F"
+    label: "MERRA-2 reanalysis (land monthly)"
+    short_name: M2TMNXLND
+    raw_subdir: M2TMNXLND
+    source_type: reanalysis
+    independence: "Separate GMAO MERRA-2 reanalysis; not the GLDAS forcing archive."
+  GPCPMON:
+    version: "3.3"
+    doi: "10.5067/MEASURES/GPCP/DATA306"
+    label: "GPCP monthly precipitation"
+    short_name: GPCPMON
+    raw_subdir: GPCPMON
+    source_type: mission_observation
+    independence: "Independent GPCP satellite-gauge product; shares GPCC gauge inputs with IMERG, so independence is partial."
+
+variables:
+  air_temperature:
+    product: M2TMNXSLV
+    source_variable: T2M
+    native_unit: K
+    display_unit: degC
+    conversion: kelvin_to_celsius
+    main_variable: air_temperature
+  surface_skin_temperature:
+    product: M2TMNXSLV
+    source_variable: TS
+    native_unit: K
+    display_unit: degC
+    conversion: kelvin_to_celsius
+    main_variable: surface_skin_temperature
+  specific_humidity:
+    product: M2TMNXSLV
+    source_variable: QV2M
+    native_unit: kg kg-1
+    display_unit: g kg-1
+    conversion: kg_per_kg_to_g_per_kg
+    main_variable: specific_humidity
+  evapotranspiration:
+    product: M2TMNXLND
+    source_variable: EVLAND
+    native_unit: kg m-2 s-1
+    display_unit: mm/month
+    conversion: per_second_to_per_month
+    main_variable: evapotranspiration
+  surface_soil_moisture:
+    product: M2TMNXLND
+    source_variable: GWETTOP
+    native_unit: "1"
+    display_unit: fraction
+    conversion: identity
+    main_variable: surface_soil_moisture
+  root_zone_soil_moisture:
+    product: M2TMNXLND
+    source_variable: GWETROOT
+    native_unit: "1"
+    display_unit: fraction
+    conversion: identity
+    main_variable: root_zone_soil_moisture
+  precipitation:
+    product: GPCPMON
+    source_variable: sat_gauge_precip
+    native_unit: mm/day
+    display_unit: mm/month
+    conversion: per_day_to_per_month
+    main_variable: precipitation

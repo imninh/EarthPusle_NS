@@ -26,7 +26,9 @@ def bh_fdr(p_values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     -------
     (q_values, rejected)
         ``q_values`` has the same shape as ``p_values`` (NaN where excluded);
-        ``rejected`` is a boolean array (False where excluded).
+        ``rejected`` is a boolean array (False where excluded) that follows the
+        contract strictly: ``q < Q_THRESHOLD``. ``multipletests`` itself can
+        reject at ``q == Q_THRESHOLD``, so its mask is not used directly.
     """
     p = np.asarray(p_values, dtype=float)
     q = np.full(p.shape, np.nan)
@@ -39,7 +41,7 @@ def bh_fdr(p_values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
     # clip to [0, 1] so tiny floating-point overshoots cannot break multipletests
     p_in = np.clip(p[finite], 0.0, 1.0)
-    rej, q_adj, _, _ = multipletests(p_in, alpha=Q_THRESHOLD, method="fdr_bh")
+    _, q_adj, _, _ = multipletests(p_in, alpha=Q_THRESHOLD, method="fdr_bh")
     q[finite] = q_adj
-    rejected[finite] = rej
+    rejected[finite] = q_adj < Q_THRESHOLD
     return q, rejected

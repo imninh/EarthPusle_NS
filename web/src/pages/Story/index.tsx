@@ -7,13 +7,17 @@ import { CaseMiniMap } from './MiniMap'
 import { QualityCaution } from './QualityCaution'
 import {
   caseDetails,
+  caseDestination,
+  caseEvidenceActionLabel,
   caseIdForStep,
   caseLead,
+  caseMapCaption,
   casePlaceLabel,
+  caseRegionNote,
   evidenceLabel,
   evidenceVariableId,
-  formatBbox,
   formatCoverage,
+  formatSignedSlope,
   formatSlope,
   formatStat,
   isCautionCase,
@@ -21,6 +25,8 @@ import {
   stepFromCaseId,
   stepTitle,
   trendClassWords,
+  witnessAgreementWords,
+  witnessProductLabel,
 } from './model'
 import './story.css'
 
@@ -251,12 +257,15 @@ function CaseCard({ item, number, total }: { item: DetectiveCase; number: number
   const lead = caseLead(item)
   const details = caseDetails(item)
   const caution = isCautionCase(item)
-  const open = (page: 'discovery' | 'region') =>
-    navigate(page, {
+  const open = (action: 'map' | 'evidence') => {
+    const destination = caseDestination(item, action)
+    navigate(destination.page, {
       variableId,
       windowId: item.window,
-      selection: { kind: 'bbox', bbox: item.region.bbox },
+      selection: destination.selection,
+      mapLayer: destination.mapLayer,
     })
+  }
 
   return (
     <article className={caution ? 'story-card caution ui-card' : 'story-card ui-card'}>
@@ -269,7 +278,7 @@ function CaseCard({ item, number, total }: { item: DetectiveCase; number: number
       <h2>{item.title}</h2>
       <p className="story-why">{lead}</p>
       <p className="story-region">
-        <strong>{item.region.label}</strong> · approximate box {formatBbox(item.region.bbox)}
+        <strong>{item.region.label}</strong> · {caseRegionNote(item)}
       </p>
 
       {details ? (
@@ -282,7 +291,13 @@ function CaseCard({ item, number, total }: { item: DetectiveCase; number: number
         <QualityCaution item={item} variableId={variableId} qualityAvailable={Boolean(index.quality)} />
       ) : null}
 
-      <CaseMiniMap variableId={variableId} windowId={item.window} bbox={item.region.bbox} label={variableLabel} />
+      <CaseMiniMap
+        variableId={variableId}
+        windowId={item.window}
+        bbox={item.region.bbox}
+        label={variableLabel}
+        caption={caseMapCaption(item)}
+      />
 
       <h3>Key evidence</h3>
       <ul className="story-evidence">
@@ -309,6 +324,14 @@ function CaseCard({ item, number, total }: { item: DetectiveCase; number: number
               <dd>{formatCoverage(evidence.coverage_fraction)}</dd>
             </dl>
             <p className="story-method">{evidence.method}</p>
+            {evidence.witness ? (
+              <p className="story-witness">
+                <strong>Second witness ({witnessProductLabel(item, evidence.variable, index) ?? evidence.witness.product}):</strong>{' '}
+                {evidence.witness.variable} {witnessAgreementWords(evidence.witness.agreement)}; slope{' '}
+                {formatSignedSlope(evidence.witness.sen_slope_decade)} {evidence.witness.slope_unit}; q{' '}
+                {formatStat(evidence.witness.q_value)}.
+              </p>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -325,11 +348,11 @@ function CaseCard({ item, number, total }: { item: DetectiveCase; number: number
       )}
 
       <div className="story-actions">
-        <button type="button" className="button secondary" onClick={() => open('discovery')}>
+        <button type="button" className="button secondary" onClick={() => open('map')}>
           Show on map
         </button>
-        <button type="button" className="button" onClick={() => open('region')}>
-          Open evidence
+        <button type="button" className="button" onClick={() => open('evidence')}>
+          {caseEvidenceActionLabel(item)}
         </button>
       </div>
     </article>
