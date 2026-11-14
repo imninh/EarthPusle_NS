@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EarthPulse — page not found</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 4rem auto; max-width: 36rem; padding: 0 1rem; }
+      a { color: #1a5fb4; }
+    </style>
+    <script>
+      // GitHub Pages project sites serve this file for unknown paths. Send the
+      // reader back to the app root while keeping the /earthpulse/ sub-path.
+      (function () {
+        var path = window.location.pathname;
+        var match = path.match(/^(.*?\/earthpulse\/)/);
+        var target = match ? match[1] : '/';
+        window.location.replace(target);
+      })();
+    </script>
+  </head>
+  <body>
+    <h1>Page not found</h1>
+    <p>Return to <a href="./">EarthPulse</a>.</p>
+  </body>
+</html>
