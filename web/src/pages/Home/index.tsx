@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
-import type { FeatureCollection } from 'geojson'
+import type { FeatureCollection, MultiLineString } from 'geojson'
 import { useApp } from '../../data/AppState'
 import { loadCases, loadQualityFlag, loadScreener, loadTrendClass } from '../../data/loaders'
 import type { CasesFile, DataIndex, DetectiveCase, ScreenerFile, WindowMeta } from '../../data/types'
@@ -311,6 +311,8 @@ interface GlobeData {
   trendClass: Int8Array
   qualityFlag: Int8Array | null
   land: FeatureCollection
+  borders: MultiLineString
+  countries: FeatureCollection | null
 }
 
 function GlobePlaceholder({ note }: { note?: string }) {
@@ -352,7 +354,15 @@ function HomeGlobe({
       loadNaturalEarth(),
     ])
       .then(([trendClass, qualityFlag, basemap]) => {
-        if (!cancelled) setData({ trendClass, qualityFlag, land: basemap.land })
+        if (!cancelled) {
+          setData({
+            trendClass,
+            qualityFlag,
+            land: basemap.land,
+            borders: basemap.borders,
+            countries: basemap.countries ?? null,
+          })
+        }
       })
       .catch(() => {
         if (!cancelled) setFailed(true)
@@ -372,6 +382,8 @@ function HomeGlobe({
             trendClass={data.trendClass}
             qualityFlag={data.qualityFlag}
             land={data.land}
+            borders={data.borders}
+            countries={data.countries}
             pulses={pulses}
             onPulseSelect={onSelect}
             pulseHref={(id) => `#/story?case=${encodeURIComponent(id)}`}

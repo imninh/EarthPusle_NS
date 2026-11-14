@@ -262,6 +262,11 @@ button {
   height: 34px;
   flex: none;
 }
+.brand-logo {
+  display: block;
+  width: 34px;
+  height: 34px;
+}
 .brand-planet {
   position: absolute;
   inset: 7px;

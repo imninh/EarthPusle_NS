@@ -1,7 +1,7 @@
 // The WebGL globe (docs/UI_SPEC.md §3). The only place three.js is used; pages load this file
 // with React.lazy so that no other page pays for it.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { FeatureCollection } from 'geojson'
+import type { FeatureCollection, MultiLineString } from 'geojson'
 import {
   AdditiveBlending,
   BackSide,
@@ -69,6 +69,9 @@ export interface EarthGlobeProps {
   qualityFlag?: Int8Array | null
   /** Natural Earth land, from maps/basemap loadNaturalEarth(). */
   land: FeatureCollection
+  /** Country borders mesh and country polygons from the same basemap (G2). */
+  borders?: MultiLineString | null
+  countries?: FeatureCollection | null
   pulses?: GlobePulse[]
   onPulseSelect?: (id: string) => void
   /** Default 105 (Southeast Asia faces the viewer). */
@@ -558,6 +561,8 @@ export default function EarthGlobe({
   trendClass,
   qualityFlag = null,
   land,
+  borders = null,
+  countries = null,
   pulses,
   onPulseSelect,
   initialLon = 105,
@@ -581,11 +586,20 @@ export default function EarthGlobe({
   // The equirectangular canvas; colours are read from CSS variables when it is built.
   const texture = useMemo<HTMLCanvasElement | null>(() => {
     try {
-      return buildGlobeCanvas(trendClass, qualityFlag, land, readGlobeColours())
+      return buildGlobeCanvas(
+        trendClass,
+        qualityFlag,
+        land,
+        readGlobeColours(),
+        undefined,
+        undefined,
+        borders,
+        countries,
+      )
     } catch {
       return null
     }
-  }, [trendClass, qualityFlag, land])
+  }, [trendClass, qualityFlag, land, borders, countries])
 
   // The WebGL scene. Falls back to the flat map when no context can be created or it is lost.
   useEffect(() => {

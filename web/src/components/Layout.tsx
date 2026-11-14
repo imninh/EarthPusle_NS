@@ -92,8 +92,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <header className="app-header">
         <button type="button" className="brand" onClick={() => setPage('home')}>
           <span className="brand-mark" aria-hidden="true">
-            <span className="brand-orbit" />
-            <span className="brand-planet" />
+            <img className="brand-logo" src={`${import.meta.env.BASE_URL}logo.svg`} alt="" width={34} height={34} />
           </span>
           <span className="brand-text">
             <strong>EarthPulse</strong>

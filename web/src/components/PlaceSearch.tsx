@@ -321,7 +321,15 @@ export function PlaceSearch({
       )}
 
       {open && status === 'ready' && (
-        <ul id={listId} role="listbox" aria-labelledby={labelId} style={listStyle}>
+        <ul
+          id={listId}
+          role="listbox"
+          aria-labelledby={labelId}
+          style={listStyle}
+          // Pressing on the list's scrollbar or padding must not blur the input,
+          // or the list closes before the user can scroll to a country.
+          onMouseDown={(event) => event.preventDefault()}
+        >
           {visible.length === 0 && (
             <li role="status" style={{ padding: '6px 8px', color: 'var(--muted)' }}>
               {s.none}

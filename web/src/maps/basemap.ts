@@ -14,6 +14,8 @@ export interface BasemapData {
   land: FeatureCollection
   borders: MultiLineString
   style: StyleSpecification
+  /** Natural Earth country polygons, for the globe's country labels (G2). */
+  countries?: FeatureCollection
 }
 
 export interface BasemapColours {
@@ -40,12 +42,21 @@ export function loadNaturalEarth(): Promise<BasemapData> {
       loadJson<Topology<{ countries: GeometryCollection }>>(countriesUrl),
     ]).then(([landTopo, countriesTopo]) => {
       const land = feature(landTopo, landTopo.objects.land) as unknown as FeatureCollection
+      const countries = feature(
+        countriesTopo,
+        countriesTopo.objects.countries,
+      ) as unknown as FeatureCollection
       const borders = mesh(
         countriesTopo,
         countriesTopo.objects.countries,
         (a, b) => a !== b,
       ) as MultiLineString
-      return { land, borders, style: buildBasemapStyle(false, land, borders, 'globe') }
+      return {
+        land,
+        borders,
+        style: buildBasemapStyle(false, land, borders, 'globe'),
+        countries,
+      }
     })
   }
   return cached

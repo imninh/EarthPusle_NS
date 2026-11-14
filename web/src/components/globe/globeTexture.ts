@@ -3,15 +3,17 @@
 // Pure part (testable in node): colour parsing, cell classification and `paintCellLayer`, which
 // returns RGBA pixels. DOM part: `buildGlobeCanvas` composes ocean, land, the land-clipped cell
 // layer and coastlines on a 2048 x 1024 canvas.
-import type { FeatureCollection } from 'geojson'
+import type { FeatureCollection, MultiLineString } from 'geojson'
 import { N_COLS, N_ROWS, TREND_DECREASE, TREND_INCREASE, TREND_NOT_SIGNIFICANT } from '../../data/contract'
 import { landPolygons, lonLatToPixel } from '../../maps/renderGrid'
+import { countryLabels } from './globeLabels'
 
 export const GLOBE_TEXTURE_WIDTH = 2048
 export const GLOBE_TEXTURE_HEIGHT = 1024
 export const OCEAN_COLOUR = '#0f2340'
 export const LAND_BASE_COLOUR = '#24395c'
-export const COAST_COLOUR = 'rgba(234,241,251,0.35)'
+export const BORDER_COLOUR = 'rgba(234,241,251,0.55)'
+export const COAST_COLOUR = 'rgba(234,241,251,0.7)'
 /** Lightness factor of "not significant" land (no colour, only a lighter land). */
 export const NEUTRAL_LIGHTNESS = 1.25
 
@@ -256,9 +258,77 @@ function wrappedLandPath(land: FeatureCollection, width: number, height: number)
   return path
 }
 
+/** Antimeridian-safe border lines, repeated at the east and west edges when needed. */
+function wrappedBorderPath(
+  borders: MultiLineString,
+  width: number,
+  height: number,
+): Path2D {
+  const path = new Path2D()
+  for (const line of borders.coordinates) {
+    if (line.length === 0) continue
+    const pixels = unwrapRing(line).map(([lon, lat]) => lonLatToPixel(lon, lat, width, height))
+    let minX = Infinity
+    let maxX = -Infinity
+    for (const [x] of pixels) {
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+    }
+    for (const shift of [-width, 0, width]) {
+      if (maxX + shift < 0 || minX + shift > width) continue
+      path.moveTo(pixels[0][0] + shift, pixels[0][1])
+      for (let i = 1; i < pixels.length; i++) {
+        path.lineTo(pixels[i][0] + shift, pixels[i][1])
+      }
+    }
+  }
+  return path
+}
+
+/** Country names on top of borders and coastlines, with the globe's horizontal squeeze undone. */
+function drawCountryLabels(
+  context: CanvasRenderingContext2D,
+  countries: FeatureCollection,
+  width: number,
+  height: number,
+): void {
+  const scale = width / GLOBE_TEXTURE_WIDTH
+  const fontSize = 22 * scale
+  const font = `700 ${fontSize}px system-ui, sans-serif`
+  context.save()
+  context.font = font
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.lineJoin = 'round'
+  context.lineWidth = 5 * scale
+  context.strokeStyle = 'rgba(7,15,29,0.85)'
+  context.fillStyle = '#ffffff'
+  const labels = countryLabels(countries, {
+    width,
+    height,
+    fontSize,
+    measureText: (name, size) => {
+      context.font = `700 ${size}px system-ui, sans-serif`
+      return context.measureText(name).width
+    },
+  })
+  for (const label of labels) {
+    const [x, y] = lonLatToPixel(label.lon, label.lat, width, height)
+    const stretch = Math.min(2.5, 1 / Math.max(0.2, Math.cos((Math.abs(label.lat) * Math.PI) / 180)))
+    context.save()
+    context.translate(x, y)
+    context.scale(stretch, 1)
+    context.strokeText(label.name, 0, 0)
+    context.fillText(label.name, 0, 0)
+    context.restore()
+  }
+  context.restore()
+}
+
 /**
  * The 2048 x 1024 equirectangular canvas: ocean, land base, cells clipped to land, coastlines.
- * No lighting and no labels: what is drawn here is what the legend says.
+ * No lighting. Borders and the names of large countries are drawn over the data (G2);
+ * the cell colours are exactly what the legend says.
  */
 export function buildGlobeCanvas(
   trendClass: ArrayLike<number>,
@@ -267,6 +337,8 @@ export function buildGlobeCanvas(
   colours: GlobeColours,
   width: number = GLOBE_TEXTURE_WIDTH,
   height: number = GLOBE_TEXTURE_HEIGHT,
+  borders: MultiLineString | null = null,
+  countries: FeatureCollection | null = null,
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -290,9 +362,17 @@ export function buildGlobeCanvas(
   layerContext.fillStyle = '#fff'
   layerContext.fill(path)
   context.drawImage(layer, 0, 0)
+  const scale = width / GLOBE_TEXTURE_WIDTH
+  if (borders) {
+    context.strokeStyle = BORDER_COLOUR
+    context.lineWidth = 1.2 * scale
+    context.lineJoin = 'round'
+    context.stroke(wrappedBorderPath(borders, width, height))
+  }
   context.strokeStyle = COAST_COLOUR
-  context.lineWidth = 1
+  context.lineWidth = 1.6 * scale
   context.lineJoin = 'round'
   context.stroke(path)
+  if (countries) drawCountryLabels(context, countries, width, height)
   return canvas
 }
