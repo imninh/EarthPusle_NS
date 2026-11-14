@@ -7,6 +7,12 @@ export interface ChartColors {
   surface: string
   accent: string
   secondary: string
+  ink: string
+  increase: string
+  decrease: string
+  marker: string
+  markerInk: string
+  mono: string
 }
 
 const FALLBACK: ChartColors = {
@@ -16,6 +22,12 @@ const FALLBACK: ChartColors = {
   surface: '#ffffff',
   accent: '#1f5fbf',
   secondary: '#2471a3',
+  ink: '#16202e',
+  increase: '#c8452c',
+  decrease: '#1f6fb2',
+  marker: '#f2c230',
+  markerInk: '#3d2e00',
+  mono: "ui-monospace, 'Cascadia Mono', Consolas, 'SF Mono', Menlo, monospace",
 }
 
 export function readChartColors(): ChartColors {
@@ -29,6 +41,12 @@ export function readChartColors(): ChartColors {
     surface: pick('--surface', FALLBACK.surface),
     accent: pick('--accent', FALLBACK.accent),
     secondary: pick('--decrease', FALLBACK.secondary),
+    ink: pick('--ink', FALLBACK.ink),
+    increase: pick('--increase', FALLBACK.increase),
+    decrease: pick('--decrease', FALLBACK.decrease),
+    marker: pick('--marker', FALLBACK.marker),
+    markerInk: pick('--marker-ink', FALLBACK.markerInk),
+    mono: pick('--font-mono', FALLBACK.mono),
   }
 }
 
@@ -39,7 +57,12 @@ export function useChartColors(): ChartColors {
     apply()
     const query = window.matchMedia('(prefers-color-scheme: dark)')
     query.addEventListener('change', apply)
-    return () => query.removeEventListener('change', apply)
+    const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(apply)
+    observer?.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] })
+    return () => {
+      query.removeEventListener('change', apply)
+      observer?.disconnect()
+    }
   }, [])
   return colors
 }

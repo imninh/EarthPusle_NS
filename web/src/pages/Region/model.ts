@@ -14,12 +14,24 @@ import {
   TREND_NOT_SIGNIFICANT,
 } from '../../data/contract'
 import { cellSeriesFromTile } from '../../data/loaders'
-import { fitIntercept, mannKendall, senSlope, spearman, type SpearmanResult } from '../../lib/stats'
+import {
+  fitIntercept,
+  hamedRaoMannKendall,
+  mannKendall,
+  senSlope,
+  senSlopeCI,
+  spearman,
+  type SenSlopeCI,
+  type SpearmanResult,
+} from '../../lib/stats'
 import type { VariableMeta } from '../../data/types'
 
 export const CELL_METHOD = 'precomputed: Hamed–Rao modified Mann–Kendall, FDR-corrected'
 export const BROWSER_METHOD =
-  'computed in browser: single test on the region average, original Mann–Kendall, no FDR correction'
+  'computed in browser: Hamed–Rao modified Mann–Kendall on the region average; no false-discovery correction'
+/** Used only when the Hamed–Rao variance is not usable (not finite or not positive). */
+export const BROWSER_METHOD_FALLBACK =
+  'computed in browser: original Mann–Kendall on the region average (the Hamed–Rao variance was not usable); no false-discovery correction'
 
 const MIN_VALID_FRACTION = 0.8
 const MIN_MONTHS = 10 * 12
@@ -27,6 +39,8 @@ const ALPHA = 0.05
 
 export interface EvidenceModel {
   method: string
+  /** True when the region test fell back to the original Mann–Kendall variance. */
+  varianceFallback?: boolean
   source: 'precomputed' | 'browser'
   variableLabel: string
   category: string
@@ -36,7 +50,11 @@ export interface EvidenceModel {
   sourceVariable: string
   windowLabel: string
   senSlopeDecade: number | null
+  /** 95% rank-based interval for the Sen slope, in the per-decade display unit. */
+  senSlopeDecadeCI: SenSlopeCI | null
   slopeUnit: string
+  /** Registry `increase_means`, e.g. "warmer" or "wetter". */
+  increaseMeans: string | null
   p: number | null
   q: number | null
   showQ: boolean
@@ -151,6 +169,30 @@ export function cellTrendClassWords(code: number | null): string {
   return `unknown class ${code}`
 }
 
+/** Contract trend code for a browser trend-class word, for `plainVerdict`. */
+export function trendClassCode(trendClass: string): number {
+  if (trendClass === 'increasing') return TREND_INCREASE
+  if (trendClass === 'decreasing') return TREND_DECREASE
+  if (trendClass === 'not significant') return TREND_NOT_SIGNIFICANT
+  if (trendClass === 'outside domain') return OUTSIDE_DOMAIN
+  return INSUFFICIENT_DATA
+}
+
+/** Signed display value: +0.43, -0.52, or a small-number exponent. */
+export function formatSignedRate(value: number): string {
+  const abs = Math.abs(value)
+  if (abs !== 0 && abs < 0.001) return value.toExponential(2)
+  const digits = abs >= 10 ? 1 : 2
+  const text = value.toFixed(digits)
+  return value > 0 ? `+${text}` : text
+}
+
+/** "lower to upper" for a signed interval, or null when there is no interval. */
+export function formatInterval(interval: SenSlopeCI | null): string | null {
+  if (!interval) return null
+  return `${formatSignedRate(interval.lower)} to ${formatSignedRate(interval.upper)}`
+}
+
 function variableFields(variable: VariableMeta, windowLabel: string, monthsInWindow: number) {
   return {
     variableLabel: variable.label,
@@ -161,9 +203,37 @@ function variableFields(variable: VariableMeta, windowLabel: string, monthsInWin
     sourceVariable: variable.source_variable,
     windowLabel,
     slopeUnit: perDecadeUnit(variable.slope_unit),
+    increaseMeans: variable.increase_means ?? null,
     monthsInWindow,
     caveats: variable.caveats,
     shortWindow: monthsInWindow < MIN_MONTHS,
+  }
+}
+
+export interface RegionTest {
+  p: number | null
+  tau: number | null
+  ci: SenSlopeCI | null
+  /** True when the Hamed–Rao variance was unusable and the original variance was used. */
+  fallback: boolean
+}
+
+/**
+ * p, tau and the 95% Sen-slope interval for a region or box average: Hamed–Rao modified
+ * Mann–Kendall, falling back to the original variance when the corrected one is not
+ * finite and positive.
+ */
+export function regionTest(t: readonly number[], numeric: readonly number[]): RegionTest {
+  const hr = hamedRaoMannKendall(numeric)
+  if (hr && Number.isFinite(hr.varS) && hr.varS > 0 && Number.isFinite(hr.p)) {
+    return { p: hr.p, tau: hr.tau, ci: senSlopeCI(t, numeric, 0.05, hr.varS), fallback: false }
+  }
+  const mk = mannKendall(numeric)
+  return {
+    p: mk ? mk.p : null,
+    tau: mk ? mk.tau : null,
+    ci: senSlopeCI(t, numeric),
+    fallback: mk != null && hr != null,
   }
 }
 
@@ -185,24 +255,27 @@ export function buildBrowserEvidence(args: {
   const t = months.map((month) => monthsSince(origin, month) / 12)
   const numeric = finiteArray(anomalies)
   const fit = months.length > 0 ? senSlope(t, numeric) : null
-  const mk = mannKendall(numeric)
+  const test = months.length > 0 ? regionTest(t, numeric) : { p: null, tau: null, ci: null, fallback: false }
+  const ci = test.ci
   const validMonths = countValid(anomalies)
   const shared = variableFields(args.variable, args.windowLabel, months.length)
   return {
     trend: fit ? { slopePerYear: fit.slope, intercept: fit.intercept } : null,
     evidence: {
       ...shared,
-      method: BROWSER_METHOD,
+      method: test.fallback ? BROWSER_METHOD_FALLBACK : BROWSER_METHOD,
+      varianceFallback: test.fallback,
       source: 'browser',
       senSlopeDecade: fit ? fit.slope * 10 : null,
-      p: mk ? mk.p : null,
+      senSlopeDecadeCI: ci ? { lower: ci.lower * 10, upper: ci.upper * 10 } : null,
+      p: test.p,
       q: null,
       showQ: false,
-      tau: mk ? mk.tau : null,
+      tau: test.tau,
       validMonths,
       coverage: args.coverage,
       coverageNote: args.coverageNote,
-      trendClass: browserTrendClass(mk ? mk.p : null, fit ? fit.slope : null, validMonths, months.length),
+      trendClass: browserTrendClass(test.p, fit ? fit.slope : null, validMonths, months.length),
       cellsInBox: args.cellsInBox ?? null,
       maskCells: args.maskCells ?? null,
       cellsUsed: args.cellsUsed ?? null,
@@ -228,6 +301,7 @@ export function buildCellEvidence(args: {
     method: CELL_METHOD,
     source: 'precomputed',
     senSlopeDecade: args.senSlopeDecade,
+    senSlopeDecadeCI: null,
     p: args.p,
     q: args.q,
     showQ: true,
@@ -270,6 +344,38 @@ export function senTrendSeries(
     y.push(trend.intercept + trend.slopePerYear * (monthsSince(start, month) / 12))
   }
   return { months: outMonths, y }
+}
+
+export interface TrendBand {
+  months: string[]
+  lower: number[]
+  upper: number[]
+}
+
+/**
+ * Faint 95% band for the Sen line. Both bounds pivot on the fitted line's
+ * intercept, so all three lines meet at the start of the window.
+ */
+export function senTrendBandSeries(
+  months: readonly string[],
+  start: string,
+  end: string,
+  trend: TrendLine,
+  intervalPerYear: SenSlopeCI | null,
+): TrendBand | null {
+  if (!intervalPerYear) return null
+  const outMonths: string[] = []
+  const lower: number[] = []
+  const upper: number[] = []
+  for (const month of months) {
+    if (month < start || month > end) continue
+    const years = monthsSince(start, month) / 12
+    outMonths.push(month)
+    lower.push(trend.intercept + intervalPerYear.lower * years)
+    upper.push(trend.intercept + intervalPerYear.upper * years)
+  }
+  if (outMonths.length === 0) return null
+  return { months: outMonths, lower, upper }
 }
 
 export function zScoresInWindow(

@@ -1,0 +1,2910 @@
+generated_at: '2026-11-10T09:08:04Z'
+package: P24 T1 probe (supersedes P23)
+method: Every field with a time dimension in one file per product was listed. Units, long_name and fill values are copied
+  from the files. One-month statistics use 2001-01. valid_mask_share is the fraction of the 14,250-cell common land mask whose
+  nearest native cell is finite in at least 80% of 48 sampled months (January and July of each year); production regridding
+  is the P13 conservative overlap, not nearest sampling.
+editorial: label and description are DRAFTS derived from long_name; review before P24 T5 publishes. No physical claim beyond
+  the file attributes is made.
+probe:
+  month: 2001-01
+  validity_sample_months: 48
+  validity_rule: '>= 80% of sampled months finite; threshold applied per 1 degree cell'
+  common_mask_cells: 14250
+products:
+  GLDAS_NOAH10_M:
+    version: '2.1'
+    doi: 10.5067/LWTYSMP3VM5Z
+    source_type: model
+    native_grid: 1.0 deg (150 x 360; no Antarctica)
+    n_lat: 150
+    n_lon: 360
+  M2TMNXSLV:
+    version: 5.12.4
+    doi: 10.5067/AP1B0BA5PD2K
+    source_type: reanalysis
+    native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+    n_lat: 361
+    n_lon: 576
+  M2TMNXLND:
+    version: 5.12.4
+    doi: 10.5067/8S35XF81C28F
+    source_type: reanalysis
+    native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+    n_lat: 361
+    n_lon: 576
+counts:
+  candidates: 113
+  excluded: 117
+  deep: 4
+  catalog: 109
+fields:
+- id: surface_albedo
+  product: GLDAS_NOAH10_M
+  source_variable: Albedo_inst
+  label: Surface albedo
+  long_name: Albedo
+  units: '%'
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: '%'
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly surface albedo from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 6.246853
+    median: 31.246853
+    max: 79.563583
+    n_finite: 15159.0
+- id: plant_canopy_surface_water
+  product: GLDAS_NOAH10_M
+  source_variable: CanopInt_inst
+  label: Plant canopy surface water
+  long_name: Plant canopy surface water
+  units: kg m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: kg m-2
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly plant canopy surface water from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.111319
+    max: 0.5
+    n_finite: 15159.0
+- id: canopy_water_evaporation
+  product: GLDAS_NOAH10_M
+  source_variable: ECanop_tavg
+  label: Canopy water evaporation
+  long_name: Canopy water evaporation
+  units: W m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: more evaporation
+  description: Monthly canopy water evaporation from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.007339
+    max: 83.174316
+    n_finite: 15159.0
+- id: direct_evaporation_from_bare_soil
+  product: GLDAS_NOAH10_M
+  source_variable: ESoil_tavg
+  label: Direct Evaporation from Bare Soil
+  long_name: Direct Evaporation from Bare Soil
+  units: W m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: more evaporation
+  description: Monthly direct evaporation from bare soil from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.909839
+    max: 93.708748
+    n_finite: 15159.0
+- id: downward_long_wave_radiation_flux
+  product: GLDAS_NOAH10_M
+  source_variable: LWdown_f_tavg
+  label: Downward long-wave radiation flux
+  long_name: Downward long-wave radiation flux
+  units: W m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly downward long-wave radiation flux from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 126.15773
+    median: 251.713089
+    max: 435.625183
+    n_finite: 15325.0
+- id: net_long_wave_radiation_flux
+  product: GLDAS_NOAH10_M
+  source_variable: Lwnet_tavg
+  label: Net long-wave radiation flux
+  long_name: Net long-wave radiation flux
+  units: W m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly net long-wave radiation flux from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -132.998062
+    median: -41.956371
+    max: -1.199639
+    n_finite: 15159.0
+- id: potential_evaporation_rate
+  product: GLDAS_NOAH10_M
+  source_variable: PotEvap_tavg
+  label: Potential evaporation rate
+  long_name: Potential evaporation rate
+  units: W m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: more evaporation
+  description: Monthly potential evaporation rate from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -8.090433
+    median: 31.253922
+    max: 576.806152
+    n_finite: 15159.0
+- id: surface_pressure
+  product: GLDAS_NOAH10_M
+  source_variable: Psurf_f_inst
+  label: Surface pressure
+  long_name: Pressure
+  units: Pa
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: Pa
+  conversion: identity
+  tier: catalog
+  category: pressure
+  increase_means: higher pressure
+  description: Monthly surface pressure from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 50580.742188
+    median: 96741.9375
+    max: 104350.695312
+    n_finite: 15325.0
+- id: ground_heat_flux
+  product: GLDAS_NOAH10_M
+  source_variable: Qg_tavg
+  label: Ground heat flux
+  long_name: Heat flux
+  units: W m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly ground heat flux from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -22.639694
+    median: -2.751147
+    max: 9.504257
+    n_finite: 15159.0
+- id: sensible_heat_net_flux
+  product: GLDAS_NOAH10_M
+  source_variable: Qh_tavg
+  label: Sensible heat net flux
+  long_name: Sensible heat net flux
+  units: W m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly sensible heat net flux from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -58.974049
+    median: 10.502
+    max: 215.458572
+    n_finite: 15159.0
+- id: latent_heat_net_flux
+  product: GLDAS_NOAH10_M
+  source_variable: Qle_tavg
+  label: Latent heat net flux
+  long_name: Latent heat net flux
+  units: W m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly latent heat net flux from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -8.105088
+    median: 5.216726
+    max: 160.663498
+    n_finite: 15159.0
+- id: total_precipitation_rate
+  product: GLDAS_NOAH10_M
+  source_variable: Rainf_f_tavg
+  label: Total precipitation rate
+  long_name: Total precipitation rate
+  units: kg m-2 s-1
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: mm/month
+  conversion: per_second_to_per_month
+  tier: catalog
+  category: water
+  increase_means: more water
+  description: Monthly total precipitation rate from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 9.0e-06
+    max: 0.000271
+    n_finite: 15325.0
+- id: rain_precipitation_rate
+  product: GLDAS_NOAH10_M
+  source_variable: Rainf_tavg
+  label: Rain precipitation rate
+  long_name: Rain precipitation rate
+  units: kg m-2 s-1
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: mm/month
+  conversion: per_second_to_per_month
+  tier: catalog
+  category: water
+  increase_means: more water
+  description: Monthly rain precipitation rate from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.0
+    max: 0.000271
+    n_finite: 15159.0
+- id: downward_short_wave_radiation_flux
+  product: GLDAS_NOAH10_M
+  source_variable: SWdown_f_tavg
+  label: Downward short-wave radiation flux
+  long_name: Downward short-wave radiation flux
+  units: W m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly downward short-wave radiation flux from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 92.520081
+    max: 381.056824
+    n_finite: 15325.0
+- id: snow_depth
+  product: GLDAS_NOAH10_M
+  source_variable: SnowDepth_inst
+  label: Snow depth
+  long_name: Snow depth
+  units: m
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: m
+  conversion: identity
+  tier: catalog
+  category: snow
+  increase_means: more snow
+  description: Monthly snow depth from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.011152
+    max: 337.576782
+    n_finite: 15159.0
+- id: snow_precipitation_rate
+  product: GLDAS_NOAH10_M
+  source_variable: Snowf_tavg
+  label: Snow precipitation rate
+  long_name: Snow precipitation rate
+  units: kg m-2 s-1
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: mm/month
+  conversion: per_second_to_per_month
+  tier: catalog
+  category: snow
+  increase_means: more snow
+  description: Monthly snow precipitation rate from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 1.0e-06
+    max: 0.000135
+    n_finite: 15159.0
+- id: soil_moisture_100_200cm
+  product: GLDAS_NOAH10_M
+  source_variable: SoilMoi100_200cm_inst
+  label: Soil moisture (100-200 cm)
+  long_name: Soil moisture
+  units: kg m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: kg m-2
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly soil moisture (100-200 cm) from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 22.114773
+    median: 273.778351
+    max: 1000.0
+    n_finite: 15159.0
+- id: soil_moisture_10_40cm
+  product: GLDAS_NOAH10_M
+  source_variable: SoilMoi10_40cm_inst
+  label: Soil moisture (10-40 cm)
+  long_name: Soil moisture
+  units: kg m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: kg m-2
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly soil moisture (10-40 cm) from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 7.053171
+    median: 77.812798
+    max: 300.0
+    n_finite: 15159.0
+- id: soil_moisture_40_100cm
+  product: GLDAS_NOAH10_M
+  source_variable: SoilMoi40_100cm_inst
+  label: Soil moisture (40-100 cm)
+  long_name: Soil moisture
+  units: kg m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: kg m-2
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly soil moisture (40-100 cm) from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 13.677281
+    median: 145.278946
+    max: 600.0
+    n_finite: 15159.0
+- id: soil_temperature_0_10cm
+  product: GLDAS_NOAH10_M
+  source_variable: SoilTMP0_10cm_inst
+  label: Soil temperature (0-10 cm)
+  long_name: Soil temperature
+  units: K
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly soil temperature (0-10 cm) from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 239.650543
+    median: 271.32074
+    max: 311.065979
+    n_finite: 15159.0
+- id: soil_temperature_100_200cm
+  product: GLDAS_NOAH10_M
+  source_variable: SoilTMP100_200cm_inst
+  label: Soil temperature (100-200 cm)
+  long_name: Soil temperature
+  units: K
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly soil temperature (100-200 cm) from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 246.396454
+    median: 276.634064
+    max: 306.941986
+    n_finite: 15159.0
+- id: soil_temperature_10_40cm
+  product: GLDAS_NOAH10_M
+  source_variable: SoilTMP10_40cm_inst
+  label: Soil temperature (10-40 cm)
+  long_name: Soil temperature
+  units: K
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly soil temperature (10-40 cm) from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 241.378403
+    median: 272.904205
+    max: 309.414856
+    n_finite: 15159.0
+- id: soil_temperature_40_100cm
+  product: GLDAS_NOAH10_M
+  source_variable: SoilTMP40_100cm_inst
+  label: Soil temperature (40-100 cm)
+  long_name: Soil temperature
+  units: K
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly soil temperature (40-100 cm) from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 243.192673
+    median: 274.319672
+    max: 308.454712
+    n_finite: 15159.0
+- id: net_short_wave_radiation_flux
+  product: GLDAS_NOAH10_M
+  source_variable: Swnet_tavg
+  label: Net short wave radiation flux
+  long_name: Net short wave radiation flux
+  units: W m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly net short wave radiation flux from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 67.817261
+    max: 334.413483
+    n_finite: 15159.0
+- id: transpiration
+  product: GLDAS_NOAH10_M
+  source_variable: Tveg_tavg
+  label: Transpiration
+  long_name: Transpiration
+  units: W m-2
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: more evaporation
+  description: Monthly transpiration from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.0
+    max: 128.527298
+    n_finite: 15159.0
+- id: wind_speed
+  product: GLDAS_NOAH10_M
+  source_variable: Wind_f_inst
+  label: Wind speed
+  long_name: Wind speed
+  units: m s-1
+  native_grid: 1.0 deg (150 x 360; no Antarctica)
+  display_unit: m s-1
+  conversion: identity
+  tier: catalog
+  category: wind
+  increase_means: stronger winds
+  description: Monthly wind speed from the GLDAS Noah land-surface model, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.586826
+    median: 3.324729
+    max: 12.148923
+    n_finite: 15325.0
+- id: baseflow_flux
+  product: M2TMNXLND
+  source_variable: BASEFLOW
+  label: Baseflow flux
+  long_name: baseflow_flux
+  units: kg m-2 s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: mm/month
+  conversion: per_second_to_per_month
+  tier: catalog
+  category: water
+  increase_means: more water
+  description: Monthly baseflow flux from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.0
+    max: 5.6e-05
+    n_finite: 58876.0
+- id: rate_of_change_of_total_land_energy
+  product: M2TMNXLND
+  source_variable: ECHANGE
+  label: Rate of change of total land energy
+  long_name: rate_of_change_of_total_land_energy
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly rate of change of total land energy from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -141.606369
+    median: -5.452017
+    max: 59.370255
+    n_finite: 58876.0
+- id: evaporation_land
+  product: M2TMNXLND
+  source_variable: EVLAND
+  label: Evaporation land
+  long_name: Evaporation_land
+  units: kg m-2 s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: mm/month
+  conversion: per_second_to_per_month
+  tier: catalog
+  category: water
+  increase_means: more evaporation
+  description: Monthly evaporation land from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -4.0e-06
+    median: 2.0e-06
+    max: 0.0001
+    n_finite: 58876.0
+- id: interception_loss_energy_flux
+  product: M2TMNXLND
+  source_variable: EVPINTR
+  label: Interception loss energy flux
+  long_name: interception_loss_energy_flux
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly interception loss energy flux from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -3.672299
+    median: 0.002295
+    max: 85.074593
+    n_finite: 58876.0
+- id: snow_ice_evaporation_energy_flux
+  product: M2TMNXLND
+  source_variable: EVPSBLN
+  label: Snow and ice evaporation energy flux
+  long_name: snow_ice_evaporation_energy_flux
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: more evaporation
+  description: Monthly snow and ice evaporation energy flux from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -11.285602
+    median: 0.0
+    max: 67.674606
+    n_finite: 58876.0
+- id: baresoil_evap_energy_flux
+  product: M2TMNXLND
+  source_variable: EVPSOIL
+  label: Baresoil evap energy flux
+  long_name: baresoil_evap_energy_flux
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: more evaporation
+  description: Monthly baresoil evap energy flux from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 2.148693
+    max: 158.27356
+    n_finite: 58876.0
+- id: transpiration_energy_flux
+  product: M2TMNXLND
+  source_variable: EVPTRNS
+  label: Transpiration energy flux
+  long_name: transpiration_energy_flux
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: more evaporation
+  description: Monthly transpiration energy flux from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -0.06625
+    median: 0.003954
+    max: 145.656006
+    n_finite: 58876.0
+- id: fractional_area_saturated_zone
+  product: M2TMNXLND
+  source_variable: FRSAT
+  label: Fractional area of the saturated zone
+  long_name: fractional_area_of_saturated_zone
+  units: '1'
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: '1'
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: more saturated area
+  description: Monthly fractional area of the saturated zone from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.003829
+    max: 0.903677
+    n_finite: 58876.0
+- id: fractional_area_of_land_snowcover
+  product: M2TMNXLND
+  source_variable: FRSNO
+  label: Fractional area of land snowcover
+  long_name: fractional_area_of_land_snowcover
+  units: '1'
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: '1'
+  conversion: identity
+  tier: catalog
+  category: snow
+  increase_means: more snow
+  description: Monthly fractional area of land snowcover from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.037755
+    max: 1.0
+    n_finite: 58876.0
+- id: fractional_area_unsaturated_zone
+  product: M2TMNXLND
+  source_variable: FRUNST
+  label: Fractional area of the unsaturated zone
+  long_name: fractional_area_of_unsaturated_zone
+  units: '1'
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: '1'
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: more saturated area
+  description: Monthly fractional area of the unsaturated zone from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.025983
+    max: 0.99849
+    n_finite: 58876.0
+- id: fractional_area_wilting_zone
+  product: M2TMNXLND
+  source_variable: FRWLT
+  label: Fractional area of the wilting zone
+  long_name: fractional_area_of_wilting_zone
+  units: '1'
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: '1'
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: more saturated area
+  description: Monthly fractional area of the wilting zone from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.0
+    max: 1.0
+    n_finite: 58876.0
+- id: ground_heating_land
+  product: M2TMNXLND
+  source_variable: GHLAND
+  label: Ground heating land
+  long_name: Ground_heating_land
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly ground heating land from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -20.209444
+    median: -4.325569
+    max: 9.245307
+    n_finite: 58876.0
+- id: greeness_fraction
+  product: M2TMNXLND
+  source_variable: GRN
+  label: Greeness fraction
+  long_name: greeness_fraction
+  units: '1'
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: '1'
+  conversion: identity
+  tier: catalog
+  category: vegetation
+  increase_means: greener
+  description: Monthly greeness fraction from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.711462
+    max: 0.988699
+    n_finite: 58876.0
+- id: average_profile_soil_wetness
+  product: M2TMNXLND
+  source_variable: GWETPROF
+  label: Average profile soil wetness
+  long_name: ave_prof_soil_moisture
+  units: '1'
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: '1'
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly average profile soil wetness from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.086371
+    median: 0.589486
+    max: 0.998333
+    n_finite: 58876.0
+- id: root_zone_soil_wetness
+  product: M2TMNXLND
+  source_variable: GWETROOT
+  label: Root-zone soil wetness
+  long_name: root_zone_soil_wetness
+  units: '1'
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: '1'
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly root-zone soil wetness from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.08536
+    median: 0.585847
+    max: 0.999978
+    n_finite: 58876.0
+- id: surface_soil_wetness
+  product: M2TMNXLND
+  source_variable: GWETTOP
+  label: Surface soil wetness
+  long_name: surface_soil_wetness
+  units: '1'
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: '1'
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly surface soil wetness from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.014373
+    median: 1.0
+    max: 1.0
+    n_finite: 207936.0
+- id: leaf_area_index
+  product: M2TMNXLND
+  source_variable: LAI
+  label: Leaf area index
+  long_name: leaf_area_index
+  units: '1'
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: '1'
+  conversion: identity
+  tier: catalog
+  category: vegetation
+  increase_means: greener
+  description: Monthly leaf area index from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.265746
+    max: 7.294518
+    n_finite: 58876.0
+- id: latent_heat_flux_land
+  product: M2TMNXLND
+  source_variable: LHLAND
+  label: Latent heat flux land
+  long_name: Latent_heat_flux_land
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly latent heat flux land from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -11.162686
+    median: 5.30453
+    max: 246.324875
+    n_finite: 58876.0
+- id: net_longwave_land
+  product: M2TMNXLND
+  source_variable: LWLAND
+  label: Net longwave land
+  long_name: Net_longwave_land
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly net longwave land from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -168.14238
+    median: -45.149054
+    max: -6.302516
+    n_finite: 58876.0
+- id: surface_downwelling_par_diffuse_flux
+  product: M2TMNXLND
+  source_variable: PARDFLAND
+  label: Surface downwelling par diffuse flux
+  long_name: surface_downwelling_par_diffuse_flux
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly surface downwelling par diffuse flux from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 16.430305
+    max: 62.81348
+    n_finite: 58876.0
+- id: surface_downwelling_par_beam_flux
+  product: M2TMNXLND
+  source_variable: PARDRLAND
+  label: Surface downwelling par beam flux
+  long_name: surface_downwelling_par_beam_flux
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly surface downwelling par beam flux from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 24.783749
+    max: 152.321747
+    n_finite: 58876.0
+- id: snowfall_land
+  product: M2TMNXLND
+  source_variable: PRECSNOLAND
+  label: Snowfall land
+  long_name: snowfall_land
+  units: kg m-2 s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: mm/month
+  conversion: per_second_to_per_month
+  tier: catalog
+  category: snow
+  increase_means: more snow
+  description: Monthly snowfall land from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 2.0e-06
+    max: 0.000432
+    n_finite: 58876.0
+- id: total_precipitation_land
+  product: M2TMNXLND
+  source_variable: PRECTOTLAND
+  label: Total precipitation land
+  long_name: Total_precipitation_land
+  units: kg m-2 s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: mm/month
+  conversion: per_second_to_per_month
+  tier: catalog
+  category: water
+  increase_means: more water
+  description: Monthly total precipitation land from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 9.0e-06
+    max: 0.000432
+    n_finite: 58876.0
+- id: water_profile_content
+  product: M2TMNXLND
+  source_variable: PRMC
+  label: Water content of the soil profile
+  long_name: water_profile
+  units: m-3 m-3
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m-3 m-3
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly water content of the soil profile from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.032217
+    median: 0.259363
+    max: 0.465669
+    n_finite: 58876.0
+- id: soil_water_infiltration_rate
+  product: M2TMNXLND
+  source_variable: QINFIL
+  label: Soil water infiltration rate
+  long_name: Soil_water_infiltration_rate
+  units: kg m-2 s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: mm/month
+  conversion: per_second_to_per_month
+  tier: catalog
+  category: water
+  increase_means: more water
+  description: Monthly soil water infiltration rate from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.0
+    max: 0.000199
+    n_finite: 58876.0
+- id: overland_runoff_including_throughflow
+  product: M2TMNXLND
+  source_variable: RUNOFF
+  label: Overland runoff including throughflow
+  long_name: overland_runoff_including_throughflow
+  units: kg m-2 s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: mm/month
+  conversion: per_second_to_per_month
+  tier: catalog
+  category: water
+  increase_means: more water
+  description: Monthly overland runoff including throughflow from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.0
+    max: 0.000415
+    n_finite: 58876.0
+- id: root_zone_water_content
+  product: M2TMNXLND
+  source_variable: RZMC
+  label: Root-zone water content
+  long_name: water_root_zone
+  units: m-3 m-3
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m-3 m-3
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly root-zone water content from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.031846
+    median: 0.25744
+    max: 0.473453
+    n_finite: 58876.0
+- id: surface_layer_water_content
+  product: M2TMNXLND
+  source_variable: SFMC
+  label: Surface-layer water content
+  long_name: water_surface_layer
+  units: m-3 m-3
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m-3 m-3
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly surface-layer water content from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.00546
+    median: 0.263829
+    max: 0.458292
+    n_finite: 58876.0
+- id: sensible_heat_flux_land
+  product: M2TMNXLND
+  source_variable: SHLAND
+  label: Sensible heat flux land
+  long_name: Sensible_heat_flux_land
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly sensible heat flux land from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -149.592392
+    median: 4.130773
+    max: 221.970917
+    n_finite: 58876.0
+- id: snowmelt_flux_land
+  product: M2TMNXLND
+  source_variable: SMLAND
+  label: Snowmelt flux land
+  long_name: Snowmelt_flux_land
+  units: kg m-2 s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: mm/month
+  conversion: per_second_to_per_month
+  tier: catalog
+  category: snow
+  increase_means: more snow
+  description: Monthly snowmelt flux land from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.0
+    max: 0.000446
+    n_finite: 58876.0
+- id: snow_depth_merra2_land
+  product: M2TMNXLND
+  source_variable: SNODP
+  label: Snow depth
+  long_name: snow_depth
+  units: m
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m
+  conversion: identity
+  tier: catalog
+  category: snow
+  increase_means: more snow
+  description: Monthly snow depth from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.131595
+    max: 9.590271
+    n_finite: 58876.0
+- id: total_snow_storage_land
+  product: M2TMNXLND
+  source_variable: SNOMAS
+  label: Total snow storage land
+  long_name: Total_snow_storage_land
+  units: kg m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: kg m-2
+  conversion: identity
+  tier: catalog
+  category: snow
+  increase_means: more snow
+  description: Monthly total snow storage land from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.983481
+    max: 3910.935059
+    n_finite: 58876.0
+- id: rate_of_spurious_land_energy_source
+  product: M2TMNXLND
+  source_variable: SPLAND
+  label: Rate of spurious land energy source
+  long_name: rate_of_spurious_land_energy_source
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly rate of spurious land energy source from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -2.332445
+    median: -0.000199
+    max: 16.378036
+    n_finite: 58876.0
+- id: spurious_snow_energy_source
+  product: M2TMNXLND
+  source_variable: SPSNOW
+  label: Spurious snow energy source
+  long_name: rate_of_spurious_snow_energy
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly spurious snow energy source from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -48.039204
+    median: 0.0
+    max: 5.661174
+    n_finite: 58876.0
+- id: rate_of_spurious_land_water_source
+  product: M2TMNXLND
+  source_variable: SPWATR
+  label: Rate of spurious land water source
+  long_name: rate_of_spurious_land_water_source
+  units: kg m-2 s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: mm/month
+  conversion: per_second_to_per_month
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly rate of spurious land water source from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -7.0e-06
+    median: 0.0
+    max: 0.0
+    n_finite: 58876.0
+- id: net_shortwave_land
+  product: M2TMNXLND
+  source_variable: SWLAND
+  label: Net shortwave land
+  long_name: Net_shortwave_land
+  units: W m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: W m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly net shortwave land from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 80.910561
+    max: 357.376038
+    n_finite: 58876.0
+- id: total_energy_storage_land
+  product: M2TMNXLND
+  source_variable: TELAND
+  label: Total energy storage land
+  long_name: Total_energy_storage_land
+  units: J m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: J m-2
+  conversion: identity
+  tier: catalog
+  category: energy
+  increase_means: more energy
+  description: Monthly total energy storage land from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -1895385472.0
+    median: 241472120.0
+    max: 1035297664.0
+    n_finite: 58876.0
+- id: surface_temperature_of_saturated_zone
+  product: M2TMNXLND
+  source_variable: TSAT
+  label: Surface temperature of saturated zone
+  long_name: surface_temperature_of_saturated_zone
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly surface temperature of saturated zone from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 0.681
+  month_stats:
+    min: 237.679489
+    median: 287.780045
+    max: 304.818878
+    n_finite: 38300.0
+- id: soil_temperatures_layer_1
+  product: M2TMNXLND
+  source_variable: TSOIL1
+  label: Soil temperatures layer 1
+  long_name: soil_temperatures_layer_1
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly soil temperatures layer 1 from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 239.257965
+    median: 272.943756
+    max: 311.246918
+    n_finite: 58876.0
+- id: soil_temperatures_layer_2
+  product: M2TMNXLND
+  source_variable: TSOIL2
+  label: Soil temperatures layer 2
+  long_name: soil_temperatures_layer_2
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly soil temperatures layer 2 from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 239.886887
+    median: 273.644058
+    max: 310.513428
+    n_finite: 58876.0
+- id: soil_temperatures_layer_3
+  product: M2TMNXLND
+  source_variable: TSOIL3
+  label: Soil temperatures layer 3
+  long_name: soil_temperatures_layer_3
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly soil temperatures layer 3 from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 241.093033
+    median: 275.118393
+    max: 309.118469
+    n_finite: 58876.0
+- id: soil_temperatures_layer_4
+  product: M2TMNXLND
+  source_variable: TSOIL4
+  label: Soil temperatures layer 4
+  long_name: soil_temperatures_layer_4
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly soil temperatures layer 4 from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 243.334579
+    median: 277.958054
+    max: 308.041077
+    n_finite: 58876.0
+- id: soil_temperatures_layer_5
+  product: M2TMNXLND
+  source_variable: TSOIL5
+  label: Soil temperatures layer 5
+  long_name: soil_temperatures_layer_5
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly soil temperatures layer 5 from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 247.015121
+    median: 281.686264
+    max: 308.594269
+    n_finite: 58876.0
+- id: soil_temperatures_layer_6
+  product: M2TMNXLND
+  source_variable: TSOIL6
+  label: Soil temperatures layer 6
+  long_name: soil_temperatures_layer_6
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly soil temperatures layer 6 from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 251.122757
+    median: 282.730377
+    max: 308.879181
+    n_finite: 58876.0
+- id: surface_temperature_of_land_incl_snow
+  product: M2TMNXLND
+  source_variable: TSURF
+  label: Surface temperature of land incl snow
+  long_name: surface_temperature_of_land_incl_snow
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly surface temperature of land incl snow from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 223.656036
+    median: 272.183212
+    max: 311.675995
+    n_finite: 58876.0
+- id: surface_temperature_of_unsaturated_zone
+  product: M2TMNXLND
+  source_variable: TUNST
+  label: Surface temperature of unsaturated zone
+  long_name: surface_temperature_of_unsaturated_zone
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly surface temperature of unsaturated zone from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 0.681
+  month_stats:
+    min: 237.137665
+    median: 289.72702
+    max: 311.667023
+    n_finite: 38317.0
+- id: avail_water_storage_land
+  product: M2TMNXLND
+  source_variable: TWLAND
+  label: Avail water storage land
+  long_name: Avail_water_storage_land
+  units: kg m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: kg m-2
+  conversion: identity
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly avail water storage land from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 42.979237
+    median: 492.284836
+    max: 4312.79541
+    n_finite: 58876.0
+- id: rate_of_change_of_total_land_water
+  product: M2TMNXLND
+  source_variable: WCHANGE
+  label: Rate of change of total land water
+  long_name: rate_of_change_of_total_land_water
+  units: kg m-2 s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: mm/month
+  conversion: per_second_to_per_month
+  tier: catalog
+  category: water
+  increase_means: wetter
+  description: Monthly rate of change of total land water from the MERRA-2 land reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -0.00019
+    median: 4.0e-06
+    max: 0.000425
+    n_finite: 58876.0
+- id: cloud_top_pressure
+  product: M2TMNXSLV
+  source_variable: CLDPRS
+  label: Cloud-top pressure
+  long_name: cloud_top_pressure
+  units: Pa
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: Pa
+  conversion: identity
+  tier: catalog
+  category: pressure
+  increase_means: higher pressure
+  description: Monthly cloud-top pressure from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 0.854
+  month_stats:
+    min: 11101.378906
+    median: 56274.123047
+    max: 92217.4375
+    n_finite: 202874.0
+- id: cloud_top_temperature
+  product: M2TMNXSLV
+  source_variable: CLDTMP
+  label: Cloud-top temperature
+  long_name: cloud_top_temperature
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly cloud-top temperature from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 0.854
+  month_stats:
+    min: 192.554153
+    median: 242.011238
+    max: 287.715363
+    n_finite: 202874.0
+- id: zero_plane_displacement_height
+  product: M2TMNXSLV
+  source_variable: DISPH
+  label: Zero plane displacement height
+  long_name: zero_plane_displacement_height
+  units: m
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m
+  conversion: identity
+  tier: catalog
+  category: atmosphere
+  increase_means: higher
+  description: Monthly zero plane displacement height from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.0
+    max: 23.078125
+    n_finite: 207936.0
+- id: height_1000hpa
+  product: M2TMNXSLV
+  source_variable: H1000
+  label: Geopotential height at 1000 hPa
+  long_name: height_at_1000_mb
+  units: m
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m
+  conversion: identity
+  tier: catalog
+  category: atmosphere
+  increase_means: higher
+  description: Monthly geopotential height at 1000 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -131.042496
+    median: 93.04398
+    max: 249.156174
+    n_finite: 207936.0
+  mask_below_ground_hpa: 1000
+- id: height_250hpa
+  product: M2TMNXSLV
+  source_variable: H250
+  label: Geopotential height at 250 hPa
+  long_name: height_at_250_hPa
+  units: m
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m
+  conversion: identity
+  tier: catalog
+  category: atmosphere
+  increase_means: higher
+  description: Monthly geopotential height at 250 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 9405.457031
+    median: 10254.076172
+    max: 10982.732422
+    n_finite: 207936.0
+  mask_below_ground_hpa: 250
+- id: height_500hpa
+  product: M2TMNXSLV
+  source_variable: H500
+  label: Geopotential height at 500 hPa
+  long_name: height_at_500_hPa
+  units: m
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m
+  conversion: identity
+  tier: catalog
+  category: atmosphere
+  increase_means: higher
+  description: Monthly geopotential height at 500 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 4908.934082
+    median: 5503.049805
+    max: 5880.348145
+    n_finite: 207936.0
+  mask_below_ground_hpa: 500
+- id: height_850hpa
+  product: M2TMNXSLV
+  source_variable: H850
+  label: Geopotential height at 850 hPa
+  long_name: height_at_850_hPa
+  units: m
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m
+  conversion: identity
+  tier: catalog
+  category: atmosphere
+  increase_means: higher
+  description: Monthly geopotential height at 850 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 1152.776489
+    median: 1426.623474
+    max: 1585.100342
+    n_finite: 207936.0
+  mask_below_ground_hpa: 850
+- id: vertical_velocity_500hpa
+  product: M2TMNXSLV
+  source_variable: OMEGA500
+  label: Vertical velocity at 500 hPa
+  long_name: omega_at_500_hPa
+  units: Pa s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: Pa s-1
+  conversion: identity
+  tier: catalog
+  category: atmosphere
+  increase_means: higher
+  description: Monthly vertical velocity at 500 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -0.770663
+    median: 0.004818
+    max: 0.7022
+    n_finite: 207936.0
+  mask_below_ground_hpa: 500
+- id: pbl_top_pressure
+  product: M2TMNXSLV
+  source_variable: PBLTOP
+  label: Planetary boundary layer top pressure
+  long_name: pbltop_pressure
+  units: Pa
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: Pa
+  conversion: identity
+  tier: catalog
+  category: pressure
+  increase_means: higher pressure
+  description: Monthly planetary boundary layer top pressure from the MERRA-2 single-level reanalysis, on the common land
+    grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 40296.003906
+    median: 91090.492188
+    max: 100508.921875
+    n_finite: 207936.0
+- id: surface_pressure_merra2
+  product: M2TMNXSLV
+  source_variable: PS
+  label: Surface pressure
+  long_name: surface_pressure
+  units: Pa
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: Pa
+  conversion: identity
+  tier: catalog
+  category: pressure
+  increase_means: higher pressure
+  description: Monthly surface pressure from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 50584.378906
+    median: 100609.054688
+    max: 103152.023438
+    n_finite: 207936.0
+- id: specific_humidity_250hpa
+  product: M2TMNXSLV
+  source_variable: Q250
+  label: Specific humidity at 250 hPa
+  long_name: specific_humidity_at_250_hPa
+  units: kg kg-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: g kg-1
+  conversion: kg_per_kg_to_g_per_kg
+  tier: catalog
+  category: atmosphere
+  increase_means: more humid
+  description: Monthly specific humidity at 250 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 1.0e-05
+    median: 3.7e-05
+    max: 0.000388
+    n_finite: 207936.0
+  mask_below_ground_hpa: 250
+- id: specific_humidity_500hpa
+  product: M2TMNXSLV
+  source_variable: Q500
+  label: Specific humidity at 500 hPa
+  long_name: specific_humidity_at_500_hPa
+  units: kg kg-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: g kg-1
+  conversion: kg_per_kg_to_g_per_kg
+  tier: catalog
+  category: atmosphere
+  increase_means: more humid
+  description: Monthly specific humidity at 500 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 7.5e-05
+    median: 0.000483
+    max: 0.005121
+    n_finite: 207936.0
+  mask_below_ground_hpa: 500
+- id: specific_humidity_850hpa
+  product: M2TMNXSLV
+  source_variable: Q850
+  label: Specific humidity at 850 hPa
+  long_name: specific_humidity_at_850_hPa
+  units: kg kg-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: g kg-1
+  conversion: kg_per_kg_to_g_per_kg
+  tier: catalog
+  category: atmosphere
+  increase_means: more humid
+  description: Monthly specific humidity at 850 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 0.941
+  month_stats:
+    min: 0.000194
+    median: 0.003329
+    max: 0.014973
+    n_finite: 188499.0
+  mask_below_ground_hpa: 850
+- id: specific_humidity_2m
+  product: M2TMNXSLV
+  source_variable: QV2M
+  label: Specific humidity at 2 m
+  long_name: 2-meter_specific_humidity
+  units: kg kg-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: g kg-1
+  conversion: kg_per_kg_to_g_per_kg
+  tier: catalog
+  category: atmosphere
+  increase_means: more humid
+  description: Monthly specific humidity at 2 m from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 7.4e-05
+    median: 0.004627
+    max: 0.020992
+    n_finite: 207936.0
+- id: sea_level_pressure
+  product: M2TMNXSLV
+  source_variable: SLP
+  label: Sea level pressure
+  long_name: sea_level_pressure
+  units: Pa
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: Pa
+  conversion: identity
+  tier: catalog
+  category: pressure
+  increase_means: higher pressure
+  description: Monthly sea level pressure from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 98391.890625
+    median: 101107.359375
+    max: 103213.875
+    n_finite: 207936.0
+- id: air_temperature_250hpa
+  product: M2TMNXSLV
+  source_variable: T250
+  label: Air temperature at 250 hPa
+  long_name: air_temperature_at_250_hPa
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly air temperature at 250 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 207.83905
+    median: 224.400085
+    max: 234.783844
+    n_finite: 207936.0
+  mask_below_ground_hpa: 250
+- id: air_temperature_2m
+  product: M2TMNXSLV
+  source_variable: T2M
+  label: Air temperature at 2 m
+  long_name: 2-meter_air_temperature
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly air temperature at 2 m from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 229.948975
+    median: 279.753647
+    max: 308.306213
+    n_finite: 207936.0
+- id: dew_point_temperature_2m
+  product: M2TMNXSLV
+  source_variable: T2MDEW
+  label: Dew-point temperature at 2 m
+  long_name: dew_point_temperature_at_2_m
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly dew-point temperature at 2 m from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 229.772217
+    median: 275.466843
+    max: 299.079254
+    n_finite: 207936.0
+- id: wet_bulb_temperature_2m
+  product: M2TMNXSLV
+  source_variable: T2MWET
+  label: Wet-bulb temperature at 2 m
+  long_name: wet_bulb_temperature_at_2_m
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly wet-bulb temperature at 2 m from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 229.907898
+    median: 275.481812
+    max: 299.078979
+    n_finite: 207936.0
+- id: air_temperature_500hpa
+  product: M2TMNXSLV
+  source_variable: T500
+  label: Air temperature at 500 hPa
+  long_name: air_temperature_at_500_hPa
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: deep
+  category: temperature
+  increase_means: warmer
+  description: Air temperature about 5.5 km above the surface, from the MERRA-2 reanalysis.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 229.782227
+    median: 251.056549
+    max: 269.624664
+    n_finite: 207936.0
+  mask_below_ground_hpa: 500
+- id: air_temperature_850hpa
+  product: M2TMNXSLV
+  source_variable: T850
+  label: Air temperature at 850 hPa
+  long_name: air_temperature_at_850_hPa
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: deep
+  category: temperature
+  increase_means: warmer
+  description: Air temperature about 1.5 km above the surface, from the MERRA-2 reanalysis.
+  valid_mask_share: 0.941
+  month_stats:
+    min: 239.536621
+    median: 275.568542
+    max: 300.93924
+    n_finite: 188499.0
+  mask_below_ground_hpa: 850
+- id: total_ozone
+  product: M2TMNXSLV
+  source_variable: TO3
+  label: Total column ozone
+  long_name: total_column_ozone
+  units: Dobsons
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: Dobsons
+  conversion: identity
+  tier: deep
+  category: atmosphere
+  increase_means: more ozone
+  description: Total ozone in a column of air above each place, from the MERRA-2 reanalysis.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 227.344635
+    median: 280.023071
+    max: 467.371277
+    n_finite: 207936.0
+- id: total_column_odd_oxygen
+  product: M2TMNXSLV
+  source_variable: TOX
+  label: Total column odd oxygen
+  long_name: total_column_odd_oxygen
+  units: kg m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: kg m-2
+  conversion: identity
+  tier: catalog
+  category: atmosphere
+  increase_means: more odd oxygen
+  description: Monthly total column odd oxygen from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.004879
+    median: 0.006014
+    max: 0.010024
+    n_finite: 207936.0
+- id: total_precipitable_ice_water
+  product: M2TMNXSLV
+  source_variable: TQI
+  label: Total precipitable ice water
+  long_name: total_precipitable_ice_water
+  units: kg m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: kg m-2
+  conversion: identity
+  tier: catalog
+  category: atmosphere
+  increase_means: more cloud water
+  description: Monthly total precipitable ice water from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 3.0e-06
+    median: 0.012424
+    max: 0.24026
+    n_finite: 207936.0
+- id: total_precipitable_liquid_water
+  product: M2TMNXSLV
+  source_variable: TQL
+  label: Total precipitable liquid water
+  long_name: total_precipitable_liquid_water
+  units: kg m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: kg m-2
+  conversion: identity
+  tier: catalog
+  category: atmosphere
+  increase_means: more cloud water
+  description: Monthly total precipitable liquid water from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.0
+    median: 0.058403
+    max: 0.324207
+    n_finite: 207936.0
+- id: column_water_vapor
+  product: M2TMNXSLV
+  source_variable: TQV
+  label: Column water vapour
+  long_name: total_precipitable_water_vapor
+  units: kg m-2
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: kg m-2
+  conversion: identity
+  tier: deep
+  category: atmosphere
+  increase_means: more water vapour
+  description: All the water vapour in a column of air above each place, from the MERRA-2 reanalysis.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 0.494147
+    median: 11.298181
+    max: 62.505669
+    n_finite: 207936.0
+- id: tropopause_pressure_blended
+  product: M2TMNXSLV
+  source_variable: TROPPB
+  label: Tropopause pressure (blended estimate)
+  long_name: tropopause_pressure_based_on_blended_estimate
+  units: Pa
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: Pa
+  conversion: identity
+  tier: catalog
+  category: pressure
+  increase_means: higher pressure
+  description: Monthly tropopause pressure (blended estimate) from the MERRA-2 single-level reanalysis, on the common land
+    grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 8798.925781
+    median: 25039.208984
+    max: 37919.890625
+    n_finite: 207936.0
+- id: tropopause_specific_humidity
+  product: M2TMNXSLV
+  source_variable: TROPQ
+  label: Tropopause specific humidity
+  long_name: tropopause_specific_humidity_using_blended_TROPP_estimate
+  units: kg kg-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: g kg-1
+  conversion: kg_per_kg_to_g_per_kg
+  tier: catalog
+  category: atmosphere
+  increase_means: more humid
+  description: Monthly tropopause specific humidity from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 1.0e-06
+    median: 1.5e-05
+    max: 8.1e-05
+    n_finite: 207936.0
+- id: tropopause_temperature
+  product: M2TMNXSLV
+  source_variable: TROPT
+  label: Tropopause temperature
+  long_name: tropopause_temperature_using_blended_TROPP_estimate
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly tropopause temperature from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 184.973129
+    median: 211.470627
+    max: 226.991608
+    n_finite: 207936.0
+- id: surface_skin_temperature_merra2
+  product: M2TMNXSLV
+  source_variable: TS
+  label: Surface skin temperature (MERRA-2)
+  long_name: surface_skin_temperature
+  units: K
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: degC
+  conversion: kelvin_to_celsius
+  tier: catalog
+  category: temperature
+  increase_means: warmer
+  description: Monthly surface skin temperature (merra-2) from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 223.512238
+    median: 280.60466
+    max: 311.676056
+    n_finite: 207936.0
+- id: eastward_wind_10m
+  product: M2TMNXSLV
+  source_variable: U10M
+  label: Eastward wind at 10 m
+  long_name: 10-meter_eastward_wind
+  units: m s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m s-1
+  conversion: identity
+  tier: catalog
+  category: wind
+  increase_means: stronger winds
+  description: Monthly eastward wind at 10 m from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -11.091273
+    median: -0.027337
+    max: 13.413982
+    n_finite: 207936.0
+- id: eastward_wind_250hpa
+  product: M2TMNXSLV
+  source_variable: U250
+  label: Eastward wind at 250 hPa
+  long_name: eastward_wind_at_250_hPa
+  units: m s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m s-1
+  conversion: identity
+  tier: catalog
+  category: wind
+  increase_means: stronger winds
+  description: Monthly eastward wind at 250 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -14.311023
+    median: 10.05955
+    max: 76.408134
+    n_finite: 207936.0
+  mask_below_ground_hpa: 250
+- id: eastward_wind_500hpa
+  product: M2TMNXSLV
+  source_variable: U500
+  label: Eastward wind at 500 hPa
+  long_name: eastward_wind_at_500_hPa
+  units: m s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m s-1
+  conversion: identity
+  tier: catalog
+  category: wind
+  increase_means: stronger winds
+  description: Monthly eastward wind at 500 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -13.661933
+    median: 4.04566
+    max: 43.657921
+    n_finite: 207936.0
+  mask_below_ground_hpa: 500
+- id: eastward_wind_850hpa
+  product: M2TMNXSLV
+  source_variable: U850
+  label: Eastward wind at 850 hPa
+  long_name: eastward_wind_at_850_hPa
+  units: m s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m s-1
+  conversion: identity
+  tier: catalog
+  category: wind
+  increase_means: stronger winds
+  description: Monthly eastward wind at 850 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 0.941
+  month_stats:
+    min: -15.060933
+    median: 0.842206
+    max: 18.174049
+    n_finite: 188499.0
+  mask_below_ground_hpa: 850
+- id: northward_wind_10m
+  product: M2TMNXSLV
+  source_variable: V10M
+  label: Northward wind at 10 m
+  long_name: 10-meter_northward_wind
+  units: m s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m s-1
+  conversion: identity
+  tier: catalog
+  category: wind
+  increase_means: stronger winds
+  description: Monthly northward wind at 10 m from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -11.566578
+    median: -0.15756
+    max: 10.142595
+    n_finite: 207936.0
+- id: northward_wind_250hpa
+  product: M2TMNXSLV
+  source_variable: V250
+  label: Northward wind at 250 hPa
+  long_name: northward_wind_at_250_hPa
+  units: m s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m s-1
+  conversion: identity
+  tier: catalog
+  category: wind
+  increase_means: stronger winds
+  description: Monthly northward wind at 250 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -20.349272
+    median: 0.242487
+    max: 22.09495
+    n_finite: 207936.0
+  mask_below_ground_hpa: 250
+- id: northward_wind_500hpa
+  product: M2TMNXSLV
+  source_variable: V500
+  label: Northward wind at 500 hPa
+  long_name: northward_wind_at_500_hPa
+  units: m s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m s-1
+  conversion: identity
+  tier: catalog
+  category: wind
+  increase_means: stronger winds
+  description: Monthly northward wind at 500 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: -15.98622
+    median: -0.149717
+    max: 19.247168
+    n_finite: 207936.0
+  mask_below_ground_hpa: 500
+- id: northward_wind_850hpa
+  product: M2TMNXSLV
+  source_variable: V850
+  label: Northward wind at 850 hPa
+  long_name: northward_wind_at_850_hPa
+  units: m s-1
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m s-1
+  conversion: identity
+  tier: catalog
+  category: wind
+  increase_means: stronger winds
+  description: Monthly northward wind at 850 hpa from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 0.941
+  month_stats:
+    min: -11.072941
+    median: -0.384268
+    max: 13.791555
+    n_finite: 188499.0
+  mask_below_ground_hpa: 850
+- id: lifting_condensation_level
+  product: M2TMNXSLV
+  source_variable: ZLCL
+  label: Lifting condensation level
+  long_name: lifting_condensation_level
+  units: m
+  native_grid: 0.5 deg lat x 0.625 deg lon (361 x 576)
+  display_unit: m
+  conversion: identity
+  tier: catalog
+  category: atmosphere
+  increase_means: higher
+  description: Monthly lifting condensation level from the MERRA-2 single-level reanalysis, on the common land grid.
+  valid_mask_share: 1.0
+  month_stats:
+    min: 191.071228
+    median: 608.558807
+    max: 4863.679688
+    n_finite: 207936.0
+excluded:
+- product: GLDAS_NOAH10_M
+  source_variable: AvgSurfT_inst
+  long_name: Average Surface Skin temperature
+  units: K
+  reason: Source field of one of the seven published variables.
+  valid_mask_share: null
+- product: GLDAS_NOAH10_M
+  source_variable: Evap_tavg
+  long_name: Evapotranspiration
+  units: kg m-2 s-1
+  reason: Source field of one of the seven published variables.
+  valid_mask_share: null
+- product: GLDAS_NOAH10_M
+  source_variable: Qair_f_inst
+  long_name: Specific humidity
+  units: kg kg-1
+  reason: Source field of one of the seven published variables.
+  valid_mask_share: null
+- product: GLDAS_NOAH10_M
+  source_variable: Qs_acc
+  long_name: Storm surface runoff
+  units: kg m-2
+  reason: Accumulation whose monthly convention is unresolved (variables.yaml).
+  valid_mask_share: null
+- product: GLDAS_NOAH10_M
+  source_variable: Qsb_acc
+  long_name: Baseflow-groundwater runoff
+  units: kg m-2
+  reason: Accumulation whose monthly convention is unresolved (variables.yaml).
+  valid_mask_share: null
+- product: GLDAS_NOAH10_M
+  source_variable: Qsm_acc
+  long_name: Snow melt
+  units: kg m-2
+  reason: Accumulation whose monthly convention is unresolved (variables.yaml).
+  valid_mask_share: null
+- product: GLDAS_NOAH10_M
+  source_variable: RootMoist_inst
+  long_name: Root zone soil moisture
+  units: kg m-2
+  reason: Source field of one of the seven published variables.
+  valid_mask_share: null
+- product: GLDAS_NOAH10_M
+  source_variable: SWE_inst
+  long_name: Snow depth water equivalent
+  units: kg m-2
+  reason: Extreme values over Greenland; the registry already excludes it until a snow/ice QC rule exists.
+  valid_mask_share: 1.0
+- product: GLDAS_NOAH10_M
+  source_variable: SoilMoi0_10cm_inst
+  long_name: Soil moisture
+  units: kg m-2
+  reason: Source field of one of the seven published variables.
+  valid_mask_share: null
+- product: GLDAS_NOAH10_M
+  source_variable: Tair_f_inst
+  long_name: Temperature
+  units: K
+  reason: Source field of one of the seven published variables.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: TPSNOW
+  long_name: surface_temperature_of_snow
+  units: K
+  reason: Only 1.7% of the common land mask is valid in at least 80% of sampled months (T4 rejects below 50%).
+  valid_mask_share: 0.017
+- product: M2TMNXLND
+  source_variable: TWLT
+  long_name: surface_temperature_of_wilted_zone
+  units: K
+  reason: Only 45.0% of the common land mask is valid in at least 80% of sampled months (T4 rejects below 50%).
+  valid_mask_share: 0.45
+- product: M2TMNXLND
+  source_variable: Var_BASEFLOW
+  long_name: Variance_of_BASEFLOW
+  units: kg m-2 s-1 kg m-2 s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_ECHANGE
+  long_name: Variance_of_ECHANGE
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_EVLAND
+  long_name: Variance_of_EVLAND
+  units: kg m-2 s-1 kg m-2 s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_EVPINTR
+  long_name: Variance_of_EVPINTR
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_EVPSBLN
+  long_name: Variance_of_EVPSBLN
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_EVPSOIL
+  long_name: Variance_of_EVPSOIL
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_EVPTRNS
+  long_name: Variance_of_EVPTRNS
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_FRSAT
+  long_name: Variance_of_FRSAT
+  units: 1 1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_FRSNO
+  long_name: Variance_of_FRSNO
+  units: 1 1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_FRUNST
+  long_name: Variance_of_FRUNST
+  units: 1 1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_FRWLT
+  long_name: Variance_of_FRWLT
+  units: 1 1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_GHLAND
+  long_name: Variance_of_GHLAND
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_GRN
+  long_name: Variance_of_GRN
+  units: 1 1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_GWETPROF
+  long_name: Variance_of_GWETPROF
+  units: 1 1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_GWETROOT
+  long_name: Variance_of_GWETROOT
+  units: 1 1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_GWETTOP
+  long_name: Variance_of_GWETTOP
+  units: 1 1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_LAI
+  long_name: Variance_of_LAI
+  units: 1 1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_LHLAND
+  long_name: Variance_of_LHLAND
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_LWLAND
+  long_name: Variance_of_LWLAND
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_PARDFLAND
+  long_name: Variance_of_PARDFLAND
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_PARDRLAND
+  long_name: Variance_of_PARDRLAND
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_PRECSNOLAND
+  long_name: Variance_of_PRECSNOLAND
+  units: kg m-2 s-1 kg m-2 s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_PRECTOTLAND
+  long_name: Variance_of_PRECTOTLAND
+  units: kg m-2 s-1 kg m-2 s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_PRMC
+  long_name: Variance_of_PRMC
+  units: m-3 m-3 m-3 m-3
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_QINFIL
+  long_name: Variance_of_QINFIL
+  units: kg m-2 s-1 kg m-2 s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_RUNOFF
+  long_name: Variance_of_RUNOFF
+  units: kg m-2 s-1 kg m-2 s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_RZMC
+  long_name: Variance_of_RZMC
+  units: m-3 m-3 m-3 m-3
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_SFMC
+  long_name: Variance_of_SFMC
+  units: m-3 m-3 m-3 m-3
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_SHLAND
+  long_name: Variance_of_SHLAND
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_SMLAND
+  long_name: Variance_of_SMLAND
+  units: kg m-2 s-1 kg m-2 s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_SNODP
+  long_name: Variance_of_SNODP
+  units: m m
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_SNOMAS
+  long_name: Variance_of_SNOMAS
+  units: kg m-2 kg m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_SPLAND
+  long_name: Variance_of_SPLAND
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_SPSNOW
+  long_name: Variance_of_SPSNOW
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_SPWATR
+  long_name: Variance_of_SPWATR
+  units: kg m-2 s-1 kg m-2 s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_SWLAND
+  long_name: Variance_of_SWLAND
+  units: W m-2 W m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TELAND
+  long_name: Variance_of_TELAND
+  units: J m-2 J m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TPSNOW
+  long_name: Variance_of_TPSNOW
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TSAT
+  long_name: Variance_of_TSAT
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TSOIL1
+  long_name: Variance_of_TSOIL1
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TSOIL2
+  long_name: Variance_of_TSOIL2
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TSOIL3
+  long_name: Variance_of_TSOIL3
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TSOIL4
+  long_name: Variance_of_TSOIL4
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TSOIL5
+  long_name: Variance_of_TSOIL5
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TSOIL6
+  long_name: Variance_of_TSOIL6
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TSURF
+  long_name: Variance_of_TSURF
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TUNST
+  long_name: Variance_of_TUNST
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TWLAND
+  long_name: Variance_of_TWLAND
+  units: kg m-2 kg m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_TWLT
+  long_name: Variance_of_TWLT
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXLND
+  source_variable: Var_WCHANGE
+  long_name: Variance_of_WCHANGE
+  units: kg m-2 s-1 kg m-2 s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: QV10M
+  long_name: 10-meter_specific_humidity
+  units: kg kg-1
+  reason: Near-duplicate of QV2M; keep the 2 m specific humidity.
+  valid_mask_share: 1.0
+- product: M2TMNXSLV
+  source_variable: T10M
+  long_name: 10-meter_air_temperature
+  units: K
+  reason: Near-duplicate of T2M; keep the 2 m air temperature.
+  valid_mask_share: 1.0
+- product: M2TMNXSLV
+  source_variable: TROPPT
+  long_name: tropopause_pressure_based_on_thermal_estimate
+  units: Pa
+  reason: Near-duplicate tropopause estimate; keep the blended TROPPB.
+  valid_mask_share: 1.0
+- product: M2TMNXSLV
+  source_variable: TROPPV
+  long_name: tropopause_pressure_based_on_EPV_estimate
+  units: Pa
+  reason: Near-duplicate tropopause estimate; keep the blended TROPPB.
+  valid_mask_share: 1.0
+- product: M2TMNXSLV
+  source_variable: U2M
+  long_name: 2-meter_eastward_wind
+  units: m s-1
+  reason: Near-duplicate 2 m wind level; keep U10M/V10M (10 m).
+  valid_mask_share: 1.0
+- product: M2TMNXSLV
+  source_variable: U50M
+  long_name: eastward_wind_at_50_meters
+  units: m s-1
+  reason: Near-duplicate 50 m wind level; keep U10M/V10M (10 m).
+  valid_mask_share: 1.0
+- product: M2TMNXSLV
+  source_variable: V2M
+  long_name: 2-meter_northward_wind
+  units: m s-1
+  reason: Near-duplicate 2 m wind level; keep U10M/V10M (10 m).
+  valid_mask_share: 1.0
+- product: M2TMNXSLV
+  source_variable: V50M
+  long_name: northward_wind_at_50_meters
+  units: m s-1
+  reason: Near-duplicate 50 m wind level; keep U10M/V10M (10 m).
+  valid_mask_share: 1.0
+- product: M2TMNXSLV
+  source_variable: Var_CLDPRS
+  long_name: Variance_of_CLDPRS
+  units: Pa Pa
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_CLDTMP
+  long_name: Variance_of_CLDTMP
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_DISPH
+  long_name: Variance_of_DISPH
+  units: m m
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_H1000
+  long_name: Variance_of_H1000
+  units: m m
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_H250
+  long_name: Variance_of_H250
+  units: m m
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_H500
+  long_name: Variance_of_H500
+  units: m m
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_H850
+  long_name: Variance_of_H850
+  units: m m
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_OMEGA500
+  long_name: Variance_of_OMEGA500
+  units: Pa s-1 Pa s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_PBLTOP
+  long_name: Variance_of_PBLTOP
+  units: Pa Pa
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_PS
+  long_name: Variance_of_PS
+  units: Pa Pa
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_Q250
+  long_name: Variance_of_Q250
+  units: kg kg-1 kg kg-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_Q500
+  long_name: Variance_of_Q500
+  units: kg kg-1 kg kg-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_Q850
+  long_name: Variance_of_Q850
+  units: kg kg-1 kg kg-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_QV10M
+  long_name: Variance_of_QV10M
+  units: kg kg-1 kg kg-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_QV2M
+  long_name: Variance_of_QV2M
+  units: kg kg-1 kg kg-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_SLP
+  long_name: Variance_of_SLP
+  units: Pa Pa
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_T10M
+  long_name: Variance_of_T10M
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_T250
+  long_name: Variance_of_T250
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_T2M
+  long_name: Variance_of_T2M
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_T2MDEW
+  long_name: Variance_of_T2MDEW
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_T2MWET
+  long_name: Variance_of_T2MWET
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_T500
+  long_name: Variance_of_T500
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_T850
+  long_name: Variance_of_T850
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_TO3
+  long_name: Variance_of_TO3
+  units: Dobsons Dobsons
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_TOX
+  long_name: Variance_of_TOX
+  units: kg m-2 kg m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_TQI
+  long_name: Variance_of_TQI
+  units: kg m-2 kg m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_TQL
+  long_name: Variance_of_TQL
+  units: kg m-2 kg m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_TQV
+  long_name: Variance_of_TQV
+  units: kg m-2 kg m-2
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_TROPPB
+  long_name: Variance_of_TROPPB
+  units: Pa Pa
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_TROPPT
+  long_name: Variance_of_TROPPT
+  units: Pa Pa
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_TROPPV
+  long_name: Variance_of_TROPPV
+  units: Pa Pa
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_TROPQ
+  long_name: Variance_of_TROPQ
+  units: kg kg-1 kg kg-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_TROPT
+  long_name: Variance_of_TROPT
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_TS
+  long_name: Variance_of_TS
+  units: K K
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_U10M
+  long_name: Variance_of_U10M
+  units: m s-1 m s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_U250
+  long_name: Variance_of_U250
+  units: m s-1 m s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_U2M
+  long_name: Variance_of_U2M
+  units: m s-1 m s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_U500
+  long_name: Variance_of_U500
+  units: m s-1 m s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_U50M
+  long_name: Variance_of_U50M
+  units: m s-1 m s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_U850
+  long_name: Variance_of_U850
+  units: m s-1 m s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_V10M
+  long_name: Variance_of_V10M
+  units: m s-1 m s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_V250
+  long_name: Variance_of_V250
+  units: m s-1 m s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_V2M
+  long_name: Variance_of_V2M
+  units: m s-1 m s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_V500
+  long_name: Variance_of_V500
+  units: m s-1 m s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_V50M
+  long_name: Variance_of_V50M
+  units: m s-1 m s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_V850
+  long_name: Variance_of_V850
+  units: m s-1 m s-1
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null
+- product: M2TMNXSLV
+  source_variable: Var_ZLCL
+  long_name: Variance_of_ZLCL
+  units: m m
+  reason: MERRA-2 variance field (Var_*) excluded by P24 T1.
+  valid_mask_share: null

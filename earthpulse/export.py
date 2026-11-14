@@ -561,7 +561,13 @@ def export_witness(
     window_ids: Sequence[str],
     mask: np.ndarray,
 ) -> dict:
-    """Write schema-1.3 witness agreement layers and return index.witness."""
+    """Write schema-1.3 witness agreement layers and return index.witness.
+
+    Deep-tier variables without a witness (G1 pilot, DATA_CONTRACT §14) are
+    skipped: no witness layers are written and they are absent from
+    ``index.witness.products``.
+    """
+    variables = [v for v in variables if v["id"] in contract.WITNESSES]
     for variable in variables:
         variable_id = variable["id"]
         for window_id in window_ids:
@@ -905,7 +911,7 @@ def export_region_series(
 
         witness_anomalies: np.ndarray | None = None
         witness_unit: str | None = None
-        if witness_anomaly_dir is not None:
+        if witness_anomaly_dir is not None and variable_id in contract.WITNESSES:
             witness_path = witness_anomaly_dir / f"{variable_id}.nc"
             if not witness_path.is_file():
                 raise FileNotFoundError(
@@ -1597,7 +1603,8 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                     "index.json: witness.products must be an object"
                 )
             else:
-                missing = sorted(set(variable_ids) - set(products))
+                with_witness = [v for v in variable_ids if v in contract.WITNESSES]
+                missing = sorted(set(with_witness) - set(products))
                 if missing:
                     errors.append(
                         f"index.json: witness.products missing variables {missing}"
@@ -1796,6 +1803,8 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
 
     if witness_present:
         for variable_id in variable_ids:
+            if variable_id not in contract.WITNESSES:
+                continue
             for window_id in window_ids:
                 agreement_rel = (
                     f"grids/{variable_id}/{window_id}/witness_agreement.i8"
@@ -1955,7 +1964,8 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                         f"{relative}: {field} has {len(data[field])} entries, "
                         f"expected {len(expected_months)}"
                     )
-            if witness_present and "witness_anomalies" not in data:
+            has_witness = variable_id in contract.WITNESSES
+            if witness_present and has_witness and "witness_anomalies" not in data:
                 errors.append(f"{relative}: missing witness_anomalies")
             if "witness_anomalies" in data:
                 if not isinstance(data["witness_anomalies"], list):
@@ -1968,7 +1978,7 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
                         f"{len(data['witness_anomalies'])} entries, "
                         f"expected {len(expected_months)}"
                     )
-            if witness_present and "witness_unit" not in data:
+            if witness_present and has_witness and "witness_unit" not in data:
                 errors.append(f"{relative}: missing witness_unit")
             if "witness_unit" in data and not isinstance(
                 data["witness_unit"], str
@@ -2070,9 +2080,9 @@ def validate_export(folder: str | Path, release: bool = False) -> dict:
             "synthetic=true"
         )
 
-    if total_bytes > 400 * 1024 * 1024:
+    if total_bytes > 700 * 1024 * 1024:
         errors.append(
-            f"export is {total_bytes / (1024 * 1024):.1f} MB, above the 400 MB budget"
+            f"export is {total_bytes / (1024 * 1024):.1f} MB, above the 700 MB budget"
         )
 
     return {

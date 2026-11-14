@@ -129,9 +129,9 @@ def test_raw_file_patterns_match_p01_verified_names():
 # ---------------------------------------------------------------------------
 
 
-def test_registry_loads_with_seven_variables():
+def test_registry_loads_with_eleven_variables():
     registry = load_registry()
-    assert len(registry["variables"]) == 7
+    assert len(registry["variables"]) == 11
     known = {
         "identity",
         "kelvin_to_celsius",
@@ -142,6 +142,13 @@ def test_registry_loads_with_seven_variables():
     for variable in registry["variables"]:
         assert variable["conversion"] in known
         assert variable["product"] in registry["products"]
+    new_ids = {
+        "air_temperature_850hpa",
+        "air_temperature_500hpa",
+        "column_water_vapor",
+        "total_ozone",
+    }
+    assert new_ids <= {variable["id"] for variable in registry["variables"]}
     gldas = registry["products"]["GLDAS_NOAH10_M"]
     imerg = registry["products"]["GPM_3IMERGM"]
     assert gldas["fill_value"] == -9999.0

@@ -52,6 +52,53 @@ def build_series() -> dict[str, np.ndarray]:
     }
 
 
+HR_SEED = 20261114
+
+
+def build_hamed_rao_series() -> dict[str, np.ndarray]:
+    """Series for the Hamed-Rao reference (A1). Separate generator so the series above never change."""
+    rng = np.random.default_rng(HR_SEED)
+    n = N_MONTHS
+    t = np.arange(n, dtype=float) / 12.0
+    out: dict[str, np.ndarray] = {
+        "hr_white_noise": rng.normal(0.0, 0.2, size=n),
+        "hr_white_noise_trend": 0.02 * t + rng.normal(0.0, 0.2, size=n),
+        "hr_ar1_phi03": ar1(rng, 0.3, 0.15, n),
+        "hr_ar1_phi03_trend": 0.015 * t + ar1(rng, 0.3, 0.15, n),
+        "hr_ar1_phi06": ar1(rng, 0.6, 0.15, n),
+        "hr_ar1_phi06_trend": 0.015 * t + ar1(rng, 0.6, 0.15, n),
+    }
+    gapped = 0.01 * t + ar1(rng, 0.5, 0.15, n)
+    gapped[rng.choice(n, size=40, replace=False)] = np.nan
+    out["hr_ar1_phi05_trend_nan_gaps"] = gapped
+    return out
+
+
+def hamed_rao_entries() -> list[dict]:
+    import pymannkendall as mk
+
+    entries = []
+    for name, values in build_hamed_rao_series().items():
+        r = mk.hamed_rao_modification_test(values)
+        o = mk.original_test(values)
+        entries.append(
+            {
+                "name": name,
+                "n": int(values.size),
+                "n_valid": int(np.isfinite(values).sum()),
+                # NaN is written as null (valid JSON)
+                "values": [None if not np.isfinite(v) else float(v) for v in values],
+                "p": float(r.p),
+                "z": float(r.z),
+                "tau": float(r.Tau),
+                "s": float(r.s),
+                "var_s": float(r.var_s),
+                "var_s_original": float(o.var_s),
+            }
+        )
+    return entries
+
+
 def main() -> None:
     series = build_series()
     out = {
@@ -83,6 +130,11 @@ def main() -> None:
                 "mk_tau": float(res["mk_tau_original"]),
             }
         )
+    out["hamed_rao"] = {
+        "source": "pymannkendall.hamed_rao_modification_test (alpha 0.05, lag None); NaN skipped; synthetic series",
+        "seed": HR_SEED,
+        "series": hamed_rao_entries(),
+    }
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(out, indent=1), encoding="utf-8")
     print(f"wrote {OUT_PATH}")

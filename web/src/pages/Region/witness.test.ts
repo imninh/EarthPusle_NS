@@ -24,6 +24,7 @@ const months = calendar(288)
 function trend(overrides: Partial<WitnessTrend> = {}): WitnessTrend {
   return {
     slopeDecade: 0.4,
+    slopeDecadeCI: { lower: 0.1, upper: 0.7 },
     p: 0.001,
     tau: 0.5,
     validMonths: 288,
@@ -39,6 +40,8 @@ describe('witnessTrendFromSeries', () => {
     const result = witnessTrendFromSeries(months, values, '2001-01', '2024-12')
     expect(result.trendClass).toBe('increasing')
     expect(result.slopeDecade).toBeGreaterThan(0)
+    expect(result.slopeDecadeCI).not.toBeNull()
+    expect(result.slopeDecadeCI!.lower).toBeGreaterThan(0)
     expect(result.p).not.toBeNull()
     expect(result.validMonths).toBe(288)
   })
@@ -192,6 +195,27 @@ describe('download and citation builders', () => {
     expect(text).toContain('Main DOI: 10.5067/LWTYSMP3VM5Z')
     expect(text).toContain('Witness DOI: 10.5067/AP1B0BA5PD2K')
     expect(text).toContain('Method: precomputed')
+    expect(text).toContain('95% interval after Sen (1968)')
     expect(text).toContain('Witness method:')
+  })
+})
+
+import { existsSync as vnExists, readFileSync as vnRead } from 'node:fs'
+import { dirname as vnDir, resolve as vnResolve } from 'node:path'
+import { fileURLToPath as vnUrl } from 'node:url'
+import { hamedRaoMannKendall as vnHR, mannKendall as vnMK, senSlopeCI as vnCI } from '../../lib/stats'
+import { regionTest as vnRegionTest } from './model'
+
+describe('Vietnam second dataset, before and after (report only)', () => {
+  const file = vnResolve(vnDir(vnUrl(import.meta.url)), '../../../public/data/series/regions/country_704/air_temperature.json')
+  it.skipIf(!vnExists(file))('prints original vs Hamed–Rao witness p and interval', () => {
+    const d = JSON.parse(vnRead(file, 'utf8')) as { months: string[]; witness_anomalies: (number | null)[] }
+    const t = d.months.map((_, i) => i / 12)
+    const x = d.witness_anomalies.map((v) => (v == null ? Number.NaN : v))
+    const mk = vnMK(x)!
+    const b = vnCI(t, x)!
+    const a = vnRegionTest(t, x)
+    expect(vnHR(x)).not.toBeNull()
+    console.log(`VNWITNESS before p=${mk.p.toExponential(3)} CI=[${(b.lower * 10).toFixed(4)}, ${(b.upper * 10).toFixed(4)}] after p=${a.p!.toExponential(3)} CI=[${(a.ci!.lower * 10).toFixed(4)}, ${(a.ci!.upper * 10).toFixed(4)}] fallback=${a.fallback}`)
   })
 })

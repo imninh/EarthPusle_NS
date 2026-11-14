@@ -1,0 +1,151 @@
+/* The globe sits on a night surface (docs/DESIGN.md). Colours come from the shared variables, with
+   the DESIGN.md values as fallbacks so the component also works before the tokens land. */
+.globe {
+  --globe-ink: var(--on-night, #eaf1fb);
+  --globe-ink-muted: var(--on-night-muted, #a9b8cf);
+  --globe-focus: var(--marker, #f2c230);
+  /* DESIGN.md dark values, read by both the texture and the legend swatches. */
+  --globe-increase: #ef7d63;
+  --globe-decrease: #6db3ea;
+  color: var(--globe-ink);
+  width: 100%;
+}
+
+.globe__stage {
+  position: relative;
+  width: 100%;
+  min-width: 260px;
+  max-width: 460px;
+  aspect-ratio: 1;
+  margin-inline: auto;
+}
+
+.globe__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  /* Horizontal drags rotate; vertical swipes keep scrolling the page. */
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.globe__canvas--dragging {
+  cursor: grabbing;
+}
+
+.globe__stage--flat {
+  aspect-ratio: auto;
+  max-width: 460px;
+}
+
+.globe__flat {
+  border-radius: var(--radius-md, 12px);
+  overflow: hidden;
+  background: #0f2340;
+  line-height: 0;
+}
+
+.globe__flat-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.globe__tip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 10;
+  max-width: 240px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--night-2, #13294a);
+  color: var(--globe-ink);
+  border: 1px solid rgba(234, 241, 251, 0.25);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  pointer-events: none;
+  white-space: normal;
+  text-align: center;
+}
+
+.globe__tip[hidden] {
+  display: none;
+}
+
+.globe__legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 16px;
+  margin: var(--space-3, 12px) 0 0;
+  color: var(--globe-ink-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.globe__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.globe__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.globe__swatch--increase {
+  background: var(--globe-increase, var(--increase, #c8452c));
+}
+
+.globe__swatch--decrease {
+  background: var(--globe-decrease, var(--decrease, #1f6fb2));
+}
+
+.globe__swatch--flagged {
+  background: var(--marker, #f2c230);
+}
+
+.globe__links {
+  list-style: none;
+  margin: var(--space-3, 12px) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 16px;
+  font-size: 0.875rem;
+}
+
+.globe__links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 4px;
+  color: var(--globe-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.globe__links a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.globe__links a:focus-visible,
+.globe__canvas:focus-visible {
+  outline: 2px solid var(--globe-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (max-width: 480px) {
+  .globe__links {
+    flex-direction: column;
+    align-items: center;
+  }
+}

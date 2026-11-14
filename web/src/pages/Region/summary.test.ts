@@ -14,7 +14,9 @@ const base: EvidenceModel = {
   sourceVariable: 'Tair_f_inst',
   windowLabel: '2001-01 to 2024-12 (2001-2024)',
   senSlopeDecade: 0.8,
+  senSlopeDecadeCI: { lower: 0.3, upper: 1.3 },
   slopeUnit: 'degC per decade',
+  increaseMeans: 'warmer',
   p: 0.0001,
   q: 0.0001,
   showQ: true,
@@ -65,7 +67,7 @@ function sentence(
 describe('summarySentence', () => {
   it('states a significant cell trend with q and a per-decade slope', () => {
     expect(sentence(base)).toBe(
-      'Over 2001–2024, near-surface air temperature in Vietnam rose by about 0.8 degC per decade; this trend is statistically significant (q = 0.0001).',
+      'Over 2001–2024, near-surface air temperature in Vietnam rose by about 0.8 °C per decade; this trend is statistically significant (q = 0.0001).',
     )
   })
 
@@ -92,11 +94,48 @@ describe('summarySentence', () => {
     expect(text).not.toContain('q =')
   })
 
-  it('never turns "not significant" into "no change"', () => {
-    const evidence = withEvidence({ trendClass: 'not significant', p: 0.4, q: null, showQ: false })
-    const text = sentence(evidence)
-    expect(text).toContain('not statistically significant')
-    expect(text).toContain('does not mean there was no change')
+  it('keeps a visible but not-yet-significant direction and shows the interval', () => {
+    const evidence = withEvidence({
+      trendClass: 'not significant',
+      p: 0.4,
+      q: null,
+      showQ: false,
+      senSlopeDecadeCI: { lower: -0.2, upper: 1.8 },
+    })
+    const text = summarySentence({
+      evidence,
+      placeLabel: 'in Vietnam',
+      windowStart: '2001-01',
+      windowEnd: '2024-12',
+      interval: evidence.senSlopeDecadeCI,
+    })
+    expect(text).toContain('near-surface air temperature in Vietnam rose by about 0.8 °C per decade')
+    expect(text).toContain('not strong enough yet to call this significant')
+    expect(text).toContain('(p = 0.4; the 95% interval -0.20 to +1.80 includes zero)')
+    expect(text).toContain('A longer record could change this.')
+    expect(text).not.toContain('no change')
+  })
+
+  it('replaces the generic longer-record line with the years-to-detect sentence', () => {
+    const evidence = withEvidence({
+      trendClass: 'not significant',
+      p: 0.4,
+      q: null,
+      showQ: false,
+      senSlopeDecadeCI: { lower: -0.2, upper: 1.8 },
+    })
+    const detection =
+      'A trend of this size would need about 14.4 years of data to stand out from the natural ups and downs here (range 10.1–20.3). The record has 24.'
+    const text = summarySentence({
+      evidence,
+      placeLabel: 'in Vietnam',
+      windowStart: '2001-01',
+      windowEnd: '2024-12',
+      interval: evidence.senSlopeDecadeCI,
+      detection,
+    })
+    expect(text).toContain(detection)
+    expect(text).not.toContain('A longer record could change this.')
   })
 
   it('describes insufficient data without a trend claim', () => {

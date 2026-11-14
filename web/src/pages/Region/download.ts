@@ -59,7 +59,7 @@ export function buildCitation(input: CitationInput): string {
     `${input.place} — ${input.variableLabel}, ${input.windowLabel}`,
     `Main product: ${input.product} ${input.productVersion}`.trim(),
     input.doi ? `Main DOI: ${input.doi}` : 'Main DOI: not listed',
-    input.method ? `Method: ${input.method}` : '',
+    input.method ? `Method: ${input.method}; 95% interval after Sen (1968)` : '',
   ]
   if (input.witness) {
     lines.push(

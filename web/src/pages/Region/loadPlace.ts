@@ -353,7 +353,7 @@ async function loadRegion(
   const box = country?.bbox ?? region?.bbox ?? null
   const boxText = box ? ` Approximate bbox [west, south, east, north]: ${box.join(', ')}.` : ''
   const detail = country
-    ? `Country region from Natural Earth. ${country.n_cells} grid cells inside the common mask.${boxText}`
+    ? `Country region from Natural Earth. ${country.n_cells} grid cells inside the common mask.`
     : `Predefined region. The box is approximate.${boxText}`
   const validFraction = alignToMonths(series.months, series.valid_cell_fraction, index.months)
   const witnessProduct = witnessProductInfo(index, variable.id)

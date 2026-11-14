@@ -15,18 +15,18 @@ export function ComparisonChart({ months, seriesA, seriesB, labelA, labelB, rhoL
       title="Anomaly comparison"
       yTitle="z-score"
       traces={[
-        { x: months, y: seriesA, name: labelA, color: 'accent' },
-        { x: months, y: seriesB, name: labelB, color: 'secondary' },
+        { x: months, y: seriesA, name: labelA, color: 'accent', label: labelA },
+        { x: months, y: seriesB, name: labelB, color: 'muted', dash: 'dash', label: labelB },
       ]}
       footer={
         <>
-          <div className="chart-swatches">
+          <div className="chart-swatches chart-swatches--narrow">
             <span className="chart-swatch">
               <span className="swatch swatch-accent" />
               {labelA}
             </span>
             <span className="chart-swatch">
-              <span className="swatch swatch-secondary" />
+              <span className="swatch swatch-muted" />
               {labelB}
             </span>
           </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ChartFrame, type ChartMarker, type ChartTrace } from './ChartFrame'
+import { formatUnit } from '../lib/format'
+import { ChartFrame, type ChartMarker, type ChartTrace, type ChartTrendBand } from './ChartFrame'
 
 interface AnomalyTrendChartProps {
   months: readonly string[]
@@ -10,6 +11,7 @@ interface AnomalyTrendChartProps {
   windowEnd: string
   trendMonths: readonly string[] | null
   trendY: readonly number[] | null
+  trendBand?: ChartTrendBand | null
   annualMeans?: { x: readonly string[]; y: readonly number[] } | null
   breakYear?: number | null
   witnessZ?: readonly (number | null)[] | null
@@ -37,6 +39,7 @@ export function AnomalyTrendChart({
   windowEnd,
   trendMonths,
   trendY,
+  trendBand,
   annualMeans,
   breakYear,
   witnessZ,
@@ -45,20 +48,24 @@ export function AnomalyTrendChart({
   mainZ,
   caption,
 }: AnomalyTrendChartProps) {
+  const displayUnit = formatUnit(unit)
+  const displayWitnessUnit = witnessUnit ? formatUnit(witnessUnit) : null
   const hasWitness = Boolean(witnessZ && witnessZ.length > 0 && witnessLabel)
   const [showWitness, setShowWitness] = useState(hasWitness)
   useEffect(() => {
     setShowWitness(hasWitness)
   }, [hasWitness])
-  const traces: ChartTrace[] = [{ x: months, y: anomalies, name: label, color: 'accent' }]
+  // Monthly anomalies are bars: warm above zero, cool below (colour set in traces.ts).
+  const traces: ChartTrace[] = [{ x: months, y: anomalies, name: label, color: 'accent', mode: 'bars' }]
   if (showWitness && hasWitness && witnessZ) {
     if (mainZ && mainZ.length > 0) {
       traces.push({
         x: months,
         y: mainZ,
         name: `${label} (z-score)`,
-        color: 'accent',
-        dash: 'dash',
+        color: 'ink',
+        width: 1,
+        opacity: 0.45,
         axis: 'y2',
       })
     }
@@ -66,12 +73,15 @@ export function AnomalyTrendChart({
       x: months,
       y: witnessZ,
       name: `${witnessLabel} (z-score)`,
-      color: 'secondary',
+      color: 'muted',
+      dash: 'dash',
+      width: 2,
       axis: 'y2',
+      label: witnessLabel ?? undefined,
     })
   }
   if (trendMonths && trendY) {
-    traces.push({ x: trendMonths, y: trendY, name: 'Sen trend', color: 'text', dash: 'dash' })
+    traces.push({ x: trendMonths, y: trendY, name: 'Sen trend', color: 'ink', width: 2.5, label: 'Sen trend' })
   }
   const hasAnnualMeans = Boolean(annualMeans && annualMeans.x.length > 0)
   if (annualMeans && hasAnnualMeans) {
@@ -86,14 +96,15 @@ export function AnomalyTrendChart({
   const markers: ChartMarker[] =
     breakYear == null || !Number.isFinite(breakYear)
       ? []
-      : [{ x: breakYearIso(breakYear), label: `Possible break ~${Math.round(breakYear)}` }]
+      : [{ x: breakYearIso(breakYear), label: `sudden shift ≈ ${Math.round(breakYear)}` }]
   return (
     <ChartFrame
-      title={`Anomalies (${unit})`}
-      yTitle={unit}
+      title={`Anomalies (${displayUnit})`}
+      yTitle={displayUnit}
       yTitle2={showWitness && hasWitness ? 'z-score' : undefined}
       traces={traces}
       band={{ start: windowStart, end: windowEnd }}
+      trendBand={trendBand ?? null}
       markers={markers}
       footer={
         <>
@@ -109,13 +120,20 @@ export function AnomalyTrendChart({
           ) : null}
           <div className="chart-swatches">
             <span className="chart-swatch">
-              <span className="swatch swatch-accent" />
+              <span className="swatch swatch-increase" />
+              <span className="swatch swatch-decrease" />
               {label}
             </span>
             {trendY && (
               <span className="chart-swatch">
                 <span className="swatch swatch-trend" />
                 Sen trend
+              </span>
+            )}
+            {trendBand && (
+              <span className="chart-swatch">
+                <span className="swatch swatch-band" />
+                95% interval of the trend
               </span>
             )}
             {hasAnnualMeans && (
@@ -126,8 +144,8 @@ export function AnomalyTrendChart({
             )}
             {showWitness && hasWitness ? (
               <span className="chart-swatch">
-                <span className="swatch swatch-secondary" />
-                {witnessLabel} (z-score{witnessUnit ? `, ${witnessUnit}` : ''})
+                <span className="swatch swatch-muted" />
+                {witnessLabel} (z-score{displayWitnessUnit ? `, ${displayWitnessUnit}` : ''})
               </span>
             ) : null}
           </div>

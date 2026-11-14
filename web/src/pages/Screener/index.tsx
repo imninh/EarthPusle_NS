@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { PlaceSearch } from '../../components/PlaceSearch'
-import { Chip, Disclosure, HelpTip } from '../../components/ui'
+import { Chip, Disclosure, GlossaryTip } from '../../components/ui'
 import { useApp } from '../../data/AppState'
 import { loadRegionsFile, loadScreener } from '../../data/loaders'
 import type { RegionsFile, ScreenerFile } from '../../data/types'
+import { formatUnit, type TermId } from '../../lib/format'
 import { TrendThumbnail } from './TrendThumbnail'
 import {
   MAGNITUDE_TOOLTIP,
@@ -38,9 +39,13 @@ function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
-function ariaSort(active: SortKey, direction: SortDirection, column: SortKey): 'ascending' | 'descending' | 'none' {
-  if (active !== column) return 'none'
-  return direction === 'asc' ? 'ascending' : 'descending'
+/** Each sort key explains itself with one glossary entry. */
+const COLUMN_TERM: Record<SortKey, TermId> = {
+  significantArea: 'significant',
+  magnitude: 'rate_of_change',
+  contrast: 'contrast',
+  coverage: 'coverage',
+  witness: 'second_witness',
 }
 
 export default function ScreenerPage() {
@@ -106,6 +111,20 @@ export default function ScreenerPage() {
     () => sortByMetric(viewRows, (row) => metricValue(row, sortKey), sortDir),
     [viewRows, sortKey, sortDir],
   )
+  // Group by category. Groups are ordered by the best-ranked row they contain.
+  const groups = useMemo(() => {
+    const order: string[] = []
+    const byCategory = new Map<string, ScreenerViewRow[]>()
+    for (const row of sortedRows) {
+      const list = byCategory.get(row.category)
+      if (list) list.push(row)
+      else {
+        byCategory.set(row.category, [row])
+        order.push(row.category)
+      }
+    }
+    return order.map((category) => ({ category, rows: byCategory.get(category) ?? [] }))
+  }, [sortedRows])
   const empty = screener != null && domainHasNoEvaluatedCells(viewRows)
   const showQuality = hasDiscontinuityFields(viewRows)
   const showWitness = hasWitnessFields(viewRows)
@@ -114,17 +133,23 @@ export default function ScreenerPage() {
     : SORT_COLUMNS
   const headline = screenerHeadline(viewRows, domainLabel)
 
-  const onSort = (key: SortKey) => {
-    if (key === sortKey) {
-      setSortDir((direction) => (direction === 'asc' ? 'desc' : 'asc'))
-      return
-    }
+  const onSortKey = (key: SortKey) => {
+    if (key === sortKey) return
     setSortKey(key)
     setSortDir('desc')
   }
+  const toggleDir = () => setSortDir((direction) => (direction === 'asc' ? 'desc' : 'asc'))
 
   const openVariable = (variableId: string) => {
     navigate('discovery', { variableId, windowId })
+  }
+
+  const openEvidence = (variableId: string) => {
+    if (domain === 'global') {
+      navigate('investigate', { variableId, windowId })
+      return
+    }
+    navigate('region', { variableId, windowId, selection: { kind: 'region', regionId: domain } })
   }
 
   return (
@@ -162,6 +187,33 @@ export default function ScreenerPage() {
             <Chip tone="accent">{domainLabel}</Chip>
           </div>
         </div>
+        {!loading && !screenerError && screener && !empty ? (
+          <div className="screener-sortrow">
+            <label className="screener-sortfield">
+              <span className="field-label">Sort by</span>
+              <select value={sortKey} onChange={(event) => onSortKey(event.target.value as SortKey)}>
+                {sortColumns.map((column) => (
+                  <option key={column.id} value={column.id}>
+                    {column.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <GlossaryTip term={COLUMN_TERM[sortKey]} />
+            <button
+              type="button"
+              className="button screener-dir"
+              onClick={toggleDir}
+              aria-label={
+                sortDir === 'asc'
+                  ? 'Order: smallest first. Switch to largest first'
+                  : 'Order: largest first. Switch to smallest first'
+              }
+            >
+              <span aria-hidden="true">{sortDir === 'asc' ? '↑ Smallest first' : '↓ Largest first'}</span>
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {regions == null && regionsError == null ? (
@@ -191,74 +243,52 @@ export default function ScreenerPage() {
           {!empty ? <p className="screener-headline">{headline}</p> : null}
           {!empty ? (
             <>
-              <div className="screener-sortbar" role="group" aria-label="Sort by">
-                {sortColumns.map((column) => (
-                  <SortButton key={column.id} column={column} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                ))}
-              </div>
-              <div className="screener-table-wrap">
-                <table className="screener-table">
-                  <caption>
-                    {sortDescription(sortKey, sortDir)} Missing values sort last.
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Variable</th>
-                      {sortColumns.map((column) => (
-                        <th key={column.id} scope="col" aria-sort={ariaSort(sortKey, sortDir, column.id)}>
-                          <SortButton column={column} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                          {column.id === 'witness' ? (
-                            <HelpTip label="About the second witness">
-                              A second, independent NASA dataset is tested with the same method. Confirmed means it is
-                              significant in the same direction; a high contradicted share is a warning to read the
-                              trend with caution, not a verdict.
-                            </HelpTip>
-                          ) : null}
-                        </th>
-                      ))}
-                      {showQuality ? (
-                        <th scope="col">
-                          Sudden shift
-                          <HelpTip label="About the sudden-shift quality flag">
-                            A flag means a step fits slightly better than a straight line. It could be a real jump in
-                            the climate or a data artefact. A shift during a documented GLDAS input change
-                            (2008–2012) is marked code 2: read the trend with caution.
-                          </HelpTip>
-                        </th>
-                      ) : null}
-                      <th scope="col">Map</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedRows.map((row) => (
-                      <ScreenerTableRow
+              <p className="screener-note" role="status">
+                {sortDescription(sortKey, sortDir)} Missing values sort last.
+              </p>
+              {groups.map((group) => (
+                <section
+                  key={group.category}
+                  className="screener-group"
+                  aria-labelledby={`screener-cat-${group.category}`}
+                >
+                  <h2 className="label-caps screener-cat" id={`screener-cat-${group.category}`}>
+                    {group.category}
+                  </h2>
+                  <ul className="screener-list" aria-label={`${group.category} variables`}>
+                    {group.rows.map((row) => (
+                      <ScreenerRowCard
                         key={row.variableId}
                         row={row}
                         windowId={windowId}
+                        domain={domain}
+                        domainLabel={domainLabel}
                         showQuality={showQuality}
                         showWitness={showWitness}
                         onOpen={openVariable}
+                        onEvidence={openEvidence}
                       />
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </ul>
+                </section>
+              ))}
             </>
           ) : (
             <p className="screener-status" role="status">
               No cells were evaluated in {domainLabel} for this period, so there is nothing to rank.
             </p>
           )}
-          <Disclosure summary="How to read this table">
+          <Disclosure summary="How to read this list">
             <p>
               &ldquo;Significant&rdquo; means a trend whose FDR-adjusted q-value is below {index.q_threshold}. The test
               is the Hamed–Rao modified Mann–Kendall test, corrected for autocorrelation and for testing thousands of
               grid cells.
             </p>
             <p>
-              Area fractions are area-weighted over evaluated cells. Bars run from significant decrease on the left to
-              significant increase on the right; the increase colour uses each variable&apos;s own meaning. Typical
-              change is {MAGNITUDE_TOOLTIP}.
+              Area fractions are area-weighted over evaluated cells. The bar is the evaluated land: the cool part from
+              the left is significant decrease, the warm part from the right is significant increase, and the grey
+              between is everything else. The increase colour uses each variable&apos;s own meaning. Typical change is{' '}
+              {MAGNITUDE_TOOLTIP}.
             </p>
             <p>
               The &ldquo;opposite trends&rdquo; score is near 0 when one direction dominates and near 0.5 when increase
@@ -266,16 +296,16 @@ export default function ScreenerPage() {
               called out.
             </p>
             <p>
-              Thumbnails show the full global trend grid and are not cropped to the selected domain. A{' '}
+              Small maps show the full global trend grid and are not cropped to the selected domain. A{' '}
               <strong>sudden shift</strong> flag means a step fits slightly better than a straight line: it could be a
               real climate jump or a data artefact. Code 2 marks a shift during a documented GLDAS input change
               (2008–2012), so read the trend with caution.
             </p>
             {showWitness ? (
               <p>
-                The <strong>Second witness</strong> column reports the share of the significant area where an
-                independent NASA dataset is also significant in the same direction. A high contradicted share is a
-                warning to read the trend with caution, not a verdict.
+                The <strong>second dataset</strong> chip reports the share of the significant area where an independent
+                NASA dataset is also significant in the same direction. A high contradicted share is a warning to read
+                the trend with caution, not a verdict.
               </p>
             ) : null}
           </Disclosure>
@@ -285,165 +315,233 @@ export default function ScreenerPage() {
   )
 }
 
-function SortButton({
-  column,
-  sortKey,
-  sortDir,
-  onSort,
-}: {
-  column: ScreenerSortColumn
-  sortKey: SortKey
-  sortDir: SortDirection
-  onSort: (key: SortKey) => void
-}) {
-  const active = sortKey === column.id
-  return (
-    <button type="button" onClick={() => onSort(column.id)} aria-pressed={active}>
-      {column.label}
-      {active ? <span aria-hidden="true">{sortDir === 'asc' ? ' ↑' : ' ↓'}</span> : null}
-      {active ? <span className="screener-sr">{sortDir === 'asc' ? ', smallest first' : ', largest first'}</span> : null}
-    </button>
-  )
+/** Share of the full track, 0 to 100. Display only. */
+function trackPercent(fraction: number | null): number {
+  return barHalfPercent(fraction) * 2
 }
 
-function ScreenerTableRow({
+/** The same facts as the card, in one sentence for assistive technology. */
+function rowSentence(row: ScreenerViewRow): string {
+  const parts = [`${row.label}.`]
+  if (row.sigDecrease != null && row.sigIncrease != null) {
+    parts.push(
+      `${formatPercent(row.sigDecrease)} significant decrease, ${formatPercent(row.sigIncrease)} significant increase (${row.increaseMeans}).`,
+    )
+  } else {
+    parts.push('Significant area not available.')
+  }
+  if (row.stepFlag != null && row.stepFlag > 0) {
+    parts.push(`Sudden shift flagged over ${formatPercent(row.stepFlag)} of area.`)
+  }
+  const confirmed = witnessConfirmedText(row)
+  if (confirmed) parts.push(`Second dataset: ${confirmed}.`)
+  return parts.join(' ')
+}
+
+function ScreenerRowCard({
   row,
   windowId,
+  domain,
+  domainLabel,
   showQuality,
   showWitness,
   onOpen,
+  onEvidence,
 }: {
   row: ScreenerViewRow
   windowId: string
+  domain: string
+  domainLabel: string
   showQuality: boolean
   showWitness: boolean
   onOpen: (variableId: string) => void
+  onEvidence: (variableId: string) => void
 }) {
-  const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return
-    event.preventDefault()
-    onOpen(row.variableId)
-  }
   const areaMissing = row.sigIncrease == null || row.sigDecrease == null
+  const flagged = row.stepFlag != null && row.stepFlag > 0
   return (
-    <tr className="screener-row" tabIndex={0} onClick={() => onOpen(row.variableId)} onKeyDown={onKeyDown}>
-      <th scope="row" data-label="Variable">
-        <div className="screener-var">
-          <strong>{row.label}</strong>
-          <span className="screener-meta">{row.category}</span>
-          <span className="screener-badge">{row.sourceBadge}</span>
-          <span className="screener-meta">{row.unit}</span>
-          <span className="screener-meta">
-            {row.nCells == null ? 'Cells evaluated: —' : `${formatCellCount(row.nCells)} cells evaluated`}
-          </span>
-        </div>
-      </th>
-      <td data-label="Area with significant change (increase + decrease)">
+    <li className="screener-row" aria-label={rowSentence(row)}>
+      <div className="screener-main">
+        <h3 className="screener-name">
+          <button type="button" className="screener-name-btn" onClick={() => onOpen(row.variableId)}>
+            {row.label}
+          </button>
+        </h3>
+        {row.description ? <p className="screener-description">{row.description}</p> : null}
         {areaMissing ? (
-          <span>—</span>
+          <p className="screener-meta">Significant area: —</p>
         ) : (
           <div className="screener-area">
-            <div className="screener-area-labels">
-              <span className="screener-down-label">{formatPercent(row.sigDecrease)} decrease</span>
-              <span className="screener-up-label">
-                {formatPercent(row.sigIncrease)} {row.increaseMeans}
-              </span>
-            </div>
+            <span className="screener-end screener-end-down">
+              <span className="num-mono">{formatPercent(row.sigDecrease)}</span>
+              <span className="screener-end-word">decrease</span>
+            </span>
             <div className="screener-track" aria-hidden="true">
-              <span className="screener-bar screener-bar-down" style={{ width: `${barHalfPercent(row.sigDecrease)}%` }} />
-              <span className="screener-bar screener-bar-up" style={{ width: `${barHalfPercent(row.sigIncrease)}%` }} />
+              <span className="screener-bar screener-bar-down" style={{ width: `${trackPercent(row.sigDecrease)}%` }} />
+              <span className="screener-bar screener-bar-up" style={{ width: `${trackPercent(row.sigIncrease)}%` }} />
             </div>
+            <span className="screener-end screener-end-up">
+              <span className="num-mono">{formatPercent(row.sigIncrease)}</span>
+              <span className="screener-end-word">{row.increaseMeans}</span>
+            </span>
           </div>
         )}
-      </td>
-      <td data-label="Typical change" title={MAGNITUDE_TOOLTIP}>
-        {formatMagnitude(row.magnitude)}
-      </td>
-      <td data-label="Opposite trends">
-        {row.contrast == null ? (
-          <span>—</span>
-        ) : (
-          <div className="screener-contrast">
-            <div className="screener-meter" aria-hidden="true">
-              <div className="screener-meter-fill" style={{ width: `${contrastMeterPercent(row.contrast)}%` }} />
-            </div>
-            <div className="screener-meter-scale">
-              <span>0</span>
-              <span>0.5</span>
-            </div>
-            <span>{contrastLabel(row.contrast)}</span>
-            <span className="screener-meta">{formatContrast(row.contrast)} of 0.5</span>
-          </div>
-        )}
-      </td>
-      <td data-label="Coverage">
-        <span className="screener-coverage">
-          <span>{formatPercent(row.coverage)}</span>
+        <div className="screener-chips">
+          {showQuality && flagged ? (
+            <Chip
+              tone="warn"
+              title="Sudden shift: a step fits slightly better than a straight line. It could be a real climate jump or a data artefact; read the evidence."
+            >
+              Sudden shift flagged <span className="num-mono">{formatPercent(row.stepFlag)}</span>
+            </Chip>
+          ) : null}
+          {showWitness && row.witnessCorroborated != null ? (
+            <Chip tone="good">
+              Second dataset: <span className="num-mono">{formatPercent(row.witnessCorroborated)}</span> confirmed
+            </Chip>
+          ) : null}
+          {showWitness && witnessContradictionWarning(row) ? (
+            <Chip
+              tone="warn"
+              title="A second dataset contradicts a substantial share of the significant area. Read the trend with caution; this is not a verdict."
+            >
+              High disagreement
+            </Chip>
+          ) : null}
           {coverageIsLow(row.coverage) ? (
             <span className="screener-warn">
               <WarningIcon />
-              <span>Below 70%</span>
+              <span>Coverage below 70%</span>
             </span>
           ) : null}
-        </span>
-      </td>
-      {showWitness ? (
-        <td data-label="Second witness">
-          {row.witnessCorroborated == null ? (
-            <span className="screener-meta">No witness value</span>
-          ) : (
-            <span className="screener-witness">
-              <span>{witnessConfirmedText(row)}</span>
-              {row.witnessContradicted != null ? (
-                <span className="screener-meta">
-                  {formatPercent(row.witnessContradicted)} contradicted
-                </span>
-              ) : null}
-              {witnessContradictionWarning(row) ? (
-                <Chip
-                  tone="warn"
-                  title="A second dataset contradicts a substantial share of the significant area. Read the trend with caution; this is not a verdict."
-                >
-                  High disagreement
-                </Chip>
-              ) : null}
-            </span>
-          )}
-        </td>
-      ) : null}
-      {showQuality ? (
-        <td data-label="Sudden shift flag">
-          {row.stepFlag == null ? (
-            <span>—</span>
-          ) : row.stepFlag > 0 ? (
-            <span className="screener-quality">
-              <Chip
-                tone="warn"
-                title="Sudden shift: a step fits slightly better than a straight line. It could be a real climate jump or a data artefact; read the evidence."
-              >
-                Sudden shift flagged
-              </Chip>
-              <span className="screener-meta">{formatPercent(row.stepFlag)} of area flagged</span>
-              {row.sigTrendFlagged != null ? (
-                <span className="screener-meta">
-                  {formatPercent(row.sigTrendFlagged)} of significant area also flagged
-                </span>
-              ) : null}
-            </span>
-          ) : (
-            <span className="screener-meta">No sudden shift detected</span>
-          )}
-        </td>
-      ) : null}
-      <td data-label="Map">
+        </div>
+        <details className="screener-more">
+          <summary>More metrics</summary>
+          <dl className="screener-dl">
+            <div>
+              <dt>
+                Typical change
+                <GlossaryTip term="rate_of_change" />
+              </dt>
+              <dd title={MAGNITUDE_TOOLTIP}>
+                <span className="num-mono">{formatMagnitude(row.magnitude)}</span>
+              </dd>
+            </div>
+            <div>
+              <dt>
+                Opposite trends
+                <GlossaryTip term="contrast" />
+              </dt>
+              <dd>
+                {row.contrast == null ? (
+                  <span className="num-mono">—</span>
+                ) : (
+                  <>
+                    {contrastLabel(row.contrast)} (<span className="num-mono">{formatContrast(row.contrast)}</span> of
+                    0.5)
+                    <span className="screener-meter" aria-hidden="true">
+                      <span
+                        className="screener-meter-fill"
+                        style={{ width: `${contrastMeterPercent(row.contrast)}%` }}
+                      />
+                    </span>
+                  </>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>
+                Coverage
+                <GlossaryTip term="coverage" />
+              </dt>
+              <dd>
+                <span className="num-mono">{formatPercent(row.coverage)}</span>
+              </dd>
+            </div>
+            {showQuality ? (
+              <div>
+                <dt>
+                  Sudden shift
+                  <GlossaryTip term="sudden_shift" />
+                </dt>
+                <dd>
+                  {row.stepFlag == null ? (
+                    <span className="num-mono">—</span>
+                  ) : flagged ? (
+                    <>
+                      <span className="num-mono">{formatPercent(row.stepFlag)}</span> of area flagged
+                      {row.sigTrendFlagged != null ? (
+                        <>
+                          ; <span className="num-mono">{formatPercent(row.sigTrendFlagged)}</span> of significant area
+                          also flagged
+                        </>
+                      ) : null}
+                    </>
+                  ) : (
+                    'No sudden shift detected'
+                  )}
+                </dd>
+              </div>
+            ) : null}
+            {showWitness ? (
+              <div>
+                <dt>
+                  Second witness
+                  <GlossaryTip term="second_witness" />
+                </dt>
+                <dd>
+                  {row.witnessCorroborated == null ? (
+                    'No witness value'
+                  ) : (
+                    <>
+                      {witnessConfirmedText(row)}
+                      {row.witnessContradicted != null ? (
+                        <>
+                          ; <span className="num-mono">{formatPercent(row.witnessContradicted)}</span> contradicted
+                        </>
+                      ) : null}
+                    </>
+                  )}
+                </dd>
+              </div>
+            ) : null}
+            <div>
+              <dt>Cells evaluated</dt>
+              <dd>
+                <span className="num-mono">{formatCellCount(row.nCells)}</span>
+              </dd>
+            </div>
+            <div>
+              <dt>Unit and source</dt>
+              <dd>
+                {formatUnit(row.unit)} · {row.sourceBadge}
+              </dd>
+            </div>
+          </dl>
+          <div className="screener-actions">
+            <button type="button" className="button" onClick={() => onOpen(row.variableId)}>
+              Open the map
+            </button>
+            <button type="button" className="button" onClick={() => onEvidence(row.variableId)}>
+              Open the evidence for {domain === 'global' ? 'the whole domain' : domainLabel}
+            </button>
+          </div>
+        </details>
+      </div>
+      <button
+        type="button"
+        className="screener-thumbbtn"
+        onClick={() => onOpen(row.variableId)}
+        aria-label={`Open the map for ${row.label}`}
+      >
         <TrendThumbnail
           variableId={row.variableId}
           windowId={windowId}
           label={row.label}
           increaseMeans={row.increaseMeans}
         />
-      </td>
-    </tr>
+      </button>
+    </li>
   )
 }
 

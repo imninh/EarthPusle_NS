@@ -1,23 +1,48 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useApp } from '../data/AppState'
 import type { Page } from '../data/types'
 import { CoachMark, shouldShowCoach } from './ui'
 import { VariableSelect, WindowSelect } from './VariableSelect'
 
-const VIEWS: { id: Page; label: string; short: string }[] = [
-  { id: 'home', label: 'Home', short: 'Home' },
-  { id: 'screener', label: 'Explore variables', short: 'Variables' },
-  { id: 'discovery', label: 'Explore the map', short: 'Map' },
-  { id: 'story', label: 'Follow a case', short: 'Story' },
-  { id: 'method', label: 'How it works', short: 'Method' },
+const VIEWS: { id: Page; label: string }[] = [
+  { id: 'home', label: 'Home' },
+  { id: 'investigate', label: 'Investigate' },
+  { id: 'screener', label: 'Variables' },
+  { id: 'discovery', label: 'Map' },
+  { id: 'story', label: 'Cases' },
+  { id: 'method', label: 'How it works' },
 ]
 
 export function Layout({ children }: { children: ReactNode }) {
   const { index, page, setPage } = useApp()
-  const [coachOpen, setCoachOpen] = useState(shouldShowCoach)
+  // The first-visit coach mark belongs on Home only. A deep link must never be
+  // covered by it, even when the dismissal flag has not been stored yet.
+  const [coachOpen, setCoachOpen] = useState(() => page === 'home' && shouldShowCoach())
   const helpButtonRef = useRef<HTMLButtonElement>(null)
   const showVariable = page === 'discovery' || page === 'region'
   const showPeriod = page === 'screener' || page === 'discovery' || page === 'region'
+  const showContextBar = showVariable || showPeriod
+
+  // Leaving Home closes an auto-opened tour; the "?" button can still open it
+  // deliberately on any page.
+  useEffect(() => {
+    if (page !== 'home') setCoachOpen(false)
+  }, [page])
+
+  // One help button. With a context bar it lives there; otherwise it stays in the night
+  // header so the guided tour is reachable on every page.
+  const helpButton = (
+    <button
+      ref={helpButtonRef}
+      type="button"
+      className={showContextBar ? 'help-button' : 'help-button help-button--night'}
+      onClick={() => setCoachOpen(true)}
+      aria-label="Open the guided tour"
+      title="Guided tour"
+    >
+      ?
+    </button>
+  )
 
   return (
     <div className="app">
@@ -37,7 +62,6 @@ export function Layout({ children }: { children: ReactNode }) {
           </span>
           <span className="brand-text">
             <strong>EarthPulse</strong>
-            <span>Earth system trend detective</span>
           </span>
         </button>
 
@@ -45,35 +69,29 @@ export function Layout({ children }: { children: ReactNode }) {
           {VIEWS.map((view) => (
             <button
               key={view.id}
+              type="button"
               className={view.id === page ? 'tab active' : 'tab'}
               onClick={() => setPage(view.id)}
               aria-current={view.id === page ? 'page' : undefined}
             >
-              <span className="tab-long">{view.label}</span>
-              <span className="tab-short">{view.short}</span>
+              {view.label}
             </button>
           ))}
         </nav>
 
-        <div className="header-tools">
-          {showVariable || showPeriod ? (
+        {showContextBar ? null : <div className="header-tools">{helpButton}</div>}
+      </header>
+      {showContextBar ? (
+        <div className="context-bar">
+          <div className="context-bar-inner">
             <div className="controls" role="group" aria-label="Data controls">
               {showVariable ? <VariableSelect /> : null}
               {showPeriod ? <WindowSelect /> : null}
             </div>
-          ) : null}
-          <button
-            ref={helpButtonRef}
-            type="button"
-            className="help-button"
-            onClick={() => setCoachOpen(true)}
-            aria-label="Open the guided tour"
-            title="Guided tour"
-          >
-            ?
-          </button>
+            {helpButton}
+          </div>
         </div>
-      </header>
+      ) : null}
       <main id="main" className="app-main" tabIndex={-1}>
         {children}
       </main>

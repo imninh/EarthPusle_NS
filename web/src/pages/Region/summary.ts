@@ -1,7 +1,9 @@
 // Plain-language one-sentence summary of the evidence card.
 // Wording follows the numbers: no causal claims, and "not significant" is never
 // phrased as "no change".
-import type { EvidenceModel } from './model'
+import { formatUnit } from '../../lib/format'
+import type { SenSlopeCI } from '../../lib/stats'
+import { formatInterval, type EvidenceModel } from './model'
 import { documentedInputChange, isKnownForcingShift, type QualitySummary } from './quality'
 import { witnessSummaryClause, type SummaryWitness } from './witness'
 
@@ -16,6 +18,10 @@ export interface SummaryInput {
   knownForcingPeriod?: readonly [number, number] | null
   /** Schema 1.3 second witness, when one was exported for this series. */
   witness?: SummaryWitness | null
+  /** 95% Sen interval in the same per-decade unit as `senSlopeDecade`. */
+  interval?: SenSlopeCI | null
+  /** A4/P27 sentence for a non-significant trend; omitted when not evaluated. */
+  detection?: string | null
 }
 
 function lowerFirst(text: string): string {
@@ -89,9 +95,23 @@ export function summarySentence(input: SummaryInput): string {
     return `Over ${range}, there is not enough information to summarise the trend in ${subject}.`
   }
 
-  const magnitude = `${formatMagnitude(evidence.senSlopeDecade)} ${evidence.slopeUnit}`
+  const magnitude = `${formatMagnitude(evidence.senSlopeDecade)} ${formatUnit(evidence.slopeUnit)}`
   if (evidence.trendClass === 'not significant') {
-    return `Over ${range}, ${subject} changed by about ${magnitude}, but the trend is not statistically significant, which does not mean there was no change${trail}.`
+    if (evidence.senSlopeDecade !== 0) {
+      const warm = evidence.category === 'temperature'
+      const verb = evidence.senSlopeDecade > 0 ? (warm ? 'rose' : 'increased') : (warm ? 'fell' : 'decreased')
+      const useQ = evidence.showQ && evidence.q != null
+      const statLabel = useQ ? 'q' : 'p'
+      const statValue = formatStat(useQ ? evidence.q : evidence.p)
+      const pieces: string[] = []
+      if (statValue != null) pieces.push(`${statLabel} = ${statValue}`)
+      const intervalText = formatInterval(input.interval ?? null)
+      if (intervalText) pieces.push(`the 95% interval ${intervalText} includes zero`)
+      const parenthetical = pieces.length === 0 ? '' : ` (${pieces.join('; ')})`
+      const tail = input.detection ?? 'A longer record could change this.'
+      return `Over ${range}, ${subject} ${verb} by about ${magnitude}, but the evidence is not strong enough yet to call this significant${parenthetical}. ${tail}`
+    }
+    return `Over ${range}, the trend in ${subject} is not statistically significant. A longer record could change this.`
   }
   if (evidence.trendClass !== 'increasing' && evidence.trendClass !== 'decreasing') {
     return `Over ${range}, there is not enough information to summarise the trend in ${subject}.`

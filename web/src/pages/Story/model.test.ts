@@ -10,6 +10,8 @@ import {
   casePlaceLabel,
   caseRegionId,
   caseRegionNote,
+  caseSteps,
+  clampStep,
   caseWindowYears,
   cautionShare,
   cautionCaseForVariable,
@@ -271,5 +273,27 @@ describe('second-witness wording', () => {
       },
     } as unknown as DataIndex
     expect(witnessProductLabel(item, 'precipitation', labelled)).toBe('GPCP precipitation')
+  })
+})
+
+describe('caseSteps', () => {
+  const base = {
+    evidence: [{ variable: 'x' }],
+    kind: 'finding',
+  } as unknown as DetectiveCase
+
+  it('has question, evidence and limits for a plain case', () => {
+    expect(caseSteps(base).map((s) => s.key)).toEqual(['question', 'evidence', 'limits'])
+  })
+
+  it('adds the second-dataset and caution steps only when the case has them', () => {
+    const full = { ...base, kind: 'caution', evidence: [{ variable: 'x', witness: {} }] } as unknown as DetectiveCase
+    expect(caseSteps(full).map((s) => s.key)).toEqual(['question', 'evidence', 'witness', 'caution', 'limits'])
+  })
+
+  it('clamps a step position', () => {
+    expect(clampStep(99, 4)).toBe(3)
+    expect(clampStep(-1, 4)).toBe(0)
+    expect(clampStep(Number.NaN, 4)).toBe(0)
   })
 })

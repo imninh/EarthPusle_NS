@@ -64,6 +64,24 @@ export const METHOD_STEPS: readonly MethodStep[] = [
       'Agreement is corroboration, not ground truth: MERRA-2 is also a reanalysis and GPCP shares rain-gauge inputs with IMERG.',
     why: 'A second dataset makes the detective story stronger, but it does not replace judgement.',
   },
+  {
+    id: 'region',
+    title: 'Region average',
+    technical: 'area-weighted mean series',
+    body:
+      'For a country, a region or a box you choose, we average the cell anomalies into one monthly series, giving each cell a weight by its area. ' +
+      'The trend test then runs once on that series, with the Hamed–Rao modified Mann–Kendall test and no false-discovery correction.',
+    why: 'One test on one series is easy to repeat, but an average can hide cells that move in opposite directions.',
+  },
+  {
+    id: 'interval',
+    title: 'Rate and 95% interval',
+    technical: 'rate of change with its interval',
+    body:
+      'We report the rate of change together with a 95% interval, the range that is likely to contain the true rate. ' +
+      'If the interval includes zero, the direction is not yet proven, and a longer record can change that.',
+    why: 'An interval shows how sure we are, which a single number cannot.',
+  },
 ]
 
 export const METHOD_LIMITATIONS: readonly string[] = [
@@ -98,6 +116,190 @@ export const METHOD_DOC_LINKS: readonly MethodDocLink[] = [
     description: 'Grid, file layout and every published field.',
   },
 ]
+
+// ---------------------------------------------------------------------------
+// "How EarthPulse answers the challenge". Every row names a feature that exists
+// in web/src today; the quoted phrases are short pieces of the challenge text
+// (docs/CHALLENGE_BRIEF.md). `page` is a hash route used with the app's navigate().
+// ---------------------------------------------------------------------------
+
+export type ChallengePage = 'investigate' | 'screener' | 'discovery' | 'region' | 'story' | 'method'
+
+export interface ChallengeRow {
+  id: string
+  kind: 'Objective' | 'Consideration'
+  /** Short quote from the challenge text. */
+  phrase: string
+  /** Where the feature is in the app, in plain words. */
+  where: string
+  page: ChallengePage
+  linkLabel: string
+}
+
+export const CHALLENGE_ROWS: readonly ChallengeRow[] = [
+  {
+    id: 'variables',
+    kind: 'Objective',
+    phrase: 'variables of interest',
+    where: 'The Variables page ranks every published variable by how much of the land shows a trend.',
+    page: 'screener',
+    linkLabel: 'Open Variables',
+  },
+  {
+    id: 'region',
+    kind: 'Objective',
+    phrase: 'a particular region',
+    where: 'Pick a country, a region or a box of your own on the Region page.',
+    page: 'region',
+    linkLabel: 'Open the Region page',
+  },
+  {
+    id: 'series',
+    kind: 'Objective',
+    phrase: 'a time series',
+    where: 'The Region page draws the monthly series for your place and lets you change the period.',
+    page: 'region',
+    linkLabel: 'Open the Region page',
+  },
+  {
+    id: 'rate',
+    kind: 'Objective',
+    phrase: 'the Mann-Kendall test, or confidence intervals',
+    where: 'The Region page gives the rate of change with a 95% interval and a Hamed–Rao Mann–Kendall test.',
+    page: 'region',
+    linkLabel: 'Open the Region page',
+  },
+  {
+    id: 'definitions',
+    kind: 'Consideration',
+    phrase: 'simple definitions of the variables',
+    where: 'The Map shows a one-sentence definition of the chosen variable, and the “?” buttons explain each term.',
+    page: 'discovery',
+    linkLabel: 'Open the Map',
+  },
+  {
+    id: 'questions',
+    kind: 'Consideration',
+    phrase: 'a short series of questions',
+    where: 'Investigate asks where, what and when, then shows the matching variables.',
+    page: 'investigate',
+    linkLabel: 'Open Investigate',
+  },
+  {
+    id: 'demos',
+    kind: 'Consideration',
+    phrase: 'demonstration examples',
+    where: 'The Cases page walks through the published detective cases one step at a time.',
+    page: 'story',
+    linkLabel: 'Open Cases',
+  },
+  {
+    id: 'not-significant',
+    kind: 'Consideration',
+    phrase: 'interesting even if it doesn’t reach the level of significance',
+    where: 'A weak trend is shown as “a direction, not yet significant”, never as “no change”.',
+    page: 'investigate',
+    linkLabel: 'Open Investigate',
+  },
+  {
+    id: 'seasonal',
+    kind: 'Consideration',
+    phrase: 'once the seasonal cycle is removed',
+    where: 'Every chart and test uses monthly anomalies, so the normal yearly rhythm is already taken out.',
+    page: 'region',
+    linkLabel: 'Open the Region page',
+  },
+]
+
+export function challengeHref(page: ChallengePage): string {
+  return `#/${page}`
+}
+
+// ---------------------------------------------------------------------------
+// Tools to check our numbers
+// ---------------------------------------------------------------------------
+
+export interface ToolLink {
+  label: string
+  href: string
+}
+
+export const CHECK_TOOLS: readonly ToolLink[] = [
+  { label: 'Giovanni', href: 'https://giovanni.gsfc.nasa.gov/' },
+  {
+    label: 'Hydrology Time Series',
+    href: 'https://disc.gsfc.nasa.gov/information/tools?title=Hydrology%20Time%20Series',
+  },
+  { label: 'KNMI Climate Explorer', href: 'https://climexp.knmi.nl/' },
+]
+
+export const CHECK_TOOLS_SENTENCE =
+  'These tools draw and test one series at a time. EarthPulse adds screening across variables, correction for many tests, data-quality flags and a second dataset.'
+
+// ---------------------------------------------------------------------------
+// Classroom sheet (English and Vietnamese)
+// ---------------------------------------------------------------------------
+
+export type SheetLang = 'en' | 'vi'
+
+export interface SheetText {
+  title: string
+  subtitle: string
+  nameLine: string
+  tasksLabel: string
+  tasks: readonly string[]
+  sourcePrefix: string
+  printLabel: string
+}
+
+export const SHEET_TEXT: Record<SheetLang, SheetText> = {
+  en: {
+    title: 'EarthPulse classroom sheet',
+    subtitle: '15 minutes · open EarthPulse and work through three tasks',
+    nameLine: 'Name',
+    tasksLabel: 'Tasks',
+    tasks: [
+      'Is your country getting warmer? Write the rate and its 95% interval.',
+      'Find a trend you should not fully trust. Which warning did the app give?',
+      "Find a variable with no significant trend. What does the app say about it, and why is that not the same as 'no change'?",
+    ],
+    sourcePrefix: 'Data sources',
+    printLabel: 'Print this sheet',
+  },
+  vi: {
+    title: 'Phiếu học tập EarthPulse',
+    subtitle: '15 phút · mở EarthPulse và làm ba nhiệm vụ',
+    nameLine: 'Họ tên',
+    tasksLabel: 'Nhiệm vụ',
+    tasks: [
+      'Nước bạn có đang ấm lên không? Ghi tốc độ thay đổi và khoảng tin cậy 95%.',
+      'Tìm một xu hướng mà bạn chưa nên tin hoàn toàn. Ứng dụng đã cảnh báo điều gì?',
+      "Tìm một biến chưa có xu hướng có ý nghĩa thống kê. Ứng dụng nói gì, và vì sao điều đó không có nghĩa là 'không thay đổi'?",
+    ],
+    sourcePrefix: 'Nguồn dữ liệu',
+    printLabel: 'In phiếu này',
+  },
+}
+
+export interface SourceProduct {
+  product: string
+  version?: string | null
+  doi?: string | null
+}
+
+/** "Prefix: Product version, DOI x; ..." built from the published index; duplicates removed. */
+export function sheetSourceLine(prefix: string, products: readonly SourceProduct[]): string {
+  const seen = new Set<string>()
+  const parts: string[] = []
+  for (const item of products) {
+    const name = [item.product, item.version].filter(Boolean).join(' ')
+    const text = item.doi ? `${name}, DOI ${item.doi}` : name
+    if (!name || seen.has(text)) continue
+    seen.add(text)
+    parts.push(text)
+  }
+  return parts.length > 0 ? `${prefix}: ${parts.join('; ')}` : prefix
+}
 
 export function sentenceCount(text: string): number {
   return text

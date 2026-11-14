@@ -1,7 +1,7 @@
 // Hash routing for shareable app state. Kept pure so it can be unit-tested without a DOM.
 import type { Page, Selection } from '../../data/types'
 
-const PAGES: readonly Page[] = ['home', 'screener', 'discovery', 'region', 'story', 'method']
+const PAGES: readonly Page[] = ['home', 'investigate', 'screener', 'discovery', 'region', 'story', 'method']
 const PAGES_WITH_VARIABLE: readonly Page[] = ['screener', 'discovery', 'region']
 
 export interface RouteState {
@@ -104,6 +104,10 @@ function appendSelection(params: URLSearchParams, selection: Selection) {
  */
 export function serializeHash(route: RouteState): string {
   const params = new URLSearchParams()
+  if (route.page === 'investigate') {
+    // The Investigate page owns place/topic; only the shared period is routed here.
+    if (route.windowId) params.set('w', route.windowId)
+  }
   if (PAGES_WITH_VARIABLE.includes(route.page)) {
     if (route.variableId) params.set('v', route.variableId)
     if (route.windowId) params.set('w', route.windowId)

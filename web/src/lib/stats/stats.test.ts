@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { fitIntercept, mannKendall, senSlope, spearman } from './index'
+import { fitIntercept, hamedRaoMannKendall, mannKendall, senSlope, senSlopeCI, spearman, yearsToDetect } from './index'
 
 const fixturePath = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -54,6 +54,62 @@ describe('senSlope', () => {
 describe('fitIntercept', () => {
   it('is the median of x - slope * t', () => {
     expect(fitIntercept([0, 1, 2, 3], [1, 2, 2, 4], 1)).toBe(1)
+  })
+})
+
+describe('senSlopeCI', () => {
+  // Reference call, run once in the project venv (scipy 1.18.1):
+  //   scipy.stats.theilslopes(x, t, alpha=0.95)
+  // on the 19 finite points below gives slope 0.035196,
+  // low_slope 0.019108, high_slope 0.054885.
+  // The rank formula in the spec lands on the neighbouring ranks, so its
+  // bounds are 0.01916472 and 0.05463612; both are recorded here.
+  const values = [
+    0.000025, 0.010142, 0.002851, -0.005312, 0.007573, Number.NaN, 0.026203, 0.055971, 0.023489,
+    0.025091, 0.051464, 0.052971, 0.052108, 0.035557, 0.057748, 0.076406, 0.039782, 0.061681,
+    0.036976, 0.053376,
+  ]
+  const t = values.map((_, i) => i / 12)
+
+  it('matches the scipy reference fixture on the rank formula', () => {
+    const ci = senSlopeCI(t, values)
+    expect(ci).not.toBeNull()
+    expect(ci!.lower).toBeCloseTo(0.019164720183596076, 9)
+    expect(ci!.upper).toBeCloseTo(0.054636115746117195, 9)
+    // scipy.stats.theilslopes(x, t, alpha=0.95) = (0.035196, 0.019108, 0.054885)
+    expect(Math.abs(ci!.lower - 0.019108)).toBeLessThan(0.0001)
+    expect(Math.abs(ci!.upper - 0.054885)).toBeLessThan(0.0005)
+  })
+
+  it('collapses to the slope on a straight line', () => {
+    const tStraight = Array.from({ length: 24 }, (_, i) => i)
+    const straight = tStraight.map((value) => 2 * value + 1)
+    const ci = senSlopeCI(tStraight, straight)
+    expect(ci).not.toBeNull()
+    expect(ci!.lower).toBeCloseTo(2, 12)
+    expect(ci!.upper).toBeCloseTo(2, 12)
+  })
+
+  it('contains zero for a deterministic white-noise series', () => {
+    // Fixed pseudo-random sequence, so the test never depends on a random seed.
+    const noise = Array.from({ length: 30 }, (_, i) => (((i * 37) % 101) - 50) / 100)
+    const ci = senSlopeCI(noise.map((_, i) => i / 12), noise)
+    expect(ci).not.toBeNull()
+    expect(ci!.lower).toBeLessThan(0)
+    expect(ci!.upper).toBeGreaterThan(0)
+  })
+
+  it('handles NaN exactly like senSlope and needs ten valid points', () => {
+    const gapped = values.map((value, i) => (i % 7 === 0 ? Number.NaN : value))
+    const ciGapped = senSlopeCI(t, gapped)
+    const finiteT = t.filter((_, i) => Number.isFinite(gapped[i]))
+    const finiteX = gapped.filter((value) => Number.isFinite(value))
+    const ciFinite = senSlopeCI(finiteT, finiteX)
+    expect(ciGapped).toEqual(ciFinite)
+    const ten = Array.from({ length: 10 }, (_, i) => i * 2)
+    const tenT = ten.map((_, i) => i)
+    expect(senSlopeCI(tenT.slice(0, 9), ten.slice(0, 9))).toBeNull()
+    expect(senSlopeCI(tenT, ten)).not.toBeNull()
   })
 })
 
@@ -183,5 +239,86 @@ describe('stats_reference.json', () => {
       expect(Math.abs(mk!.tau - tau), series.name).toBeLessThanOrEqual(1e-6)
       expect(Math.abs(mk!.p - p), series.name).toBeLessThanOrEqual(1e-4)
     }
+  })
+})
+
+interface HamedRaoReference {
+  name: string
+  values: (number | null)[]
+  p: number
+  z: number
+  tau: number
+  var_s: number
+  var_s_original: number
+}
+
+describe('hamedRaoMannKendall', () => {
+  const hamedRaoReference = (): HamedRaoReference[] => {
+    const raw = JSON.parse(readFileSync(fixturePath, 'utf8')) as { hamed_rao?: { series: HamedRaoReference[] } }
+    return raw.hamed_rao?.series ?? []
+  }
+
+  it('matches pymannkendall.hamed_rao_modification_test on the reference series', () => {
+    const series = hamedRaoReference()
+    expect(series.length).toBeGreaterThanOrEqual(6)
+    for (const ref of series) {
+      const values = ref.values.map((v) => (v == null ? Number.NaN : v))
+      const hr = hamedRaoMannKendall(values)
+      expect(hr, ref.name).not.toBeNull()
+      expect(Math.abs(hr!.p - ref.p), ref.name).toBeLessThanOrEqual(1e-4)
+      expect(Math.abs(hr!.z - ref.z), ref.name).toBeLessThanOrEqual(1e-6 * Math.max(1, Math.abs(ref.z)))
+      expect(Math.abs(hr!.tau - ref.tau), ref.name).toBeLessThanOrEqual(1e-9)
+      expect(Math.abs(hr!.varS - ref.var_s) / ref.var_s, ref.name).toBeLessThanOrEqual(1e-6)
+      expect(Math.abs(hr!.varSOriginal - ref.var_s_original) / ref.var_s_original, ref.name).toBeLessThanOrEqual(1e-9)
+    }
+  })
+
+  it('includes a series with NaN gaps', () => {
+    expect(hamedRaoReference().some((r) => r.values.some((v) => v == null))).toBe(true)
+  })
+
+  it('returns null with fewer than three finite values', () => {
+    expect(hamedRaoMannKendall([1, 2, Number.NaN])).toBeNull()
+  })
+})
+
+describe('senSlopeCI with a supplied variance', () => {
+  const x = Array.from({ length: 40 }, (_, i) => 0.05 * i + (((i * 37) % 101) - 50) / 100)
+  const t = x.map((_, i) => i / 12)
+  it('a larger variance gives a wider interval; non-finite or non-positive gives null', () => {
+    const base = senSlopeCI(t, x)!
+    const mk = mannKendall(x)!
+    expect(senSlopeCI(t, x, 0.05, mk.varS)).toEqual(base)
+    const wide = senSlopeCI(t, x, 0.05, mk.varS * 4)!
+    expect(wide.upper - wide.lower).toBeGreaterThan(base.upper - base.lower)
+    expect(senSlopeCI(t, x, 0.05, Number.NaN)).toBeNull()
+    expect(senSlopeCI(t, x, 0.05, -1)).toBeNull()
+  })
+})
+
+describe('yearsToDetect', () => {
+  const detectionPath = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '../../../../tests/fixtures/detection_reference.json',
+  )
+  it('matches the Python fixture to 1e-6 relative', () => {
+    const payload = JSON.parse(readFileSync(detectionPath, 'utf8'))
+    for (const item of payload.cases) {
+      const residual = item.residual.map((value: number | null) =>
+        value == null ? Number.NaN : value,
+      )
+      const result = yearsToDetect(item.slope_per_year, residual)
+      for (const key of ['n_star', 'lower', 'upper', 'sigma', 'phi'] as const) {
+        const actual = key === 'n_star' ? result.nStar : result[key]
+        const expected = item.expected[key]
+        expect(Math.abs(actual - expected) / Math.abs(expected), item.name).toBeLessThanOrEqual(1e-6)
+      }
+    }
+  })
+
+  it('returns infinity for a zero slope and NaN for unusable input', () => {
+    expect(yearsToDetect(0, [1, 2, 3, 4, 5]).nStar).toBe(Number.POSITIVE_INFINITY)
+    expect(yearsToDetect(Number.NaN, [1, 2, 3, 4]).nStar).toBeNaN()
+    expect(yearsToDetect(1, [Number.NaN, 2, Number.NaN]).nStar).toBeNaN()
   })
 })

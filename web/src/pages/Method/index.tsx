@@ -1,8 +1,20 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Chip } from '../../components/ui'
 import { useApp } from '../../data/AppState'
 import type { VariableMeta } from '../../data/types'
-import { METHOD_DOC_LINKS, METHOD_LIMITATIONS, METHOD_STEPS } from './content'
+import { GLOSSARY, GLOSSARY_ORDER, formatUnit } from '../../lib/format'
+import {
+  CHALLENGE_ROWS,
+  CHECK_TOOLS,
+  CHECK_TOOLS_SENTENCE,
+  METHOD_DOC_LINKS,
+  METHOD_LIMITATIONS,
+  METHOD_STEPS,
+  SHEET_TEXT,
+  challengeHref,
+  sheetSourceLine,
+  type SheetLang,
+} from './content'
 import './method.css'
 
 interface ProductCard {
@@ -11,6 +23,7 @@ interface ProductCard {
   version: string
   doi: string | null
   variables: string[]
+  units: string[]
 }
 
 function collectProducts(variables: readonly VariableMeta[]): ProductCard[] {
@@ -20,6 +33,7 @@ function collectProducts(variables: readonly VariableMeta[]): ProductCard[] {
     const current = byKey.get(key)
     if (current) {
       current.variables.push(variable.label)
+      if (!current.units.includes(variable.display_unit)) current.units.push(variable.display_unit)
     } else {
       byKey.set(key, {
         key,
@@ -27,6 +41,7 @@ function collectProducts(variables: readonly VariableMeta[]): ProductCard[] {
         version: variable.product_version,
         doi: variable.doi ?? null,
         variables: [variable.label],
+        units: [variable.display_unit],
       })
     }
   }
@@ -38,9 +53,15 @@ function doiHref(doi: string | null): string | null {
 }
 
 export default function MethodPage() {
-  const { index } = useApp()
+  const { index, navigate } = useApp()
   const products = useMemo(() => collectProducts(index.variables), [index.variables])
   const witnessProducts = Object.entries(index.witness?.products ?? {})
+  const [sheetLang, setSheetLang] = useState<SheetLang>('en')
+  const sheet = SHEET_TEXT[sheetLang]
+  const sourceLine = sheetSourceLine(sheet.sourcePrefix, [
+    ...products.map((p) => ({ product: p.product, version: p.version, doi: p.doi })),
+    ...witnessProducts.map(([, w]) => ({ product: w.product, version: w.version, doi: w.doi })),
+  ])
 
   return (
     <section className="method">
@@ -58,7 +79,48 @@ export default function MethodPage() {
         </div>
       </header>
 
-      <section className="method-section" aria-labelledby="method-flow-title">
+      <section className="method-section method-section--wide" aria-labelledby="method-challenge-title">
+        <h2 id="method-challenge-title">How EarthPulse answers the challenge</h2>
+        <p className="method-section-note">
+          The challenge asks for four things and names a few ideas worth adding. Here is where each one lives in the app.
+        </p>
+        <div className="method-table-wrap">
+          <table className="method-table">
+            <thead>
+              <tr>
+                <th scope="col">The challenge says</th>
+                <th scope="col">Where in EarthPulse</th>
+                <th scope="col">Go there</th>
+              </tr>
+            </thead>
+            <tbody>
+              {CHALLENGE_ROWS.map((row) => (
+                <tr key={row.id}>
+                  <td data-label="The challenge says">
+                    <span className="label-caps method-table-kind">{row.kind}</span>
+                    <q className="method-table-phrase">{row.phrase}</q>
+                  </td>
+                  <td data-label="Where in EarthPulse">{row.where}</td>
+                  <td data-label="Go there">
+                    <a
+                      className="method-table-link"
+                      href={challengeHref(row.page)}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        navigate(row.page)
+                      }}
+                    >
+                      {row.linkLabel}
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="method-section method-section--wide" aria-labelledby="method-flow-title">
         <h2 id="method-flow-title">The pipeline at a glance</h2>
         <ol className="method-flow" aria-label="Analysis steps">
           {METHOD_STEPS.map((step, position) => (
@@ -94,6 +156,28 @@ export default function MethodPage() {
         </div>
       </section>
 
+      <section className="method-section" aria-labelledby="method-words-title">
+        <h2 id="method-words-title">Words we use</h2>
+        <p className="method-section-note">
+          Plain words first, with the exact method name in brackets for anyone who wants it. The same explanations
+          appear behind the &ldquo;?&rdquo; buttons across the app.
+        </p>
+        <dl className="method-glossary">
+          {GLOSSARY_ORDER.map((id) => {
+            const entry = GLOSSARY[id]
+            return (
+              <div key={id} className="method-glossary-item ui-card">
+                <dt>{entry.term}</dt>
+                <dd>
+                  <span>{entry.plain}</span>
+                  <span className="method-technical">({entry.technical})</span>
+                </dd>
+              </div>
+            )
+          })}
+        </dl>
+      </section>
+
       <section className="method-section" aria-labelledby="method-products-title">
         <h2 id="method-products-title">Products and DOIs</h2>
         <p className="method-section-note">
@@ -108,6 +192,9 @@ export default function MethodPage() {
                 <Chip>{product.version}</Chip>
               </div>
               <p className="method-product-vars">{product.variables.join(' · ')}</p>
+              <p className="method-product-units">
+                Reported in {product.units.map(formatUnit).join(' · ')}
+              </p>
               {doiHref(product.doi) ? (
                 <a href={doiHref(product.doi) ?? '#'} target="_blank" rel="noreferrer">
                   DOI {product.doi}
@@ -167,6 +254,72 @@ export default function MethodPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="method-section" aria-labelledby="method-tools-title">
+        <h2 id="method-tools-title">Tools to check our numbers</h2>
+        <p className="method-section-note">{CHECK_TOOLS_SENTENCE}</p>
+        <ul className="method-docs">
+          {CHECK_TOOLS.map((tool) => (
+            <li key={tool.href}>
+              <a href={tool.href} target="_blank" rel="noopener">
+                {tool.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="method-section method-class" aria-labelledby="method-class-title">
+        <h2 id="method-class-title">Use it in class (15 minutes)</h2>
+        <p className="method-section-note">
+          A one-page activity for a teacher or a student. Choose a language, print it, and work through the tasks in the
+          app.
+        </p>
+        <div className="method-class-tools">
+          <div className="method-lang" role="group" aria-label="Sheet language">
+            <button
+              type="button"
+              className="method-lang-button"
+              aria-pressed={sheetLang === 'en'}
+              onClick={() => setSheetLang('en')}
+            >
+              English
+            </button>
+            <button
+              type="button"
+              className="method-lang-button"
+              aria-pressed={sheetLang === 'vi'}
+              onClick={() => setSheetLang('vi')}
+            >
+              Tiếng Việt
+            </button>
+          </div>
+          <button type="button" className="button primary" onClick={() => window.print()}>
+            {sheet.printLabel}
+          </button>
+        </div>
+
+        <article className="method-sheet" lang={sheetLang} aria-labelledby="method-sheet-title">
+          <header className="method-sheet-head">
+            <p className="label-caps method-sheet-kicker">{sheet.subtitle}</p>
+            <h3 id="method-sheet-title">{sheet.title}</h3>
+            <p className="method-sheet-name">
+              <span>{sheet.nameLine}</span>
+              <span className="method-sheet-rule" aria-hidden="true" />
+            </p>
+          </header>
+          <ol className="method-sheet-tasks" aria-label={sheet.tasksLabel}>
+            {sheet.tasks.map((task) => (
+              <li key={task}>
+                <p>{task}</p>
+                <span className="method-sheet-rule" aria-hidden="true" />
+                <span className="method-sheet-rule" aria-hidden="true" />
+              </li>
+            ))}
+          </ol>
+          <p className="method-sheet-source">{sourceLine}</p>
+        </article>
       </section>
     </section>
   )

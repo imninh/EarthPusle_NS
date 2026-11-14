@@ -1,172 +1,144 @@
 import { expect, test, type Page } from '@playwright/test'
-import { globalCautionCase, vietnamCase } from './cases'
-import { assertClean, controlOffscreen, horizontalOverflow, trackConsole } from './support'
+import { assertClean, controlOffscreen, horizontalOverflow, trackConsole, type ConsoleSink } from './support'
 
 /**
- * Demo path from docs/packages/specs/P17_qa_e2e_review.md.
- * The coach's last step button is labelled "Got it", so the tour is Next, Next,
- * then Escape (the dismiss key the spec names).
+ * P17b demo path, updated to the frozen UI (14 Nov).
+ * Starts at the public entry the D3 talk uses: #/investigate, Vietnam + Heat.
+ * The old Home → Screener → map path is covered by pages.pw.ts instead.
  */
-async function runDemo(page: Page, mobile: boolean): Promise<void> {
+const INVESTIGATE = '/#/investigate?place=country_704&topic=heat&w=2001-2024'
+const REGION = '/#/region?v=air_temperature&w=2001-2024&region=country_704'
+
+async function checkpoint(
+  page: Page,
+  sink: ConsoleSink,
+  mobile: boolean,
+  overflows: string[],
+  offscreen: string[],
+  step: string,
+  controls: RegExp[] = [],
+): Promise<void> {
+  assertClean(sink, step)
+  const overflow = await horizontalOverflow(page)
+  if (overflow > 1) overflows.push(`${step}: ${overflow}px`)
+  if (!mobile) return
+  for (const name of controls) {
+    const problem = await controlOffscreen(page, name)
+    if (problem) offscreen.push(`${step}: ${problem}`)
+  }
+}
+
+test('demo path: #/investigate to the case file and Check it yourself', async ({ page }, testInfo) => {
+  const mobile = testInfo.project.name === 'mobile'
   const sink = trackConsole(page)
   const overflows: string[] = []
   const offscreen: string[] = []
-  const vietnam = vietnamCase()
-  const vietnamRegion = vietnam.region.id
-  if (!vietnamRegion) throw new Error('The Vietnam case has no region.id')
-  expect(vietnamRegion, 'Vietnam case region id').toBe('country_704')
-  const globalCase = globalCautionCase()
+  await page.addInitScript(() => localStorage.clear())
 
-  async function checkpoint(step: string, controls: RegExp[] = []): Promise<void> {
-    assertClean(sink, step)
-    const overflow = await horizontalOverflow(page)
-    if (overflow > 1) overflows.push(`${step}: ${overflow}px`)
-    if (!mobile) return
-    for (const name of controls) {
-      const problem = await controlOffscreen(page, name)
-      if (problem) offscreen.push(`${step}: ${problem}`)
-    }
-  }
+  await page.goto(INVESTIGATE)
+  await expect(page.getByRole('heading', { level: 1, name: 'Start an investigation' })).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByText('Looking at Vietnam.')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Where do you want to look?' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'What are you curious about?' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Which years?' })).toBeVisible()
 
-  await page.addInitScript(() => {
-    localStorage.clear()
-  })
-  await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1, name: /Which parts of Earth/ })).toBeVisible()
-  await expect(page.getByText('Could not load data')).toHaveCount(0)
+  // The new atmosphere topic and the country-report actions are part of the frozen UI.
+  const atmosphere = page.getByRole('button', { name: /^Atmosphere/ })
+  await expect(atmosphere).toBeVisible()
+  await atmosphere.click()
+  await expect(atmosphere).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('button', { name: /^Heat/ }).click()
+  await expect(page.getByRole('button', { name: /^Heat/ })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('button', { name: 'Print this report' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Copy link' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Download image' })).toBeVisible()
 
-  const coach = page.getByRole('dialog')
-  await expect(coach).toContainText('1 of 3')
-  await expect(coach.getByRole('heading', { name: 'Ask an Earth-system question' })).toBeVisible()
-  await coach.getByRole('button', { name: 'Next' }).click()
-  await expect(coach).toContainText('2 of 3')
-  await coach.getByRole('button', { name: 'Next' }).click()
-  await expect(coach).toContainText('3 of 3')
-  await expect(coach.getByRole('heading', { name: 'Follow the evidence' })).toBeVisible()
-  await page.keyboard.press('Escape')
-  await expect(coach).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Open the guided tour' })).toBeFocused()
-  await checkpoint('home', [/Explore variables/, /Explore the map|Map/, /Follow a case|Story/])
+  const card = page.locator('.investigate-card').filter({ hasText: 'Near-surface air temperature' })
+  await expect(card).toBeVisible()
+  await expect(card).toContainText("Warmer over 63.5% of Vietnam's land, read with caution")
+  await expect(card).toContainText(/Sudden-shift flags cover \d+% of the area with a significant trend/)
+  await checkpoint(page, sink, mobile, overflows, offscreen, 'investigate', [
+    /Open the evidence for Near-surface air temperature/,
+    /Print this report/,
+  ])
 
-  await page.locator('.home-actions').getByRole('button', { name: 'Explore variables' }).click()
-  await expect(page.getByRole('heading', { name: 'Variable Screener' })).toBeVisible()
-  // Desktop hides the extra sort bar and uses the column buttons; mobile does the opposite.
-  // getByRole skips the hidden copy, so this is the control a visitor can actually press.
-  const coverage = page.getByRole('button', { name: /^Coverage/ })
-  await expect(coverage).toBeVisible()
-  await coverage.click()
-  await expect(coverage).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByRole('table').locator('caption')).toContainText(/coverage/i)
-  await checkpoint('screener', [/^Coverage/])
+  await card
+    .getByRole('button', { name: 'Open the evidence for Near-surface air temperature' })
+    .click()
+  await expect(page).toHaveURL(/region=country_704/)
+  await expect(page).toHaveURL(/v=air_temperature/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Vietnam' })).toBeVisible({ timeout: 90_000 })
 
-  const views = page.getByRole('navigation', { name: 'Views' })
-  await views.getByRole('button', { name: /^(Explore the map|Map)$/ }).click()
-  await expect(page.getByRole('region', { name: 'World map of the selected variable' }).or(page.locator('.discovery'))).toBeVisible()
-  const layers = page.getByRole('radiogroup', { name: 'Map layer' })
-  await expect(layers.getByRole('radio', { name: 'Data quality' })).toBeVisible({ timeout: 120_000 })
-  const radios = layers.getByRole('radio')
-  const radioCount = await radios.count()
-  expect(radioCount).toBeGreaterThan(1)
-  for (let index = 0; index < radioCount; index++) {
-    await radios.nth(index).click()
-    await expect(radios.nth(index)).toBeChecked()
-    await expect(page.getByText('This layer failed to load')).toHaveCount(0)
-  }
-  await layers.getByRole('radio', { name: 'Data quality' }).click()
-  await expect(layers.getByRole('radio', { name: 'Data quality' })).toBeChecked()
-  await checkpoint('map', [/Data quality/, /Globe|Flat map/])
+  await expect(page.getByText(/Case file · Near-surface air temperature · 2001–2024/)).toBeVisible()
+  await expect(page.locator('.ui-stamp')).toHaveText(/Read with caution/i)
+  await expect(page.getByRole('heading', { name: 'Cross-examination' })).toBeVisible()
+  await expect(page.locator('.verdict-strip-answer')).toHaveText([
+    'Yes',
+    'Sudden shift flagged',
+    'Agrees on direction only',
+  ])
 
-  const place = page.getByRole('combobox', { name: 'Place' })
-  await place.fill('viet')
-  await page.getByRole('option', { name: 'Vietnam', exact: true }).click()
-  await expect(page.getByText('Vietnam', { exact: true }).first()).toBeVisible()
-  await page.getByRole('button', { name: 'Open evidence' }).click()
+  const exhibitA = page.getByRole('region', { name: 'Exhibit A · Rate of change' })
+  await expect(exhibitA).toBeVisible()
+  await expect(exhibitA.locator('.ui-exhibit-value')).toHaveText('+0.43')
+  await expect(exhibitA.locator('.ui-ibar')).toBeVisible()
+  await expect(exhibitA.locator('.ui-ibar-labels')).toContainText('+0.22')
+  await expect(exhibitA.locator('.ui-ibar-labels')).toContainText('+0.63')
+  await expect(page.getByRole('region', { name: 'Exhibit B · How sure are we?' })).toContainText('p = 0.0001')
+  await expect(page.getByRole('region', { name: 'Exhibit C · Second dataset' })).toContainText('+0.07')
 
-  const summary = page.locator('.plain-summary')
-  await expect(summary).toBeVisible({ timeout: 90_000 })
-  await expect(summary).toContainText(/Vietnam/)
-  await expect(summary).toContainText(/2001/)
-  await checkpoint('region', [/Choose a different place/])
+  const witness = page.getByRole('checkbox', { name: /Show second witness/ })
+  await expect(witness).toBeVisible({ timeout: 90_000 })
+  await expect(witness).toBeChecked()
+  await witness.uncheck()
+  await expect(witness).not.toBeChecked()
+  await witness.check()
+  await expect(witness).toBeChecked()
+  await expect(page.locator('.chart-swatches').filter({ hasText: 'MERRA-2' })).toBeVisible()
 
-  await views.getByRole('button', { name: /^(Follow a case|Story)$/ }).click()
-  await expect(page.getByRole('heading', { name: 'Follow the evidence' })).toBeVisible()
-  await page.getByRole('button', { name: 'Start with case 1' }).click()
-  await expect(page).toHaveURL(/case=/)
-  const firstCaseUrl = page.url()
+  await page.getByText('Full evidence', { exact: true }).click()
+  await expect(page.locator('.evidence-grid')).toBeVisible()
+  await expect(page.locator('.evidence-grid')).toContainText('Second witness')
+  await page.getByText('Check it yourself', { exact: true }).click()
+  await expect(page.getByText('Product short name')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Giovanni' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'KNMI Climate Explorer' })).toBeVisible()
+  await checkpoint(page, sink, mobile, overflows, offscreen, 'region', [
+    /Choose a different place/,
+    /Giovanni/,
+  ])
 
-  await page.getByRole('button', { name: 'Next case' }).click()
-  await expect(page).not.toHaveURL(firstCaseUrl)
-  const secondCaseUrl = page.url()
-  await page.goBack()
-  await expect(page).toHaveURL(firstCaseUrl)
-  await page.goForward()
-  await expect(page).toHaveURL(secondCaseUrl)
-
-  let sawCaution = false
-  for (let guard = 0; guard < 8; guard++) {
-    const caution = page.getByRole('complementary', { name: 'Data-quality caution' })
-    if ((await caution.count()) > 0) {
-      sawCaution = true
-      await expect(caution).toBeVisible()
-      await expect(caution).toContainText(/sudden-shift|Read with caution/)
-      await expect(caution).not.toContainText('Checking the published', { timeout: 90_000 })
-    }
-    const backToIntro = page.getByRole('button', { name: 'Back to intro' })
-    if ((await backToIntro.count()) > 0 && (await backToIntro.isVisible())) break
-    await page.getByRole('button', { name: 'Next case' }).click()
-  }
-  expect(sawCaution, 'the caution case should show the amber data-quality panel').toBe(true)
-  await page.getByRole('button', { name: 'Back to intro' }).click()
-  await expect(page.getByRole('heading', { name: 'How to read a case' })).toBeVisible()
-  await checkpoint('story', [/Start with case 1|Next case|Back to intro/])
-
-  // Find the case by title or kind + label, never by its rank-order id.
-  await page.goto(`/#/story?case=${vietnam.id}`)
-  await expect(page.getByRole('heading', { name: /Vietnam is warming/ })).toBeVisible()
-  await page.reload()
-  await expect(page).toHaveURL(new RegExp(`case=${vietnam.id}`))
-  await expect(page.getByRole('heading', { name: /Vietnam is warming/ })).toBeVisible()
-  await expect(page.getByRole('complementary', { name: 'Data-quality caution' })).toBeVisible()
-
-  // P15d: the country case must open its exact country domain, not the bbox.
-  await page.getByRole('button', { name: 'Open evidence' }).click()
-  await expect(page).toHaveURL(new RegExp(`region=${vietnamRegion}`))
-  await expect(page.locator('.plain-summary')).toBeVisible({ timeout: 90_000 })
-  await expect(page.locator('.plain-summary')).toContainText(/Vietnam/)
-  await checkpoint('vietnam case evidence')
-
-  // The global caution case must never render the empty-region "0 / 288" line.
-  await page.goto(`/#/story?case=${globalCase.id}`)
-  await expect(page.getByRole('heading', { name: /Is the air drying/ })).toBeVisible()
-  await expect(page.getByText(/0\s*\/\s*288/)).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Open in Explore variables' })).toBeVisible()
-  await page.getByRole('button', { name: 'Open in Explore variables' }).click()
-  await expect(page.getByRole('heading', { name: 'Variable Screener' })).toBeVisible()
-  await expect(page.getByText(/0\s*\/\s*288/)).toHaveCount(0)
-  await checkpoint('global case')
-
-  await page.goto('/#/discovery?v=precipitation&w=2001-2024&cell=66,192')
-  await expect(page.getByText('row 66')).toBeVisible({ timeout: 120_000 })
-  await page.reload()
-  await expect(page).toHaveURL(/v=precipitation/)
-  await expect(page).toHaveURL(/w=2001-2024/)
-  await expect(page).toHaveURL(/cell=66,192/)
-  await expect(page.getByText('row 66')).toBeVisible({ timeout: 120_000 })
-  await checkpoint('deep link')
-
-  await page.goto('/#/method')
-  await expect(page.getByRole('heading', { level: 1, name: /From a NASA file/ })).toBeVisible()
-  await page.reload()
-  await expect(page).toHaveURL(/#\/method/)
-  await checkpoint('method')
-
+  assertClean(sink, 'end of demo')
   if (mobile) {
     expect(overflows, `horizontal scroll\n${overflows.join('\n')}`).toEqual([])
     expect(offscreen, `controls outside the 375px viewport\n${offscreen.join('\n')}`).toEqual([])
   }
-  assertClean(sink, 'end of demo')
-}
+})
 
-test('demo path', async ({ page }, testInfo) => {
-  await runDemo(page, testInfo.project.name === 'mobile')
+test('a deep link shows no coach mark', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear())
+  await page.goto(INVESTIGATE)
+  await expect(page.getByRole('heading', { level: 1, name: 'Start an investigation' })).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  await page.goto(REGION)
+  await expect(page.getByRole('heading', { level: 1, name: 'Vietnam' })).toBeVisible({ timeout: 90_000 })
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('Home shows the first-visit coach mark and the night hero', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear())
+  await page.goto('/#/home')
+  await expect(page.getByRole('heading', { level: 1, name: /Is that trend real/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Start an investigation' })).toBeVisible()
+  await expect(page.locator('.home-hero')).toHaveClass(/surface-night/)
+  await expect(page.locator('.home-hero-visual canvas').first()).toBeVisible({ timeout: 60_000 })
+
+  const coach = page.getByRole('dialog')
+  await expect(coach).toContainText('1 of 3')
+  await expect(coach.getByRole('heading', { name: 'Ask an Earth-system question' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(coach).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Open the guided tour' })).toBeFocused()
 })

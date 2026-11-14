@@ -1,5 +1,6 @@
 // Pure screener display rules. Fractions and contrast follow docs/DATA_CONTRACT.md §6.
 import type { ScreenerRow, VariableMeta } from '../../data/types'
+import { sourceLabel } from '../../lib/format'
 
 /** Spec tooltip for median_abs_std_change_decade. */
 export const MAGNITUDE_TOOLTIP = 'standard deviations per decade, median over significant cells'
@@ -34,9 +35,11 @@ export interface ScreenerViewRow {
   variableId: string
   label: string
   category: string
-  sourceBadge: 'model' | 'satellite'
+  sourceBadge: 'model' | 'satellite' | 'reanalysis'
   unit: string
   increaseMeans: string
+  /** Registry one-sentence description, shown under the variable name. */
+  description: string
   sigIncrease: number | null
   sigDecrease: number | null
   significantArea: number | null
@@ -57,11 +60,14 @@ export interface ScreenerViewRow {
 type VariableFields = Pick<
   VariableMeta,
   'id' | 'label' | 'category' | 'source_type' | 'display_unit' | 'increase_means'
->
+> & {
+  /** Optional so tests and partial exports can omit it; the real registry always has it. */
+  description?: string
+}
 
 /** Same mapping as VariableSelect: model stays "model"; mission_observation is "satellite". */
-export function sourceBadge(sourceType: VariableMeta['source_type']): 'model' | 'satellite' {
-  return sourceType === 'model' ? 'model' : 'satellite'
+export function sourceBadge(sourceType: VariableMeta['source_type']): 'model' | 'satellite' | 'reanalysis' {
+  return sourceLabel(sourceType)
 }
 
 export function finiteOrNull(value: unknown): number | null {
@@ -189,6 +195,7 @@ export function buildViewRows(variables: readonly VariableFields[], rows: readon
       sourceBadge: sourceBadge(variable.source_type),
       unit: variable.display_unit,
       increaseMeans: variable.increase_means,
+      description: variable.description ?? '',
       sigIncrease,
       sigDecrease,
       significantArea: significantArea(sigIncrease, sigDecrease),

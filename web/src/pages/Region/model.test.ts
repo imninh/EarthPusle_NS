@@ -1,7 +1,12 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { hamedRaoMannKendall, mannKendall, senSlopeCI } from '../../lib/stats'
 import { N_MONTHS, TILE_SIZE, cellAreaWeight, tileIdFor } from '../../data/contract'
 import {
   BROWSER_METHOD,
+  BROWSER_METHOD_FALLBACK,
   CELL_METHOD,
   aggregateBbox,
   alignToMonths,
@@ -12,12 +17,17 @@ import {
   cellTrendLine,
   cellsInsideBbox,
   correlationPairId,
+  formatInterval,
+  formatSignedRate,
   perDecadeUnit,
+  regionTest,
   rangeColSegments,
+  senTrendBandSeries,
   senTrendSeries,
   spearmanInWindow,
   spearmanLabel,
   tileIdsForRange,
+  trendClassCode,
   validateBbox,
   zScoresInWindow,
   type LoadedTile,
@@ -180,6 +190,9 @@ describe('evidence', () => {
     expect(evidence.trendClass).toBe('increasing')
     expect(evidence.shortWindow).toBe(false)
     expect(evidence.validMonths).toBe(120)
+    expect(evidence.senSlopeDecadeCI).not.toBeNull()
+    expect(evidence.senSlopeDecadeCI!.lower).toBeGreaterThan(0)
+    expect(evidence.increaseMeans).toBe('wetter')
   })
 
   it('labels a short or sparse window as insufficient data and still flags the short window', () => {
@@ -215,6 +228,7 @@ describe('evidence', () => {
     expect(evidence.q).toBe(0.04)
     expect(evidence.trendClass).toBe('decreasing')
     expect(evidence.senSlopeDecade).toBe(-1.5)
+    expect(evidence.senSlopeDecadeCI).toBeNull()
     expect(evidence.source).toBe('precomputed')
   })
 
@@ -258,5 +272,107 @@ describe('perDecadeUnit', () => {
     expect(perDecadeUnit('per year')).toBe('per decade')
     expect(perDecadeUnit('kg m-2 per year')).toBe('kg m-2 per decade')
     expect(perDecadeUnit('index')).toBe('index per decade')
+  })
+})
+
+describe('confidence-interval helpers', () => {
+  it('maps browser trend words to contract codes', () => {
+    expect(trendClassCode('increasing')).toBe(1)
+    expect(trendClassCode('decreasing')).toBe(-1)
+    expect(trendClassCode('not significant')).toBe(0)
+    expect(trendClassCode('outside domain')).toBe(-99)
+    expect(trendClassCode('insufficient data')).toBe(-9)
+  })
+
+  it('formats signed rates and intervals', () => {
+    expect(formatSignedRate(0.4274)).toBe('+0.43')
+    expect(formatSignedRate(-0.51)).toBe('-0.51')
+    expect(formatSignedRate(12.34)).toBe('+12.3')
+    expect(formatInterval({ lower: -0.2, upper: 1.8 })).toBe('-0.20 to +1.80')
+    expect(formatInterval(null)).toBeNull()
+  })
+
+  it('draws both band bounds through the fitted line pivot', () => {
+    const band = senTrendBandSeries(
+      ['2000-12', '2001-01', '2002-01'],
+      '2001-01',
+      '2002-12',
+      { slopePerYear: 1, intercept: 0 },
+      { lower: 0.5, upper: 1.5 },
+    )
+    expect(band).not.toBeNull()
+    expect(band!.months).toEqual(['2001-01', '2002-01'])
+    expect(band!.lower[0]).toBe(0)
+    expect(band!.upper[0]).toBe(0)
+    expect(band!.lower[1]).toBeCloseTo(0.5, 12)
+    expect(band!.upper[1]).toBeCloseTo(1.5, 12)
+    expect(senTrendBandSeries(['2001-01'], '2001-01', '2001-12', { slopePerYear: 1, intercept: 0 }, null)).toBeNull()
+  })
+})
+
+describe('regionTest (Hamed–Rao on the region average)', () => {
+  const t240 = Array.from({ length: 240 }, (_, i) => i / 12)
+
+  it('uses the corrected variance: AR(1) noise gives a wider interval than the original variance', () => {
+    let state = 12345
+    const rand = () => {
+      state = (state * 1664525 + 1013904223) % 4294967296
+      return state / 4294967296 - 0.5
+    }
+    const x: number[] = []
+    let prev = 0
+    for (let i = 0; i < 240; i++) {
+      prev = 0.7 * prev + rand()
+      x.push(prev + 0.01 * (i / 12))
+    }
+    const hr = hamedRaoMannKendall(x)!
+    const test = regionTest(t240, x)
+    expect(test.fallback).toBe(false)
+    expect(test.p).toBeCloseTo(hr.p, 12)
+    const original = senSlopeCI(t240, x)!
+    expect(hr.varS).toBeGreaterThan(hr.varSOriginal)
+    expect(test.ci!.upper - test.ci!.lower).toBeGreaterThan(original.upper - original.lower)
+  })
+
+  it('falls back to the original variance and says so when the corrected one is unusable', () => {
+    const flat = Array.from({ length: 240 }, () => 3)
+    const test = regionTest(t240, flat)
+    expect(test.p).toBe(1)
+    const months = Array.from({ length: 240 }, (_, i) => `${2001 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`)
+    const { evidence } = buildBrowserEvidence({
+      variable,
+      windowLabel: 'flat',
+      windowMonths: months,
+      anomalies: flat,
+      coverage: 1,
+      coverageNote: null,
+    })
+    expect(evidence.varianceFallback).toBe(evidence.method === BROWSER_METHOD_FALLBACK)
+    expect(BROWSER_METHOD).toContain('Hamed–Rao modified Mann–Kendall on the region average; no false-discovery correction')
+    expect(BROWSER_METHOD_FALLBACK).toContain('original')
+  })
+})
+
+describe('Vietnam country_704 2001-2024, before and after (report only)', () => {
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../public/data/series/regions/country_704')
+  it.skipIf(!existsSync(root))('prints original vs Hamed–Rao p and 95% interval per decade', () => {
+    for (const id of ['air_temperature', 'precipitation']) {
+      const file = JSON.parse(readFileSync(`${root}/${id}.json`, 'utf8')) as {
+        months: string[]
+        anomalies: (number | null)[]
+      }
+      const t = file.months.map((_, i) => i / 12)
+      const x = file.anomalies.map((v) => (v == null ? Number.NaN : v))
+      const mk = mannKendall(x)!
+      const before = senSlopeCI(t, x)!
+      const after = regionTest(t, x)
+      const hr = hamedRaoMannKendall(x)!
+      console.log(
+        `VIETNAM ${id}: before p=${mk.p.toExponential(3)} CI/decade=[${(before.lower * 10).toFixed(4)}, ${(before.upper * 10).toFixed(4)}] | ` +
+          `after p=${after.p!.toExponential(3)} CI/decade=[${(after.ci!.lower * 10).toFixed(4)}, ${(after.ci!.upper * 10).toFixed(4)}] ` +
+          `varS ratio=${hr.correction.toFixed(3)} fallback=${after.fallback}`,
+      )
+      expect(after.ci).not.toBeNull()
+    }
   })
 })

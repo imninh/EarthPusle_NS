@@ -39,7 +39,12 @@ from earthpulse.grid import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = PROJECT_ROOT / "config" / "variables.yaml"
-RAW_SUBDIRS = {"GLDAS_NOAH10_M": "gldas", "GPM_3IMERGM": "gpm"}
+RAW_SUBDIRS = {
+    "GLDAS_NOAH10_M": "gldas",
+    "GPM_3IMERGM": "gpm",
+    # G1 (P24 T2 pilot): MERRA-2 files already on disk from P13 (no new download).
+    "M2TMNXSLV": "witness/M2TMNXSLV",
+}
 
 # A cell enters the common mask only when each criterion holds in at least
 # this fraction of the 288 months (P02 spec T4).
@@ -134,6 +139,8 @@ def raw_file_pattern(product_short_name: str, year: int, month: int) -> str:
         return f"GLDAS_NOAH10_M.A{year:04d}{month:02d}.*.nc4"
     if product_short_name == "GPM_3IMERGM":
         return f"3B-MO.MS.MRG.3IMERG.{year:04d}{month:02d}01-*.HDF5"
+    if product_short_name == "M2TMNXSLV":
+        return f"MERRA2_*.tavgM_2d_slv_Nx.{year:04d}{month:02d}.nc4"
     raise ValueError(f"No file-name pattern for product {product_short_name!r}")
 
 
@@ -233,6 +240,10 @@ def harmonize_variable(
     IMERG a companion ``valid_fraction`` variable records the valid fine-cell
     area fraction of each 1° cell per month.
     """
+    if product_cfg.get("regrid") == "conservative":
+        return harmonize_variable_conservative(
+            variable_cfg, product_cfg, raw_root, out_path
+        )
     months = expected_months()
     lat, lon = target_grid()
     n = len(months)
@@ -318,6 +329,147 @@ def harmonize_variable(
             "package": "P02",
         },
     )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    encoding = {
+        name: {"dtype": "float32", "zlib": True, "complevel": 4}
+        for name in cube.data_vars
+    }
+    cube.to_netcdf(out_path, engine="netcdf4", encoding=encoding)
+    return out_path
+
+
+def _read_native_field(ds: xr.Dataset, name: str) -> tuple[np.ndarray, dict]:
+    """One native ``(lat, lon)`` field with its fill value turned into NaN."""
+    variable = ds[name]
+    values = np.asarray(variable.values, dtype=np.float64)
+    if values.ndim == 3:
+        values = values[0]
+    fill = variable.attrs.get("_FillValue", variable.attrs.get("missing_value"))
+    if fill is not None:
+        values[values == float(fill)] = np.nan
+    values[~np.isfinite(values)] = np.nan
+    return values, dict(variable.attrs)
+
+
+def harmonize_variable_conservative(
+    variable_cfg: dict,
+    product_cfg: dict,
+    raw_root: Path,
+    out_path: Path,
+    mask_path: Path | None = None,
+    weights=None,
+) -> Path:
+    """Harmonize a fine-grid (non-1 degree) product with the P13 regridder.
+
+    Used for MERRA-2 ``M2TMNXSLV`` (G1 / P24 T2). Steps per month: read the
+    native field, mask the file's own fill value, optionally mask native cells
+    where a second field is below a limit (T850: ``PS < 85000 Pa``), convert
+    units, regrid conservatively (``earthpulse.witness``, cos-latitude overlap
+    weights, missing values excluded) to the contract grid and apply the common
+    land mask. ``units`` and ``long_name`` of the source field are read from the
+    first raw file and must agree with the registry row.
+    """
+    from earthpulse import witness  # local import keeps GLDAS/IMERG paths light
+
+    months = expected_months()
+    mask_file = Path(mask_path) if mask_path else Path(out_path).parent / "common_mask.nc"
+    with xr.open_dataset(mask_file, engine="netcdf4") as mask_ds:
+        mask = np.asarray(mask_ds["common_mask"].values, dtype=bool)
+
+    source = variable_cfg["source_variable"]
+    limit = variable_cfg.get("valid_where_min")
+    first = find_raw_file(raw_root, variable_cfg["product"], *months[0])
+    with xr.open_dataset(
+        first, engine="netcdf4", decode_times=False, mask_and_scale=False
+    ) as ds:
+        file_units = ds[source].attrs.get("units")
+        file_long_name = ds[source].attrs.get("long_name")
+        src_lat = np.asarray(ds["lat"].values, dtype=float)
+        src_lon = np.asarray(ds["lon"].values, dtype=float)
+    if file_units != variable_cfg["native_unit"]:
+        raise RuntimeError(
+            f"{source}: file units {file_units!r} != registry native_unit "
+            f"{variable_cfg['native_unit']!r}"
+        )
+    expected_name = variable_cfg.get("source_long_name")
+    if expected_name is not None and file_long_name != expected_name:
+        raise RuntimeError(
+            f"{source}: file long_name {file_long_name!r} != registry "
+            f"source_long_name {expected_name!r}"
+        )
+    if weights is None:
+        weights = witness.build_overlap_weights(src_lat, src_lon)
+
+    n_masked_ps = 0
+    values = np.full(
+        (len(months), contract.N_ROWS, contract.N_COLS), np.nan, dtype=np.float32
+    )
+    for index, (year, month) in enumerate(months):
+        path = find_raw_file(raw_root, variable_cfg["product"], year, month)
+        with xr.open_dataset(
+            path, engine="netcdf4", decode_times=False, mask_and_scale=False
+        ) as ds:
+            begin = int(ds["time"].attrs.get("begin_date", 0))
+            if begin and begin // 100 != year * 100 + month:
+                raise RuntimeError(
+                    f"{path.name}: begin_date {begin} is not {year:04d}-{month:02d}; "
+                    "refusing to substitute."
+                )
+            field, _ = _read_native_field(ds, source)
+            if limit is not None:
+                surface, _ = _read_native_field(ds, limit["source_variable"])
+                below = ~(surface >= float(limit["value"]))
+                n_masked_ps += int((below & np.isfinite(field)).sum())
+                field = np.where(below, np.nan, field)
+        field = witness.convert_units(field, variable_cfg["conversion"], year, month)
+        regridded = witness.area_weighted_regrid(field, weights, field.shape)
+        values[index] = witness.apply_mask(regridded, mask)
+
+    lat, lon = target_grid()
+    time_coords = np.array([np.datetime64(f"{y:04d}-{m:02d}", "M") for y, m in months])
+    valid_where = "none"
+    if limit is not None:
+        valid_where = (
+            f"{limit['source_variable']} >= {limit['value']} {limit['unit']} "
+            f"(native cells; {n_masked_ps} native cell-months masked)"
+        )
+    cube = xr.Dataset(
+        {
+            variable_cfg["id"]: xr.DataArray(
+                values,
+                dims=("time", "lat", "lon"),
+                coords={"time": time_coords, "lat": lat, "lon": lon},
+                attrs={
+                    "long_name": variable_cfg["label"],
+                    "description": variable_cfg["description"],
+                },
+            )
+        },
+        attrs={
+            "title": f"EarthPulse harmonized monthly {variable_cfg['label']}",
+            "units": variable_cfg["display_unit"],
+            "source_product": variable_cfg["product"],
+            "source_product_version": product_cfg["version"],
+            "source_variable": source,
+            "source_long_name": file_long_name,
+            "source_units": file_units,
+            "conversion": variable_cfg["conversion"],
+            "doi": product_cfg["doi"],
+            "monthly_statistic": variable_cfg["monthly_statistic"],
+            "time_coverage": f"{contract.FIRST_MONTH} .. {contract.LAST_MONTH}",
+            "time_note": "Timestamp is the start of the month.",
+            "grid": (
+                f"{contract.N_ROWS}x{contract.N_COLS} 1° cells, row 0 north "
+                f"(centre {contract.LAT_NORTH_CENTER}), column 0 west "
+                f"(centre {contract.LON_WEST_CENTER})"
+            ),
+            "regrid": "conservative cos(latitude) overlap weights (P13), missing excluded",
+            "mask": "common land mask applied; outside is NaN",
+            "valid_where": valid_where,
+            "package": "G1",
+        },
+    )
+    out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     encoding = {
         name: {"dtype": "float32", "zlib": True, "complevel": 4}

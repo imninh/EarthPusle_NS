@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import type { FeatureCollection } from 'geojson'
 import { useApp } from '../../data/AppState'
-import { loadCases, loadCountries, loadScreener, loadTrendClass } from '../../data/loaders'
-import type { CasesFile, Country, DataIndex, ScreenerFile, WindowMeta } from '../../data/types'
-import { paintTrendClass, trendColoursFrom } from '../Screener/thumbnail'
+import { loadCases, loadQualityFlag, loadScreener, loadTrendClass } from '../../data/loaders'
+import type { CasesFile, DataIndex, DetectiveCase, ScreenerFile, WindowMeta } from '../../data/types'
+import { Exhibit } from '../../components/ui'
+import type { GlobePulse } from '../../components/globe/EarthGlobe'
+import { loadNaturalEarth } from '../../maps/basemap'
 import {
-  buildCautionEntry,
   buildHomeInsights,
   heroVariableId,
   qualityEvidenceText,
@@ -13,8 +15,15 @@ import {
 } from './insights'
 import './home.css'
 
+// three.js lives only in this lazy chunk (docs/UI_SPEC.md §3).
+const EarthGlobe = lazy(() => import('../../components/globe/EarthGlobe'))
+
 /** The long window is the default story on Home; the header still controls the other views. */
 const HOME_WINDOW_ID = '2001-2024'
+/** The globe shows near-surface air temperature (UI_SPEC §5); the hero variable is the fallback. */
+const GLOBE_VARIABLE_ID = 'air_temperature'
+/** The Vietnam caution case is the worked case; region.id is a schema 1.2 additive field. */
+const WORKED_CASE_REGION_ID = 'country_704'
 
 function homeWindow(index: DataIndex): WindowMeta {
   return (
@@ -27,12 +36,31 @@ function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
+function regionIdOf(entry: DetectiveCase): string | undefined {
+  return (entry.region as { id?: string }).id
+}
+
+function pickWorkedCase(file: CasesFile | null): DetectiveCase | null {
+  const list = file?.cases ?? []
+  return list.find((entry) => regionIdOf(entry) === WORKED_CASE_REGION_ID) ?? list[0] ?? null
+}
+
+/** One pulse per published case, at the centre of its region bounding box. */
+function casePulses(file: CasesFile | null): GlobePulse[] {
+  return (file?.cases ?? []).map((entry) => {
+    const [west, south, east, north] = entry.region.bbox
+    return { id: entry.id, lat: (south + north) / 2, lon: (west + east) / 2, label: entry.title }
+  })
+}
+
+/** Stable empty list, so the memos below do not recompute on every render while the screener loads. */
+const NO_ROWS: ScreenerFile['rows'] = []
+
 export default function HomePage() {
   const { index, navigate } = useApp()
   const windowMeta = homeWindow(index)
   const [screener, setScreener] = useState<ScreenerFile | null>(null)
   const [cases, setCases] = useState<CasesFile | null>(null)
-  const [countries, setCountries] = useState<Country[]>([])
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
 
@@ -54,28 +82,28 @@ export default function HomePage() {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([loadCases(), loadCountries().catch(() => [] as Country[])])
-      .then(([file, countryList]) => {
-        if (cancelled) return
-        setCases(file)
-        setCountries(countryList)
+    loadCases()
+      .then((file) => {
+        if (!cancelled) setCases(file)
       })
       .catch(() => {
-        // The caution entry is optional; Home still works without cases.json.
+        // Cases are optional; Home still works without cases.json.
       })
     return () => {
       cancelled = true
     }
   }, [])
 
-  const rows = screener?.rows ?? []
+  const rows = screener?.rows ?? NO_ROWS
   const insights = useMemo(
     () => buildHomeInsights(index.variables, rows, windowMeta.start, windowMeta.end, cases?.cases),
     [index.variables, rows, windowMeta.start, windowMeta.end, cases],
   )
-  const caution = useMemo(() => buildCautionEntry(cases?.cases, countries), [cases, countries])
   const heroId = useMemo(() => heroVariableId(index.variables, rows), [index.variables, rows])
   const hero = index.variables.find((variable) => variable.id === heroId) ?? index.variables[0]
+  const globeVariable = index.variables.find((variable) => variable.id === GLOBE_VARIABLE_ID) ?? hero
+  const pulses = useMemo(() => casePulses(cases), [cases])
+  const workedCase = useMemo(() => pickWorkedCase(cases), [cases])
 
   const openVariable = (variableId: string | null) => {
     if (variableId) navigate('discovery', { variableId, windowId: windowMeta.id })
@@ -85,271 +113,271 @@ export default function HomePage() {
     if (insight.caseId) navigate('story', { caseId: insight.caseId })
     else openVariable(insight.variableId)
   }
+  const shown = insights.slice(0, 3)
 
   return (
     <div className="home">
-      <section className="home-hero" aria-labelledby="home-promise">
-        <div className="home-hero-copy">
-          <p className="eyebrow">NASA Space Apps 2026 · Earth system trend detective</p>
-          <h1 id="home-promise">
-            Which parts of Earth&apos;s system are changing, where, how much, and is it significant?
-          </h1>
-          <p className="home-lede">
-            EarthPulse ranks NASA Earth variables by the area with a statistically significant trend, then lets you
-            inspect the same evidence on a map, in a region, and in a guided case.
-          </p>
-          <div className="home-actions">
-            <button
-              type="button"
-              className="button primary large"
-              onClick={() => navigate('screener', { windowId: windowMeta.id, domain: 'global' })}
-            >
-              Explore variables
-            </button>
-            <button
-              type="button"
-              className="button large"
-              onClick={() => navigate('discovery', { variableId: hero?.id, windowId: windowMeta.id })}
-            >
-              Explore the map
-            </button>
-            <button type="button" className="button secondary large" onClick={() => navigate('story', { caseId: null })}>
-              Follow a case
-            </button>
+      <section className="home-hero surface-night" aria-labelledby="home-promise">
+        <div className="home-hero-inner">
+          <div className="home-hero-copy">
+            <p className="home-eyebrow label-caps">NASA Space Apps 2026 · Earth system trend detective</p>
+            <h1 id="home-promise" className="display">
+              Is that trend real, or <span className="home-mark">a glitch in the data?</span>
+            </h1>
+            <p className="home-sub">
+              EarthPulse cross-examines 24 years of NASA data: what is changing, where, how much, whether it is
+              significant, and whether a second NASA dataset agrees.
+            </p>
+            <p className="home-audience">
+              For high-school and college students, and anyone curious about our planet: answer a few questions and
+              read the evidence in about a minute.
+            </p>
+            <div className="home-actions">
+              <button
+                type="button"
+                className="button primary large"
+                onClick={() => navigate('investigate', { windowId: windowMeta.id })}
+              >
+                Start an investigation
+              </button>
+              <button
+                type="button"
+                className="button large home-secondary"
+                onClick={() => navigate('story', { caseId: workedCase?.id ?? null })}
+              >
+                Watch a worked case
+              </button>
+            </div>
+            <p className="home-links">
+              <a
+                href="#/screener"
+                onClick={(event) => {
+                  event.preventDefault()
+                  navigate('screener', { windowId: windowMeta.id, domain: 'global' })
+                }}
+              >
+                Explore variables
+              </a>
+              <a
+                href="#/discovery"
+                onClick={(event) => {
+                  event.preventDefault()
+                  navigate('discovery', { variableId: hero?.id, windowId: windowMeta.id })
+                }}
+              >
+                Explore the map
+              </a>
+            </p>
+            <p className="home-fineprint">
+              {index.variables.length} verified variables · {index.windows.length} analysis periods · FDR q &lt;{' '}
+              {index.q_threshold} for &ldquo;significant&rdquo;.
+            </p>
           </div>
-          <p className="home-fineprint">
-            {index.variables.length} verified variables · {index.windows.length} analysis periods · FDR q &lt;{' '}
-            {index.q_threshold} for &ldquo;significant&rdquo;.
-          </p>
+          <div className="home-hero-visual">
+            {globeVariable ? (
+              <HomeGlobe
+                variableId={globeVariable.id}
+                label={globeVariable.label}
+                windowMeta={windowMeta}
+                pulses={pulses}
+                onSelect={(id) => navigate('story', { caseId: id })}
+              />
+            ) : null}
+          </div>
         </div>
-        <div className="home-hero-visual">
-          {hero ? (
-            <HeroMap
-              variableId={hero.id}
-              windowId={windowMeta.id}
-              label={hero.label}
-              increaseMeans={hero.increase_means}
-            />
+      </section>
+
+      <div className="home-body">
+        <ol className="home-steps" aria-label="How EarthPulse works">
+          <li className="home-step">
+            <span className="home-step-num num-mono" aria-hidden="true">
+              1
+            </span>
+            <div>
+              <h2 className="home-step-title">Ask</h2>
+              <p>Pick a place and a question.</p>
+            </div>
+          </li>
+          <li className="home-step">
+            <span className="home-step-num num-mono" aria-hidden="true">
+              2
+            </span>
+            <div>
+              <h2 className="home-step-title">Read the evidence</h2>
+              <p>Rate, 95% interval, significance.</p>
+            </div>
+          </li>
+          <li className="home-step">
+            <span className="home-step-num num-mono" aria-hidden="true">
+              3
+            </span>
+            <div>
+              <h2 className="home-step-title">Cross-examine</h2>
+              <p>Data-quality flag, second dataset.</p>
+            </div>
+          </li>
+        </ol>
+
+        <section className="home-section" aria-labelledby="home-insights-title">
+          <div className="home-section-head">
+            <div>
+              <p className="home-kicker label-caps">From the real screener file</p>
+              <h2 id="home-insights-title">What the data says now</h2>
+            </div>
+            <p className="home-source">
+              {windowMeta.start} to {windowMeta.end} · global land ·{' '}
+              <span className="mono">screener/{windowMeta.id}/global.json</span>
+            </p>
+          </div>
+
+          {error ? (
+            <div className="home-status" role="alert">
+              <p>Could not load the screener file for Home. {error}</p>
+              <button type="button" className="button secondary" onClick={() => setAttempt((value) => value + 1)}>
+                Try again
+              </button>
+            </div>
           ) : null}
-          <p className="home-caption">
-            Global trend classes · {windowMeta.start} to {windowMeta.end}
-          </p>
-        </div>
-      </section>
-
-      <section className="home-section" aria-labelledby="home-insights-title">
-        <div className="home-section-head">
-          <div>
-            <p className="eyebrow">From the real screener file</p>
-            <h2 id="home-insights-title">What the data says now</h2>
-          </div>
-          <p className="home-source">
-            {windowMeta.start} to {windowMeta.end} · global land ·{' '}
-            <span className="mono">screener/{windowMeta.id}/global.json</span>
-          </p>
-        </div>
-
-        {error ? (
-          <div className="home-status" role="alert">
-            <p>Could not load the screener file for Home. {error}</p>
-            <button type="button" className="button secondary" onClick={() => setAttempt((value) => value + 1)}>
-              Try again
-            </button>
-          </div>
-        ) : null}
-        {!error && !screener ? (
-          <div className="home-status" role="status">
-            Computing headlines from the screener…
-          </div>
-        ) : null}
-        {screener && insights.length === 0 ? (
-          <div className="home-status" role="status">
-            This screener file has no evaluated cells yet, so there is no headline to show.
-          </div>
-        ) : null}
-        {insights.length > 0 ? (
-          <div className="home-insights">
-            {insights.map((insight) => (
-              <InsightCard key={insight.id} insight={insight} onOpen={() => openInsight(insight)} />
-            ))}
-          </div>
-        ) : null}
-        {screener ? (
-          <p className="home-fineprint">
-            Every number above is computed from the published screener rows, area-weighted over evaluated land cells.
-            A significant trend is evidence to read, not proof of cause.
-          </p>
-        ) : null}
-      </section>
-
-      <section className="home-section" aria-labelledby="home-entry-title">
-        <div className="home-section-head">
-          <div>
-            <p className="eyebrow">{caution ? 'Four ways in' : 'Three ways in'}</p>
-            <h2 id="home-entry-title">Choose how you want to explore</h2>
-          </div>
-        </div>
-        <div className="home-entries">
-          <EntryCard
-            kicker="Rank"
-            title="Explore variables"
-            body="Sort every variable by the area with significant change, coverage, typical magnitude and opposing regional trends."
-            foot={`${index.variables.length} variables compared`}
-            action="Open the Screener"
-            onClick={() => navigate('screener', { windowId: windowMeta.id, domain: 'global' })}
-          />
-          <EntryCard
-            kicker="Locate"
-            title="Explore the map"
-            body="See where the trend is significant, how strong it is, and how the core temperature–moisture pattern is split across land."
-            foot={`${index.layers.float.length + index.layers.class.length} grid layers available`}
-            action="Open Global Discovery"
-            onClick={() => navigate('discovery', { variableId: hero?.id, windowId: windowMeta.id })}
-          />
-          <EntryCard
-            kicker="Interpret"
-            title="Follow a case"
-            body="Walk through published detective cases step by step: why each place was selected, the evidence numbers, and the limitations."
-            foot="Built from computed cases.json"
-            action="Open Story mode"
-            onClick={() => navigate('story', { caseId: null })}
-          />
-          {caution ? (
-            <EntryCard
-              kicker="Look closer"
-              title={caution.title}
-              body={caution.summary}
-              foot="Caution case · read the evidence"
-              action="Open this case"
-              onClick={() => navigate('story', { caseId: caution.caseId })}
-            />
+          {!error && !screener ? (
+            <div className="home-status" role="status">
+              Computing headlines from the screener…
+            </div>
           ) : null}
-        </div>
-      </section>
+          {screener && insights.length === 0 ? (
+            <div className="home-status" role="status">
+              This screener file has no evaluated cells yet, so there is no headline to show.
+            </div>
+          ) : null}
+          {shown.length > 0 ? (
+            <div className="home-insights">
+              {shown.map((insight, position) => (
+                <InsightCard
+                  key={insight.id}
+                  insight={insight}
+                  letter={String.fromCharCode(65 + position)}
+                  onOpen={() => openInsight(insight)}
+                />
+              ))}
+            </div>
+          ) : null}
+          {screener ? (
+            <p className="home-fineprint">
+              Every number above is computed from the published screener rows, area-weighted over evaluated land
+              cells. A significant trend is evidence to read, not proof of cause.
+            </p>
+          ) : null}
+        </section>
+      </div>
     </div>
   )
 }
 
-function InsightCard({ insight, onOpen }: { insight: HomeInsight; onOpen: () => void }) {
+/** Warm = increase, cool = decrease, yellow only for the second-dataset caution. */
+const INSIGHT_TONE: Record<string, 'increase' | 'decrease' | 'caution' | 'default'> = {
+  warming: 'increase',
+  breadth: 'increase',
+  decrease: 'decrease',
+  witness: 'caution',
+}
+
+function InsightCard({ insight, letter, onOpen }: { insight: HomeInsight; letter: string; onOpen: () => void }) {
   const qualityText = qualityEvidenceText(insight)
   const witnessText = insight.id === 'witness' ? null : witnessEvidenceText(insight)
   return (
-    <button type="button" className="home-insight" onClick={onOpen}>
-      <span className="home-insight-kicker">{insight.kicker}</span>
-      <span className="home-insight-value">{insight.value}</span>
-      <span className="home-insight-unit">{insight.unit}</span>
-      <span className="home-insight-title">{insight.title}</span>
-      <span className="home-insight-detail">{insight.detail}</span>
-      {qualityText != null ? (
-        <span className="home-insight-quality">
-          {qualityText}
-          <span aria-hidden="true"> →</span>
-        </span>
-      ) : null}
-      {witnessText != null ? (
-        <span className="home-insight-witness">
-          {witnessText}
-          <span aria-hidden="true"> →</span>
-        </span>
-      ) : null}
-      <span className="home-insight-link" aria-hidden="true">
-        Inspect evidence →
-      </span>
-    </button>
+    <Exhibit
+      label={`Exhibit ${letter} · ${insight.kicker}`}
+      value={insight.value}
+      unit={insight.unit}
+      tone={INSIGHT_TONE[insight.id] ?? 'default'}
+      footer={
+        <button type="button" className="home-insight-open" onClick={onOpen}>
+          Inspect evidence <span aria-hidden="true">→</span>
+        </button>
+      }
+    >
+      <p className="home-insight-title">{insight.title}</p>
+      <p>{insight.detail}</p>
+      {qualityText != null ? <p className="home-insight-quality">{qualityText}</p> : null}
+      {witnessText != null ? <p className="home-insight-witness">{witnessText}</p> : null}
+    </Exhibit>
   )
 }
 
-function EntryCard({
-  kicker,
-  title,
-  body,
-  foot,
-  action,
-  onClick,
-}: {
-  kicker: string
-  title: string
-  body: string
-  foot: string
-  action: string
-  onClick: () => void
-}) {
+interface GlobeData {
+  trendClass: Int8Array
+  qualityFlag: Int8Array | null
+  land: FeatureCollection
+}
+
+function GlobePlaceholder({ note }: { note?: string }) {
   return (
-    <button type="button" className="home-entry" onClick={onClick}>
-      <span className="home-insight-kicker">{kicker}</span>
-      <span className="home-entry-title">{title}</span>
-      <span className="home-entry-body">{body}</span>
-      <span className="home-entry-foot">{foot}</span>
-      <span className="home-entry-action">
-        {action} <span aria-hidden="true">→</span>
-      </span>
-    </button>
+    <div className="home-globe-stage">
+      <div className="home-globe-placeholder" role="status">
+        <span className="home-globe-shimmer" aria-hidden="true" />
+        <span className="sr-only">{note ?? 'Loading the globe…'}</span>
+      </div>
+    </div>
   )
 }
 
-function HeroMap({
+function HomeGlobe({
   variableId,
-  windowId,
   label,
-  increaseMeans,
+  windowMeta,
+  pulses,
+  onSelect,
 }: {
   variableId: string
-  windowId: string
   label: string
-  increaseMeans: string
+  windowMeta: WindowMeta
+  pulses: GlobePulse[]
+  onSelect: (id: string) => void
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<GlobeData | null>(null)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    setStatus('loading')
-    setError(null)
-    loadTrendClass(variableId, windowId)
-      .then((grid) => {
-        if (cancelled) return
-        const node = canvasRef.current
-        if (!node) return
-        paintTrendClass(node, grid, trendColoursFrom(node))
-        setStatus('ready')
+    setData(null)
+    setFailed(false)
+    Promise.all([
+      loadTrendClass(variableId, windowMeta.id),
+      loadQualityFlag(variableId, windowMeta.id),
+      loadNaturalEarth(),
+    ])
+      .then(([trendClass, qualityFlag, basemap]) => {
+        if (!cancelled) setData({ trendClass, qualityFlag, land: basemap.land })
       })
-      .catch((err: unknown) => {
-        if (cancelled) return
-        setStatus('error')
-        setError(messageOf(err))
+      .catch(() => {
+        if (!cancelled) setFailed(true)
       })
     return () => {
       cancelled = true
     }
-  }, [variableId, windowId])
+  }, [variableId, windowMeta.id])
 
   return (
-    <div className="home-hero-map">
-      <canvas
-        ref={canvasRef}
-        width={360}
-        height={180}
-        role="img"
-        aria-label={`Global trend map for ${label}. Significant increase means ${increaseMeans}; other cells are decrease, not significant, insufficient data, or outside the domain.`}
-      />
-      {status === 'loading' ? <span className="home-map-status">Loading hero map…</span> : null}
-      {status === 'error' ? (
-        <span className="home-map-status" role="alert">
-          {error ?? 'Could not draw the hero map.'}
-        </span>
-      ) : null}
-      <div className="home-map-key" aria-hidden="true">
-        <span>
-          <i className="key-swatch key-increase" /> significant increase
-        </span>
-        <span>
-          <i className="key-swatch key-decrease" /> significant decrease
-        </span>
-        <span>
-          <i className="key-swatch key-neutral" /> not significant
-        </span>
-      </div>
+    <div className="home-globe">
+      {failed ? (
+        <GlobePlaceholder note="The globe could not be loaded. The rest of the page still works." />
+      ) : data ? (
+        <Suspense fallback={<GlobePlaceholder />}>
+          <EarthGlobe
+            trendClass={data.trendClass}
+            qualityFlag={data.qualityFlag}
+            land={data.land}
+            pulses={pulses}
+            onPulseSelect={onSelect}
+            pulseHref={(id) => `#/story?case=${encodeURIComponent(id)}`}
+            ariaLabel={`Globe of the ${label.toLowerCase()} trend, ${windowMeta.start} to ${windowMeta.end}. Warm colours mean significant increase, cool colours significant decrease, yellow marks cells flagged for a sudden shift. One pulse marks each published case.`}
+          />
+        </Suspense>
+      ) : (
+        <GlobePlaceholder />
+      )}
+      <p className="home-caption">
+        {label} trend · {windowMeta.start} to {windowMeta.end}
+      </p>
     </div>
   )
 }

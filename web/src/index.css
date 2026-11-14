@@ -4,11 +4,11 @@
 
 :root {
   /* Colour tokens */
-  --bg: #f4f7fb;
+  --bg: #fbfaf7;
   --bg-elevated: #eef3fa;
   --surface: #ffffff;
   --surface-2: #f8fafc;
-  --text: #141b26;
+  --text: #16202e;
   --muted: #5b6573;
   --border: #d8e0ea;
   --border-strong: #b9c5d4;
@@ -16,14 +16,26 @@
   --accent-strong: #164a97;
   --accent-soft: #e6eefc;
   --accent-2: #0f766e;
-  --increase: #c0392b;
-  --decrease: #2471a3;
+  --increase: #c8452c;
+  --decrease: #1f6fb2;
   --neutral: #c8ccd2;
   --warn-bg: #fff4ce;
   --warn-text: #6b4e00;
   --good: #0f766e;
   --good-soft: #e2f5f1;
   --danger-soft: #fde8e6;
+
+  /* Case-file surfaces (docs/DESIGN.md): night for the shell and the globe, paper for evidence. */
+  --night: #0b1b33;
+  --night-2: #13294a;
+  --night-line: rgb(234 241 251 / 14%);
+  --on-night: #eaf1fb;
+  --on-night-muted: #a9b8cf;
+  --paper: #fbfaf7;
+  --ink: #16202e;
+  --marker: #f2c230; /* caution only */
+  --marker-ink: #3d2e00;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, 'SF Mono', Menlo, monospace;
 
   /* Discovery palette (P09 reads these; its fallbacks match the light theme). */
   --insuf-a: #d5d8de;
@@ -72,11 +84,11 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0b111b;
+    --bg: #141a24;
     --bg-elevated: #0f1723;
     --surface: #131b27;
     --surface-2: #0f1722;
-    --text: #e6edf7;
+    --text: #e8edf4;
     --muted: #9aa7b8;
     --border: #253244;
     --border-strong: #35465d;
@@ -84,9 +96,13 @@
     --accent-strong: #9cc0ff;
     --accent-soft: #192842;
     --accent-2: #5eead4;
-    --increase: #ff7a6b;
-    --decrease: #6cb6ff;
+    --increase: #ef7d63;
+    --decrease: #6db3ea;
     --neutral: #3a4656;
+    --night: #070f1d;
+    --night-2: #0d1a30;
+    --paper: #141a24;
+    --ink: #e8edf4;
     --warn-bg: #4a3b00;
     --warn-text: #ffe8a3;
     --good: #5eead4;
@@ -160,8 +176,13 @@ button {
   color: inherit;
 }
 :focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+.surface-night :focus-visible,
+.app-header :focus-visible,
+.app-footer :focus-visible {
+  outline-color: var(--marker);
 }
 ::selection {
   background: var(--accent-soft);
@@ -213,32 +234,25 @@ button {
 .app-header {
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: 30;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3) var(--space-5);
-  padding: 10px clamp(16px, 3vw, 32px);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-}
-.app-header::after {
-  content: '';
-  position: absolute;
-  inset: auto 0 -1px;
-  height: 2px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2), transparent 75%);
-  opacity: 0.7;
+  gap: var(--space-5);
+  min-height: 56px;
+  padding: 0 clamp(16px, 3vw, 32px);
+  background: var(--night);
+  color: var(--on-night);
+  border-bottom: 1px solid var(--night-line);
 }
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  min-height: 40px;
   padding: 4px;
   border: 0;
   background: transparent;
+  color: var(--on-night);
   cursor: pointer;
   text-align: left;
 }
@@ -258,10 +272,10 @@ button {
 .brand-orbit {
   position: absolute;
   inset: 4px 0;
-  border: 1.5px solid var(--accent);
+  border: 1.5px solid var(--on-night-muted);
   border-radius: 50%;
   transform: rotate(-24deg);
-  opacity: 0.7;
+  opacity: 0.8;
 }
 .brand-text {
   display: flex;
@@ -273,45 +287,53 @@ button {
   font-size: 1.1rem;
   letter-spacing: -0.02em;
 }
-.brand-text span {
-  color: var(--muted);
-  font-size: var(--text-xs);
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
 .tabs {
   display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+  align-self: stretch;
+  align-items: stretch;
+  gap: var(--space-1);
+  margin-left: var(--space-3);
+  min-width: 0;
 }
 .tab {
-  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
   background: transparent;
-  color: var(--muted);
-  padding: 8px 12px;
-  border-radius: var(--radius-pill);
+  color: var(--on-night-muted);
+  padding: 0 12px;
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: 600;
-  min-height: 40px;
+  min-height: 44px;
+  white-space: nowrap;
+  transition: color 150ms ease-out;
 }
 .tab:hover {
-  background: var(--surface-2);
-  color: var(--text);
+  color: var(--on-night);
 }
 .tab.active {
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-  color: var(--accent-strong);
-}
-.tab-short {
-  display: none;
+  color: var(--on-night);
+  border-bottom-color: var(--marker);
 }
 .header-tools {
   display: flex;
-  align-items: flex-end;
-  gap: var(--space-2);
+  align-items: center;
   margin-left: auto;
+}
+.context-bar {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.context-bar-inner {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: var(--space-2) clamp(16px, 3vw, 32px);
 }
 .controls {
   display: flex;
@@ -329,6 +351,20 @@ button {
 .control > span {
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+.control-label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.control > .control-note {
+  max-width: 34ch;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: 0;
 }
 .field {
   display: flex;
@@ -352,8 +388,8 @@ input:hover {
   border-color: var(--accent);
 }
 .help-button {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   margin-left: auto;
   border-radius: 50%;
   border: 1px solid var(--border-strong);
@@ -366,6 +402,21 @@ input:hover {
   color: var(--accent);
   border-color: var(--accent);
 }
+.context-bar .help-button {
+  margin-left: auto;
+  flex: none;
+}
+/* Home and the other pages without a context bar keep the "?" in the header, on night. */
+.help-button--night {
+  margin-left: 0;
+  background: transparent;
+  border-color: var(--night-line);
+  color: var(--on-night-muted);
+}
+.help-button--night:hover {
+  color: var(--on-night);
+  border-color: var(--on-night-muted);
+}
 .app-main {
   flex: 1;
   width: 100%;
@@ -376,14 +427,232 @@ input:hover {
 .app-footer {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-2) var(--space-5);
   padding: var(--space-5) clamp(16px, 3vw, 32px);
-  border-top: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--muted);
+  background: var(--night);
+  color: var(--on-night-muted);
   font-size: var(--text-xs);
   line-height: 1.5;
+}
+.app-footer .button.ghost {
+  color: var(--on-night);
+  text-decoration: underline;
+}
+.app-footer .button.ghost:hover {
+  background: var(--night-2);
+  color: var(--on-night);
+}
+
+/* ---------- Surfaces and type utilities (docs/DESIGN.md) ---------- */
+
+.surface-night {
+  background: var(--night);
+  color: var(--on-night);
+}
+.surface-night .muted,
+.surface-night .label-caps {
+  color: var(--on-night-muted);
+}
+.surface-paper {
+  background: var(--paper);
+  color: var(--ink);
+}
+.label-caps {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+.num-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.display {
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+/* ---------- Shared components: Exhibit, VerdictStamp, IntervalBar ---------- */
+
+.ui-exhibit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.ui-exhibit-label {
+  margin: 0;
+  color: var(--muted);
+}
+.ui-exhibit-figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+}
+.ui-exhibit-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.ui-exhibit-unit {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.ui-exhibit-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+.ui-exhibit-body > * {
+  margin: 0;
+}
+.ui-exhibit-footer {
+  margin-top: var(--space-1);
+}
+.ui-exhibit--caution {
+  border-color: var(--marker);
+  border-left-width: 4px;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+.ui-exhibit--caution .ui-exhibit-label,
+.ui-exhibit--caution .ui-exhibit-unit,
+.ui-exhibit--caution .ui-exhibit-body {
+  color: var(--warn-text);
+}
+.ui-exhibit--increase .ui-exhibit-value {
+  color: var(--increase);
+}
+.ui-exhibit--decrease .ui-exhibit-value {
+  color: var(--decrease);
+}
+
+.ui-stamp {
+  display: inline-block;
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  transform: rotate(-3deg);
+  transform-origin: center;
+  white-space: nowrap;
+}
+.ui-stamp--lg {
+  padding: 8px 16px;
+  font-size: var(--text-md);
+}
+.ui-stamp--caution {
+  border-color: var(--marker-ink);
+  background: var(--marker);
+  color: var(--marker-ink);
+}
+.ui-stamp--not-yet {
+  border-color: var(--muted);
+  border-style: dashed;
+  color: var(--muted);
+}
+.ui-stamp--none {
+  border-color: var(--border-strong);
+  border-style: dotted;
+  color: var(--muted);
+}
+@media (max-width: 480px) {
+  .ui-stamp {
+    white-space: normal;
+  }
+}
+
+.ui-ibar {
+  width: 100%;
+  height: 44px;
+  margin: 0;
+}
+.ui-ibar-track {
+  position: relative;
+  height: 26px;
+}
+.ui-ibar-axis {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 12px;
+  height: 2px;
+  background: var(--border-strong);
+}
+.ui-ibar-zero {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--ink);
+}
+.ui-ibar-range {
+  position: absolute;
+  top: 8px;
+  height: 10px;
+  min-width: 4px;
+  border-radius: 5px;
+  background: var(--muted);
+  opacity: 0.45;
+}
+.ui-ibar-dot {
+  position: absolute;
+  top: 5px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: var(--muted);
+  border: 2px solid var(--surface);
+}
+.ui-ibar--increase .ui-ibar-range,
+.ui-ibar--increase .ui-ibar-dot {
+  background: var(--increase);
+}
+.ui-ibar--decrease .ui-ibar-range,
+.ui-ibar--decrease .ui-ibar-dot {
+  background: var(--decrease);
+}
+.ui-ibar-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: 2px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 16px;
+}
+.ui-ibar-labels strong {
+  color: var(--text);
 }
 .placeholder,
 .state-message {
@@ -563,6 +832,11 @@ input:hover {
 .ui-help:focus-within .ui-help-panel {
   opacity: 1;
 }
+.ui-help-technical {
+  display: block;
+  margin-top: 4px;
+  opacity: 0.82;
+}
 
 /* ---------- Coach mark ---------- */
 
@@ -645,31 +919,48 @@ input:hover {
   background: var(--accent);
 }
 
-@media (max-width: 900px) {
-  .brand-text span {
-    display: none;
-  }
-  .app-header {
-    gap: var(--space-2) var(--space-3);
+@media (min-width: 1101px) {
+  .tabs {
+    margin-left: auto;
   }
   .header-tools {
-    width: 100%;
-    justify-content: space-between;
+    margin-left: 0;
   }
-  .controls {
-    flex: 1;
+}
+@media (max-width: 760px) {
+  /* The nav drops under the wordmark as a scrollable row; no hamburger, no script. */
+  .app-header {
+    flex-wrap: wrap;
+    gap: 0 var(--space-3);
+    padding-top: var(--space-1);
+  }
+  .header-tools {
+    margin-left: auto;
+  }
+  .tabs {
+    order: 3;
+    flex: 0 0 100%;
+    margin: 0 calc(-1 * clamp(16px, 3vw, 32px));
+    padding: 0 clamp(16px, 3vw, 32px);
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-top: 1px solid var(--night-line);
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .context-bar-inner {
+    flex-wrap: wrap;
+  }
+  .context-bar .controls {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .context-bar .help-button {
+    margin-left: auto;
   }
 }
 @media (max-width: 640px) {
-  .tab-long {
-    display: none;
-  }
-  .tab-short {
-    display: inline;
-  }
-  .tab {
-    padding: 8px 10px;
-  }
   .app-main {
     padding: 14px 12px 24px;
   }
@@ -687,6 +978,16 @@ input:hover {
     left: 12px;
     right: 12px;
     width: auto;
+  }
+  /* A tip anchored near the right edge must not widen the page at 375 px. */
+  .ui-help-panel {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 84px;
+    width: auto;
+    max-width: none;
+    transform: none;
   }
 }
 

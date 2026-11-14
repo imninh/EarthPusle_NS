@@ -33,6 +33,14 @@ products:
     dims: [time, lon, lat]   # transposed relative to GLDAS
     native_resolution_deg: 0.1
     fill_value: -9999.9
+  M2TMNXSLV:
+    version: "5.12.4"
+    doi: 10.5067/AP1B0BA5PD2K
+    source_type: reanalysis
+    open_with: {engine: netcdf4, group: null}
+    dims: [time, lat, lon]
+    fill_value: 1.0e15
+    regrid: conservative   # P13 regridder; native 0.5 deg lat x 0.625 deg lon (361 x 576)
 
 variables:
   - id: surface_skin_temperature
@@ -161,6 +169,84 @@ variables:
     caveats:
       - "GLDAS-2.1 forcing is not temporally homogeneous: its radiation input was rescaled from 2008 and shows a shift after 2011 that NASA could not correct (GLDAS-2 README, sections 1.5.3 and 1.6). Part of a trend can be a data artifact."
       - Meteorological forcing field used to drive the GLDAS model.
+
+  - id: air_temperature_850hpa
+    label: Air temperature at 850 hPa
+    category: atmosphere
+    product: M2TMNXSLV
+    source_variable: T850
+    source_long_name: air_temperature_at_850_hPa
+    native_unit: K
+    display_unit: degC
+    conversion: kelvin_to_celsius
+    semantic_type: state
+    monthly_statistic: mean
+    increase_means: warmer
+    core: false
+    verified: true
+    description: Air temperature at the 850 hPa pressure level (about 1.5 km up), averaged over the month.
+    valid_where_min: {source_variable: PS, value: 85000, unit: Pa}
+    caveats:
+      - "MERRA-2 is a reanalysis: a model constrained by observations, not a direct measurement."
+      - "No second witness for this variable."
+      - "Cells where the surface lies above 850 hPa are masked (monthly surface pressure below 85000 Pa)."
+
+  - id: air_temperature_500hpa
+    label: Air temperature at 500 hPa
+    category: atmosphere
+    product: M2TMNXSLV
+    source_variable: T500
+    source_long_name: air_temperature_at_500_hPa
+    native_unit: K
+    display_unit: degC
+    conversion: kelvin_to_celsius
+    semantic_type: state
+    monthly_statistic: mean
+    increase_means: warmer
+    core: false
+    verified: true
+    description: Air temperature at the 500 hPa pressure level (about 5.5 km up), averaged over the month.
+    caveats:
+      - "MERRA-2 is a reanalysis: a model constrained by observations, not a direct measurement."
+      - "No second witness for this variable."
+
+  - id: column_water_vapor
+    label: Column water vapour
+    category: atmosphere
+    product: M2TMNXSLV
+    source_variable: TQV
+    source_long_name: total_precipitable_water_vapor
+    native_unit: kg m-2
+    display_unit: kg m-2
+    conversion: identity
+    semantic_type: state
+    monthly_statistic: mean
+    increase_means: more water vapour
+    core: false
+    verified: true
+    description: "Total precipitable water vapour: all the water vapour in a column of air above each place, averaged over the month."
+    caveats:
+      - "MERRA-2 is a reanalysis: a model constrained by observations, not a direct measurement."
+      - "No second witness for this variable."
+
+  - id: total_ozone
+    label: Total column ozone
+    category: atmosphere
+    product: M2TMNXSLV
+    source_variable: TO3
+    source_long_name: total_column_ozone
+    native_unit: Dobsons
+    display_unit: DU
+    conversion: identity
+    semantic_type: state
+    monthly_statistic: mean
+    increase_means: more ozone
+    core: false
+    verified: true
+    description: "Total column ozone: all the ozone in a column of air above each place, averaged over the month."
+    caveats:
+      - "MERRA-2 is a reanalysis: a model constrained by observations, not a direct measurement."
+      - "No second witness for this variable."
 
 excluded:
   - {source_variable: Qs_acc, reason: "Monthly statistic of a 3-hour accumulation is undocumented (P01 open question 1)."}

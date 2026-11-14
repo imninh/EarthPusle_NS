@@ -171,3 +171,48 @@ export function applyBasemapTheme(map: MapLibreMap, dark: boolean): void {
   if (map.getLayer('country-borders')) map.setPaintProperty('country-borders', 'line-color', colours.border)
   map.setSky(basemapSky(dark))
 }
+
+// --- Night stage (task V5): the Discovery stage is always night, in light and dark mode. ---
+
+export function nightBasemapColours(dark: boolean): BasemapColours {
+  return {
+    ocean: dark ? '#070f1d' : '#0b1b33',
+    land: dark ? '#14243b' : '#1a3153',
+    coastline: '#5a77a3',
+    border: '#3a5480',
+    graticule: 'rgba(234,241,251,0.10)',
+  }
+}
+
+/** Same layers as `buildBasemapStyle`, painted in night colours, with the existing dark sky. */
+export function buildNightBasemapStyle(
+  dark: boolean,
+  land: FeatureCollection,
+  borders: MultiLineString,
+  projection: 'globe' | 'mercator' = 'globe',
+): StyleSpecification {
+  const style = buildBasemapStyle(dark, land, borders, projection)
+  const colours = nightBasemapColours(dark)
+  const paint: Record<string, [string, string]> = {
+    ocean: ['background-color', colours.ocean],
+    graticule: ['line-color', colours.graticule],
+    'land-fill': ['fill-color', colours.land],
+    coastline: ['line-color', colours.coastline],
+    'country-borders': ['line-color', colours.border],
+  }
+  for (const layer of style.layers) {
+    const entry = paint[layer.id]
+    if (entry) (layer as { paint?: Record<string, unknown> }).paint = { ...(layer.paint ?? {}), [entry[0]]: entry[1] }
+  }
+  return { ...style, sky: basemapSky(true) } as StyleSpecification
+}
+
+export function applyNightBasemapTheme(map: MapLibreMap, dark: boolean): void {
+  const colours = nightBasemapColours(dark)
+  if (map.getLayer('ocean')) map.setPaintProperty('ocean', 'background-color', colours.ocean)
+  if (map.getLayer('graticule')) map.setPaintProperty('graticule', 'line-color', colours.graticule)
+  if (map.getLayer('land-fill')) map.setPaintProperty('land-fill', 'fill-color', colours.land)
+  if (map.getLayer('coastline')) map.setPaintProperty('coastline', 'line-color', colours.coastline)
+  if (map.getLayer('country-borders')) map.setPaintProperty('country-borders', 'line-color', colours.border)
+  map.setSky(basemapSky(true))
+}

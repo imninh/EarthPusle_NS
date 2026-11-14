@@ -248,3 +248,36 @@ export function yearPosition(year: number, windowId: string): number | null {
 export function significanceCopy(qThreshold: number): string {
   return `Significant means a trend whose FDR-adjusted q-value is below ${qThreshold}. The test is a Hamed–Rao modified Mann–Kendall test over monthly anomalies, with Benjamini–Hochberg correction across thousands of cells. A significant trend is evidence to read, not proof of cause, and "not significant" does not mean "no change".`
 }
+
+export type CaseStepKey = 'question' | 'evidence' | 'witness' | 'caution' | 'limits'
+
+export interface CaseStep {
+  key: CaseStepKey
+  /** Short name shown in the progress rail and in the "STEP n OF m" label. */
+  name: string
+}
+
+/**
+ * The screens of one case, in order. A step appears only when the case has the data for it:
+ * the second-dataset step needs a witness, the caution step needs `kind: "caution"`.
+ */
+export function caseSteps(item: DetectiveCase): CaseStep[] {
+  const steps: CaseStep[] = [
+    { key: 'question', name: 'The question' },
+    { key: 'evidence', name: 'The evidence' },
+  ]
+  if (item.evidence.some((evidence) => evidence.witness)) steps.push({ key: 'witness', name: 'Second dataset' })
+  if (isCautionCase(item)) steps.push({ key: 'caution', name: 'The caution' })
+  steps.push({ key: 'limits', name: 'Limits and next steps' })
+  return steps
+}
+
+/** Clamp a step position into 0 … count - 1. */
+export function clampStep(position: number, count: number): number {
+  if (!Number.isFinite(position) || count <= 0) return 0
+  return Math.min(count - 1, Math.max(0, Math.floor(position)))
+}
+
+/** Plain-language caution text, taken from the intro wording about sudden shifts. */
+export const CAUTION_STEP_TEXT =
+  'A sudden shift can be a real jump in the climate or a data artefact. The trend is still significant; read the evidence rather than treating the flag as a verdict.'

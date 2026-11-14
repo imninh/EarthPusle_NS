@@ -50,6 +50,8 @@ import {
 } from '../../data/loaders'
 import type { Country, DataIndex, Region, Selection } from '../../data/types'
 import { PlaceSearch } from '../../components/PlaceSearch'
+import { Disclosure, Exhibit, HelpTip, VerdictStamp } from '../../components/ui'
+import { GLOSSARY, VERDICT_LABELS, formatUnit, plainVerdict } from '../../lib/format'
 import {
   type ClassPalette,
   type Rgba,
@@ -62,6 +64,7 @@ import {
   trendColour,
 } from '../../maps/gridImage'
 import {
+  PIXELS_PER_DEG,
   clipImageToLand,
   projectEquirectToMercator,
   renderClassImage,
@@ -75,11 +78,23 @@ import {
   witnessWords,
 } from '../../maps/witness'
 import {
-  applyBasemapTheme,
-  buildBasemapStyle,
+  applyNightBasemapTheme,
+  buildNightBasemapStyle,
   loadNaturalEarth,
   type BasemapData,
 } from '../../maps/basemap'
+import {
+  VERDICT_MARKER,
+  VERDICT_NOT_YET,
+  VERDICT_STRIPE,
+  VERDICT_WORDS,
+  applyContradictedStripes,
+  verdictClass,
+  verdictClassWords,
+  verdictColour,
+  verdictGrid,
+} from '../../maps/verdict'
+import { type LayerId, isLayerId, resolveLayer } from './layers'
 import './discovery.css'
 
 // Vite's prebundled maplibre looks for the worker beside that bundle, where the file is not
@@ -94,6 +109,7 @@ const METHOD_ONE_LINER =
 const COVERAGE_NOTE =
   'Coverage is valid months divided by months in the window. A cell is evaluated only when valid months are at least 80% of the window and the window is at least 10 years; otherwise the class is insufficient data. Cells outside the common land mask are left transparent.'
 
+const VERDICT_LAYER = { id: 'verdict', label: 'Verdict' } as const
 const BASE_LAYERS = [
   { id: 'trend', label: 'Trend' },
   { id: 'rate', label: 'Rate of change' },
@@ -104,8 +120,28 @@ const BASE_LAYERS = [
 ] as const
 const QUALITY_LAYER = { id: 'quality', label: 'Data quality' } as const
 const WITNESS_LAYER = { id: 'witness', label: 'Second witness' } as const
+/** Layers that stay under "More layers" until the user opens it. */
+const MORE_LAYER_IDS: readonly LayerId[] = ['std', 'significance', 'pattern', 'coverage']
 
-type LayerId = (typeof BASE_LAYERS)[number]['id'] | 'quality' | 'witness'
+/**
+ * One-line explanations for the layers that need a definition. Significance, data
+ * quality and second witness come from the shared P19 glossary; the standardized
+ * change sentence is local because the glossary has no TermId for it yet.
+ */
+const LAYER_HELP: Partial<Record<LayerId, { label: string; text: string }>> = {
+  verdict: {
+    label: 'Verdict',
+    text: 'One map of the whole idea: where a trend is significant and clean, where a sudden shift is flagged, where a second dataset disagrees, and where there is only a direction so far.',
+  },
+  std: {
+    label: 'Standardized change',
+    text: 'Change measured in units of this variable’s own year-to-year variability, so different variables can be compared.',
+  },
+  significance: { label: 'Significance', text: GLOSSARY.q_value.plain },
+  quality: { label: 'Data quality', text: GLOSSARY.sudden_shift.plain },
+  witness: { label: 'Second witness', text: GLOSSARY.second_witness.plain },
+}
+
 type Projection = 'globe' | 'mercator'
 type BasemapState = 'loading' | 'ready' | 'error'
 type LoadState = 'loading' | 'ready' | 'error'
@@ -181,8 +217,8 @@ const CANVAS_CACHE_LIMIT = 8
 
 export default function DiscoveryPage() {
   const { index, variable, variableId, windowId, navigate, selection, mapLayer } = useApp()
-  const [layer, setLayer] = useState<LayerId>(() =>
-    mapLayer === 'witness' && index.witness ? 'witness' : 'trend',
+  const [layerChoice, setLayerChoice] = useState<LayerId | null>(() =>
+    isLayerId(mapLayer) && (mapLayer !== 'witness' || index.witness) ? mapLayer : null,
   )
   const [projection, setProjection] = useState<Projection>('globe')
   const [showRegions, setShowRegions] = useState(false)
@@ -198,8 +234,9 @@ export default function DiscoveryPage() {
   const [basemapState, setBasemapState] = useState<BasemapState>('loading')
   const [basemapError, setBasemapError] = useState<string | null>(null)
   const [mapEpoch, setMapEpoch] = useState(0)
-  const [panelOpen, setPanelOpen] = useState(true)
-  const [legendOpen, setLegendOpen] = useState(() => !window.matchMedia('(max-width: 900px)').matches)
+  const [stageHeight, setStageHeight] = useState<number | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const [hover, setHover] = useState<HoverState | null>(null)
   const [pickedPlace, setPickedPlace] = useState<{ id: string; label: string; bbox: [number, number, number, number] } | null>(null)
   const [cell, setCell] = useState<CellPick | null>(() =>
@@ -207,6 +244,8 @@ export default function DiscoveryPage() {
   )
 
   const rootRef = useRef<HTMLElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const nightRef = useRef<HTMLDivElement>(null)
   const mapNodeRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -220,19 +259,17 @@ export default function DiscoveryPage() {
     variable: DataIndex['variables'][number]
     qThreshold: number
   }>({ grids: null, layer: 'trend', variable, qThreshold: index.q_threshold })
+  const activeLayer: LayerId = resolveLayer({
+    choice: layerChoice,
+    verdictByDefault: Boolean(index.quality) && Boolean(index.witness?.products[variableId]),
+    loaded: grids != null,
+    hasQuality: grids?.quality != null,
+    hasWitness: grids?.witness != null,
+  })
   cellNow.current = cell
   darkNow.current = dark
   clickState.current = { regions, showRegions, navigate, setCell }
-  interaction.current = {
-    grids,
-    layer:
-      (layer === 'quality' && grids?.quality == null) ||
-      (layer === 'witness' && grids?.witness == null)
-        ? 'trend'
-        : layer,
-    variable,
-    qThreshold: index.q_threshold,
-  }
+  interaction.current = { grids, layer: activeLayer, variable, qThreshold: index.q_threshold }
 
   const windowMeta = index.windows.find((item) => item.id === windowId)
   const temperatureLabel = variableLabel(index, index.pattern_pair.temperature)
@@ -240,14 +277,18 @@ export default function DiscoveryPage() {
   const rateLimit = useMemo(() => (grids ? finiteAbsPercentile(grids.slope, 0.98) : null), [grids])
   const qualityAvailable = Boolean(index.quality) && grids?.quality != null
   const witnessAvailable = Boolean(index.witness) && grids?.witness != null
-  const activeLayer: LayerId =
-    (layer === 'quality' && !qualityAvailable) || (layer === 'witness' && !witnessAvailable)
-      ? 'trend'
-      : layer
-  const layers = [
+  // A variable published without a witness product keeps its button, disabled: the
+  // absence is information (P22 task 6). The layer is hidden only when the export has
+  // no witness section at all.
+  const witnessListed = Boolean(index.witness?.products[variableId])
+  const witnessMissing = Boolean(index.witness) && !witnessListed
+  const displayUnit = formatUnit(variable.display_unit)
+  const verdictAvailable = qualityAvailable || witnessAvailable
+  const layers: ReadonlyArray<{ id: LayerId; label: string }> = [
+    ...(verdictAvailable || grids == null ? [VERDICT_LAYER] : []),
     ...BASE_LAYERS,
     ...(qualityAvailable ? [QUALITY_LAYER] : []),
-    ...(witnessAvailable ? [WITNESS_LAYER] : []),
+    ...(index.witness ? [WITNESS_LAYER] : []),
   ]
   const layerLabel = layers.find((item) => item.id === activeLayer)?.label ?? activeLayer
 
@@ -268,7 +309,7 @@ export default function DiscoveryPage() {
   }
 
   useLayoutEffect(() => {
-    const root = rootRef.current
+    const root = nightRef.current ?? rootRef.current
     if (!root) return
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const read = () => {
@@ -280,14 +321,31 @@ export default function DiscoveryPage() {
     return () => media.removeEventListener('change', read)
   }, [])
 
-  useEffect(() => {
-    const media = window.matchMedia('(max-width: 900px)')
-    const update = () => {
-      if (media.matches) setLegendOpen(false)
+  // The stage must end at the viewport bottom: the header and the context bar change height
+  // at 760 px and when a variable's description wraps, so measure instead of guessing.
+  useLayoutEffect(() => {
+    const stage = stageRef.current
+    if (!stage) return
+    let frame = 0
+    let cancelled = false
+    const measure = () => {
+      frame = 0
+      if (cancelled) return
+      const documentTop = stage.getBoundingClientRect().top + window.scrollY
+      setStageHeight(Math.max(520, Math.round(window.innerHeight - documentTop)))
     }
-    media.addEventListener('change', update)
-    return () => media.removeEventListener('change', update)
-  }, [])
+    const schedule = () => {
+      if (!cancelled && frame === 0) frame = requestAnimationFrame(measure)
+    }
+    schedule()
+    window.addEventListener('resize', schedule)
+    document.fonts?.ready.then(schedule).catch(() => undefined)
+    return () => {
+      cancelled = true
+      if (frame !== 0) cancelAnimationFrame(frame)
+      window.removeEventListener('resize', schedule)
+    }
+  }, [variableId, windowId])
 
   useEffect(() => {
     let cancelled = false
@@ -388,7 +446,7 @@ export default function DiscoveryPage() {
     let cancelled = false
     const map = new MapLibreMap({
       container: node,
-      style: buildBasemapStyle(darkNow.current, basemapData.land, basemapData.borders, projection),
+      style: buildNightBasemapStyle(darkNow.current, basemapData.land, basemapData.borders, projection),
       center: [15, 18],
       zoom: 2.0,
       renderWorldCopies: false,
@@ -400,11 +458,11 @@ export default function DiscoveryPage() {
     })
     mapRef.current = map
     map.addControl(new AttributionControl({ compact: true, customAttribution: 'Natural Earth' }), 'bottom-right')
-    map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
+    map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right')
 
     const mountOverlays = () => {
       if (cancelled) return
-      applyBasemapTheme(map, darkNow.current)
+      applyNightBasemapTheme(map, darkNow.current)
       ensureGrid(map)
       ensureRegions(map, clickState.current.regions, clickState.current.showRegions)
       ensureCell(map, cellNow.current)
@@ -475,7 +533,7 @@ export default function DiscoveryPage() {
   useEffect(() => {
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
-    applyBasemapTheme(map, dark)
+    applyNightBasemapTheme(map, dark)
   }, [dark])
 
   useLayoutEffect(() => {
@@ -485,11 +543,7 @@ export default function DiscoveryPage() {
       if (map.getLayer('grid-raster')) map.setLayoutProperty('grid-raster', 'visibility', 'none')
       return
     }
-    const usedLayer: LayerId =
-      (layer === 'quality' && grids.quality == null) ||
-      (layer === 'witness' && grids.witness == null)
-        ? 'trend'
-        : layer
+    const usedLayer: LayerId = activeLayer
     const key = `${grids.key}|${usedLayer}|${dark}`
     let canvas = canvasCache.current.get(key)
     if (!canvas) {
@@ -506,7 +560,7 @@ export default function DiscoveryPage() {
       pushCanvas(map, canvas)
       map.setLayoutProperty('grid-raster', 'visibility', 'visible')
     }
-  }, [grids, palette, layer, projection, dark, basemapData, mapEpoch, index.q_threshold])
+  }, [grids, palette, activeLayer, projection, dark, basemapData, mapEpoch, index.q_threshold])
 
   useEffect(() => {
     const map = mapRef.current
@@ -525,80 +579,122 @@ export default function DiscoveryPage() {
     if (source) source.setData(cell ? cellCollection(cell) : emptyCollection())
   }, [cell, mapEpoch])
 
+  const layerButton = (item: { id: LayerId; label: string }) => {
+    const help = LAYER_HELP[item.id]
+    const disabled = item.id === 'witness' && witnessMissing
+    return (
+      <div key={item.id} className="discovery-layer" role="none">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={activeLayer === item.id}
+          disabled={disabled}
+          title={disabled ? 'No second dataset for this variable' : undefined}
+          onClick={() => setLayerChoice(item.id)}
+        >
+          {item.label}
+        </button>
+        {help ? (
+          <HelpTip label={help.label} description={disabled ? 'No second dataset for this variable' : help.text}>
+            {disabled ? 'No second dataset for this variable' : help.text}
+          </HelpTip>
+        ) : null}
+      </div>
+    )
+  }
+  const mainLayers = layers.filter((item) => !MORE_LAYER_IDS.includes(item.id))
+  const moreLayers = layers.filter((item) => MORE_LAYER_IDS.includes(item.id))
+  const moreShown = moreOpen || MORE_LAYER_IDS.includes(activeLayer)
+
   return (
     <section className="discovery" ref={rootRef}>
       <h1 className="sr-only">Global Discovery</h1>
-      <div className="discovery-body">
-        <div className="discovery-map">
+      <div
+        className={`discovery-stage${cell ? ' has-cell' : ''}`}
+        ref={stageRef}
+        style={stageHeight == null ? undefined : { height: `${stageHeight}px` }}
+      >
+        <div className="discovery-night" ref={nightRef}>
           <div ref={mapNodeRef} className="discovery-map-canvas" aria-label="World map of the selected variable" />
-          <div className="discovery-place-search">
-            <PlaceSearch onPick={pickPlace} compact placeholder="Search a country or region" />
-          </div>
-          {pickedPlace ? (
-            <div className="discovery-place-callout">
-              <strong>{pickedPlace.label}</strong>
-              <div className="discovery-place-actions">
-                <button
-                  type="button"
-                  className="discovery-primary"
-                  onClick={() => navigate('region', { selection: { kind: 'region', regionId: pickedPlace.id } })}
-                >
-                  Open evidence
-                </button>
-                <button type="button" onClick={() => setPickedPlace(null)} aria-label="Close place callout">
-                  Close
-                </button>
-              </div>
-            </div>
-          ) : null}
-          <div className="discovery-map-toolbar">
-            <div className="discovery-segmented" role="group" aria-label="Map projection">
-              <button
-                type="button"
-                aria-pressed={projection === 'globe'}
-                onClick={() => setProjection('globe')}
-              >
-                Globe
-              </button>
-              <button
-                type="button"
-                aria-pressed={projection === 'mercator'}
-                onClick={() => setProjection('mercator')}
-              >
-                Flat map
-              </button>
-            </div>
-            <button
-              type="button"
-              className="discovery-panel-toggle"
-              aria-pressed={panelOpen}
-              onClick={() => setPanelOpen((open) => !open)}
-            >
-              {panelOpen ? 'Hide panel' : 'Show panel'}
-            </button>
-          </div>
 
-          <div className={`discovery-legend-drawer${legendOpen ? ' is-open' : ''}`}>
+          <aside className={`discovery-panel${sheetOpen ? ' is-open' : ''}`} aria-label="Map layers and legend">
             <button
               type="button"
-              className="discovery-legend-toggle"
-              aria-expanded={legendOpen}
-              onClick={() => setLegendOpen((open) => !open)}
+              className="discovery-sheet-handle"
+              aria-expanded={sheetOpen}
+              onClick={() => setSheetOpen((open) => !open)}
             >
-              {legendOpen ? 'Hide legend' : 'Legend'}
+              <span className="discovery-sheet-grip" aria-hidden="true" />
+              <span>
+                {layerLabel} · {sheetOpen ? 'hide legend' : 'show legend'}
+              </span>
             </button>
-            {legendOpen ? (
+            <div className="discovery-panel-body">
+              <div className="discovery-place-search">
+                <PlaceSearch onPick={pickPlace} compact placeholder="Search a country or region" />
+              </div>
+              {pickedPlace ? (
+                <div className="discovery-place-callout">
+                  <strong>{pickedPlace.label}</strong>
+                  <div className="discovery-place-actions">
+                    <button
+                      type="button"
+                      className="discovery-primary"
+                      onClick={() => navigate('region', { selection: { kind: 'region', regionId: pickedPlace.id } })}
+                    >
+                      Open evidence
+                    </button>
+                    <button type="button" onClick={() => setPickedPlace(null)} aria-label="Close place callout">
+                      Close
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              <h2 className="discovery-panel-title label-caps">Layer</h2>
+              <p className="discovery-muted">
+                {variable.label}, {windowMeta ? `${windowMeta.start} to ${windowMeta.end}` : windowId}
+              </p>
+              <div className="discovery-layers" role="radiogroup" aria-label="Map layer">
+                {mainLayers.map(layerButton)}
+                {moreLayers.length > 0 ? (
+                  <>
+                    <button
+                      type="button"
+                      className="discovery-more"
+                      aria-expanded={moreShown}
+                      onClick={() => setMoreOpen((open) => !open)}
+                    >
+                      {moreShown ? 'Fewer layers' : 'More layers'}
+                    </button>
+                    {moreShown ? moreLayers.map(layerButton) : null}
+                  </>
+                ) : null}
+              </div>
               <Legend
                 layer={activeLayer}
                 palette={palette ?? FALLBACK_PALETTE}
-                variableUnit={variable.display_unit}
+                variableUnit={displayUnit}
                 increaseMeans={variable.increase_means}
                 qThreshold={index.q_threshold}
                 rateLimit={rateLimit}
                 temperatureLabel={temperatureLabel}
                 moistureLabel={moistureLabel}
+                verdictHasQuality={grids?.quality != null}
+                verdictHasWitness={grids?.witness != null}
               />
-            ) : null}
+              <p className="discovery-muted discovery-hint">Click a cell to open its case file.</p>
+            </div>
+          </aside>
+
+          <div className="discovery-map-toolbar">
+            <div className="discovery-segmented" role="group" aria-label="Map projection">
+              <button type="button" aria-pressed={projection === 'globe'} onClick={() => setProjection('globe')}>
+                Globe
+              </button>
+              <button type="button" aria-pressed={projection === 'mercator'} onClick={() => setProjection('mercator')}>
+                Flat map
+              </button>
+            </div>
           </div>
 
           {hover ? (
@@ -639,27 +735,7 @@ export default function DiscoveryPage() {
           ) : null}
         </div>
 
-        <div className={`discovery-panels${panelOpen ? '' : ' is-collapsed'}`} hidden={!panelOpen}>
-          <section className="discovery-card">
-            <h2>{layerLabel}</h2>
-            <p className="discovery-muted">
-              {variable.label}, {windowMeta ? `${windowMeta.start} to ${windowMeta.end}` : windowId}
-            </p>
-            <div className="discovery-layers" role="radiogroup" aria-label="Map layer">
-              {layers.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={activeLayer === item.id}
-                  onClick={() => setLayer(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </section>
-
+        {cell ? (
           <CellPanel
             cell={cell}
             grids={grids}
@@ -671,49 +747,45 @@ export default function DiscoveryPage() {
             temperatureLabel={temperatureLabel}
             moistureLabel={moistureLabel}
             witnessLabel={index.witness?.products[variableId]?.label ?? variable.product}
-            onInspect={() => {
-              if (!cell) return
-              navigate('region', { selection: { kind: 'cell', row: cell.row, col: cell.col } })
-            }}
+            onClose={() => setCell(null)}
+            onInspect={() => navigate('region', { selection: { kind: 'cell', row: cell.row, col: cell.col } })}
           />
+        ) : null}
+      </div>
 
-          <section className="discovery-card">
-            <h2>Regions</h2>
-            <label className="discovery-check">
-              <input
-                type="checkbox"
-                checked={showRegions}
-                onChange={(event) => setShowRegions(event.target.checked)}
-              />
-              Show region outlines
-            </label>
-            <p className="discovery-muted">
-              Boxes are approximate. With outlines on, a click inside a box opens that region. Turn outlines off to
-              inspect a cell inside a box. Overlapping boxes open the smaller one.
-            </p>
-            {regionNote ? <p role="alert">{regionNote}</p> : null}
-            <ul className="discovery-regions">
-              {regions.map((region) => (
-                <li key={region.id}>
-                  <button
-                    type="button"
-                    onClick={() => navigate('region', { selection: { kind: 'region', regionId: region.id } })}
-                  >
-                    {region.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
+      <div className="discovery-below">
+        <section className="discovery-card">
+          <h2>Regions</h2>
+          <label className="discovery-check">
+            <input type="checkbox" checked={showRegions} onChange={(event) => setShowRegions(event.target.checked)} />
+            Show region outlines
+          </label>
+          <p className="discovery-muted">
+            Boxes are approximate. With outlines on, a click inside a box opens that region. Turn outlines off to
+            inspect a cell inside a box. Overlapping boxes open the smaller one.
+          </p>
+          {regionNote ? <p role="alert">{regionNote}</p> : null}
+          <ul className="discovery-regions">
+            {regions.map((region) => (
+              <li key={region.id}>
+                <button
+                  type="button"
+                  onClick={() => navigate('region', { selection: { kind: 'region', regionId: region.id } })}
+                >
+                  {region.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
 
-          <InfoPanel
-            variable={variable}
-            basemapState={basemapState}
-            temperatureLabel={temperatureLabel}
-            moistureLabel={moistureLabel}
-            patternLayer={activeLayer === 'pattern'}
-          />
-        </div>
+        <InfoPanel
+          variable={variable}
+          basemapState={basemapState}
+          temperatureLabel={temperatureLabel}
+          moistureLabel={moistureLabel}
+          patternLayer={activeLayer === 'pattern'}
+        />
       </div>
     </section>
   )
@@ -728,8 +800,12 @@ function Legend({
   rateLimit,
   temperatureLabel,
   moistureLabel,
+  verdictHasQuality,
+  verdictHasWitness,
 }: {
   layer: LayerId
+  verdictHasQuality: boolean
+  verdictHasWitness: boolean
   palette: Palette
   variableUnit: string
   increaseMeans: string
@@ -739,10 +815,11 @@ function Legend({
   moistureLabel: string
 }) {
   return (
-    <section className="discovery-legend">
-      <h2>Legend</h2>
+    <section className="discovery-legend" aria-label="Legend">
+      <h3>Legend</h3>
       <p>
         Display unit: {variableUnit}.
+        {layer === 'verdict' ? ' Each land cell gets one of four verdicts, from layers already on the map.' : null}
         {layer === 'rate' ? ` Sen slope: ${variableUnit} per decade.` : null}
         {layer === 'std' ? ' Standardized change: standard deviations per decade.' : null}
         {layer === 'significance' ? ' Significance is an FDR-adjusted q value from 0 to 1.' : null}
@@ -752,6 +829,56 @@ function Legend({
         {layer === 'quality' ? ' Hatching marks a sudden shift. A code-1 shift could be a real climate jump or a data artefact; a code-2 shift falls during a documented GLDAS input change (2008–2012).' : null}
         {layer === 'witness' ? ' A second, independent NASA dataset checks the sign and significance of each trend.' : null}
       </p>
+      {layer === 'verdict' ? (
+        <>
+          <ul>
+            <li>
+              <span
+                className="discovery-swatch"
+                style={{
+                  background: `linear-gradient(90deg, ${cssRgba(palette.increase)} 50%, ${cssRgba(palette.decrease)} 50%)`,
+                }}
+              />
+              <span>
+                {VERDICT_WORDS.clean} (warm = increase, cool = decrease)
+              </span>
+            </li>
+            <li>
+              <span className="discovery-swatch" style={{ background: cssRgba(VERDICT_MARKER) }} />
+              <span>{VERDICT_WORDS.flagged}</span>
+            </li>
+            <li>
+              <span
+                className="discovery-swatch"
+                style={{
+                  background: `repeating-linear-gradient(45deg, ${cssRgba(palette.increase)} 0 3px, ${cssRgba(VERDICT_STRIPE)} 3px 6px)`,
+                }}
+              />
+              <span>{VERDICT_WORDS.contradicted}</span>
+            </li>
+            <li>
+              <span
+                className="discovery-swatch"
+                style={{
+                  background: `repeating-linear-gradient(45deg, ${cssRgba([palette.neutral[0], palette.neutral[1], palette.neutral[2], 160])} 0 1px, transparent 1px 4px)`,
+                }}
+              />
+              <span>{VERDICT_WORDS.notYet}</span>
+            </li>
+            <Swatch hatch={palette} text="Not enough data" />
+            <Swatch text="Outside domain (transparent)" />
+          </ul>
+          {!verdictHasQuality || !verdictHasWitness ? (
+            <p className="discovery-muted">
+              {!verdictHasQuality && !verdictHasWitness
+                ? 'This variable has no sudden-shift check and no second dataset, so no cell is flagged or contradicted.'
+                : !verdictHasQuality
+                  ? 'This variable has no sudden-shift check, so no cell is flagged.'
+                  : 'This variable has no second dataset, so no cell can be contradicted.'}
+            </p>
+          ) : null}
+        </>
+      ) : null}
       {layer === 'trend' ? (
         <ul>
           <Swatch colour={palette.increase} text={`Significant increase (${increaseMeans})`} />
@@ -889,9 +1016,10 @@ function CellPanel({
   temperatureLabel,
   moistureLabel,
   witnessLabel,
+  onClose,
   onInspect,
 }: {
-  cell: CellPick | null
+  cell: CellPick
   grids: GridBundle | null
   loadState: LoadState
   variable: DataIndex['variables'][number]
@@ -901,84 +1029,183 @@ function CellPanel({
   temperatureLabel: string
   moistureLabel: string
   witnessLabel: string
+  onClose: () => void
   onInspect: () => void
 }) {
-  const values = cell && grids ? readCell(grids, cell) : null
+  const values = grids ? readCell(grids, cell) : null
   const monthCount = windowMeta ? monthsInWindow(months, windowMeta.start, windowMeta.end) : null
+  const unit = formatUnit(variable.display_unit)
+  const verdict = values
+    ? plainVerdict({
+        trendClass: values.trend,
+        flagged: values.quality != null && values.quality >= QUALITY_STEP,
+        witnessCode: values.witness,
+        increaseMeans: variable.increase_means,
+        slope: values.slope,
+      })
+    : null
+  const stampTone: 'strong' | 'caution' | 'not-yet' | 'none' = !verdict
+    ? 'none'
+    : verdict.tone === 'warn'
+      ? 'caution'
+      : verdict.tone === 'accent'
+        ? 'strong'
+        : verdict.label === VERDICT_LABELS.notYet
+          ? 'not-yet'
+          : 'none'
+  const notSignificant = values ? notSignificantSentence(values, unit) : null
+  const mapClass = values ? verdictClass(values.trend, values.quality, values.witness) : null
+  const evaluated = values != null && values.trend !== INSUFFICIENT_DATA && values.trend !== OUTSIDE_DOMAIN
+  const significant = values != null && (values.trend === TREND_INCREASE || values.trend === TREND_DECREASE)
+  const exhibitTone: 'default' | 'caution' | 'increase' | 'decrease' = !values
+    ? 'default'
+    : stampTone === 'caution'
+      ? 'caution'
+      : values.trend === TREND_INCREASE
+        ? 'increase'
+        : values.trend === TREND_DECREASE
+          ? 'decrease'
+          : 'default'
+  const glitch = values ? glitchAnswer(values.quality, values.breakYear) : null
+  const second = values ? witnessAnswer(values.witness) : null
   return (
-    <section className="discovery-card">
-      <h2>Cell</h2>
-      {cell == null ? (
-        <p>Click a cell to read its trend, slope, and significance in words.</p>
+    <aside className="discovery-cell" aria-label="Selected cell">
+      <div className="discovery-cell-head">
+        <div>
+          <h2 className="discovery-cell-title">
+            {formatLatitude(rowToLat(cell.row))}, {formatLongitude(colToLon(cell.col))}
+          </h2>
+          <p className="discovery-muted">
+            1° grid cell centre · row {cell.row}, column {cell.col}
+          </p>
+        </div>
+        <button type="button" className="discovery-cell-close" onClick={onClose} aria-label="Close cell panel">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+
+      {verdict ? (
+        <div className="discovery-verdict">
+          <VerdictStamp label={verdict.label} tone={stampTone} />
+          {notSignificant ? <p className="discovery-verdict-note">{notSignificant}</p> : null}
+        </div>
       ) : (
-        <>
-          <dl className="discovery-facts">
-            <dt>Latitude</dt>
-            <dd>{formatLatitude(rowToLat(cell.row))} (cell centre, row {cell.row})</dd>
-            <dt>Longitude</dt>
-            <dd>{formatLongitude(colToLon(cell.col))} (cell centre, column {cell.col})</dd>
-            <dt>Trend class</dt>
-            <dd>{values ? trendWords(values.trend, variable.increase_means) : loadState === 'error' ? 'Unavailable' : 'Loading…'}</dd>
-            <dt>Sen slope per decade</dt>
-            <dd>
-              {values ? formatStat(values.slope) : '—'} {variable.display_unit} per decade
-            </dd>
-            <dt>p</dt>
-            <dd>{values ? formatStat(values.p) : '—'}</dd>
-            <dt>q</dt>
-            <dd>
-              {values ? formatStat(values.q) : '—'}
-              {values && Number.isFinite(values.q)
-                ? values.q < qThreshold
-                  ? ' (below the FDR threshold)'
-                  : ' (not below the FDR threshold)'
-                : ''}
-            </dd>
-            <dt>τ</dt>
-            <dd>{values ? formatStat(values.tau) : '—'}</dd>
-            <dt>Valid months</dt>
-            <dd>
-              {values ? formatCount(values.nValid) : '—'}
-              {monthCount != null ? ` of ${monthCount}` : ''}
-            </dd>
-            <dt>Coverage</dt>
-            <dd>{values ? formatStat(values.coverage) : '—'}</dd>
-            <dt>Product</dt>
-            <dd>{variable.product}</dd>
-            <dt>Source variable</dt>
-            <dd>{variable.source_variable}</dd>
-            {values ? (
-              <>
-                <dt>Pattern class</dt>
-                <dd>{patternWords(values.pattern, temperatureLabel, moistureLabel)}</dd>
-              </>
-            ) : null}
-            {values && values.quality != null ? (
-              <>
-                <dt>Data quality</dt>
-                <dd>{qualityNote(values.quality, values.breakYear, variable.product)}</dd>
-              </>
-            ) : null}
-            {values && values.witness != null ? (
-              <>
-                <dt>Second witness</dt>
-                <dd>{witnessLine(values.witness, values.witnessStd, witnessLabel)}</dd>
-                {combinedQualityWitness(values.quality, values.witness, witnessLabel) ? (
-                  <>
-                    <dt>Combined reading</dt>
-                    <dd>{combinedQualityWitness(values.quality, values.witness, witnessLabel)}</dd>
-                  </>
-                ) : null}
-              </>
-            ) : null}
-          </dl>
-          <button type="button" className="discovery-primary" onClick={onInspect}>
-            Inspect evidence
-          </button>
-        </>
+        <p className="discovery-muted">{loadState === 'error' ? 'Unavailable' : 'Loading…'}</p>
       )}
-    </section>
+
+      {values && evaluated ? (
+        <Exhibit
+          label="Exhibit A · Rate of change"
+          value={formatStat(values.slope)}
+          unit={`${unit} per decade`}
+          tone={exhibitTone}
+        >
+          <p>
+            {trendWords(values.trend, variable.increase_means)}
+            {Number.isFinite(values.q) ? `. q = ${formatStat(values.q)}` : ''}
+            {Number.isFinite(values.q)
+              ? values.q < qThreshold
+                ? ' (below the FDR threshold).'
+                : ' (not below the FDR threshold).'
+              : '.'}
+          </p>
+        </Exhibit>
+      ) : null}
+
+      {values && evaluated ? (
+        <ul className="discovery-cross" aria-label="Cross-examination">
+          <li>
+            <span className="label-caps">1 Is it significant?</span>
+            <strong>{!evaluated ? 'Not enough data' : significant ? 'Yes' : 'Not yet'}</strong>
+          </li>
+          <li className={glitch?.warn ? 'is-warn' : undefined}>
+            <span className="label-caps">2 Could it be a data glitch?</span>
+            <strong>{glitch?.text}</strong>
+          </li>
+          <li className={second?.warn ? 'is-warn' : undefined}>
+            <span className="label-caps">3 Second dataset agree?</span>
+            <strong>{second?.text}</strong>
+          </li>
+        </ul>
+      ) : null}
+
+      {mapClass != null ? <p className="discovery-muted">On the Verdict map: {verdictClassWords(mapClass)}.</p> : null}
+
+      <button type="button" className="discovery-primary discovery-open" onClick={onInspect}>
+        Open the evidence
+      </button>
+
+      <Disclosure summary="Full cell details">
+        <dl className="discovery-facts">
+          <dt>Trend class</dt>
+          <dd>{values ? trendWords(values.trend, variable.increase_means) : loadState === 'error' ? 'Unavailable' : 'Loading…'}</dd>
+          <dt>p</dt>
+          <dd>{values ? formatStat(values.p) : '—'}</dd>
+          <dt>q</dt>
+          <dd>{values ? formatStat(values.q) : '—'}</dd>
+          <dt>τ</dt>
+          <dd>{values ? formatStat(values.tau) : '—'}</dd>
+          <dt>Valid months</dt>
+          <dd>
+            {values ? formatCount(values.nValid) : '—'}
+            {monthCount != null ? ` of ${monthCount}` : ''}
+          </dd>
+          <dt>Coverage</dt>
+          <dd>{values ? formatStat(values.coverage) : '—'}</dd>
+          <dt>Product</dt>
+          <dd>{variable.product}</dd>
+          <dt>Source variable</dt>
+          <dd>{variable.source_variable}</dd>
+          {values ? (
+            <>
+              <dt>Pattern class</dt>
+              <dd>{patternWords(values.pattern, temperatureLabel, moistureLabel)}</dd>
+            </>
+          ) : null}
+          {values && values.quality != null ? (
+            <>
+              <dt>Data quality</dt>
+              <dd>{qualityNote(values.quality, values.breakYear, variable.product)}</dd>
+            </>
+          ) : null}
+          {values && values.witness != null ? (
+            <>
+              <dt>Second witness</dt>
+              <dd>{witnessLine(values.witness, values.witnessStd, witnessLabel)}</dd>
+              {combinedQualityWitness(values.quality, values.witness, witnessLabel) ? (
+                <>
+                  <dt>Combined reading</dt>
+                  <dd>{combinedQualityWitness(values.quality, values.witness, witnessLabel)}</dd>
+                </>
+              ) : null}
+            </>
+          ) : null}
+        </dl>
+      </Disclosure>
+    </aside>
   )
+}
+
+function glitchAnswer(quality: number | null, breakYear: number | null): { text: string; warn: boolean } {
+  if (quality == null) return { text: 'Not checked for this variable', warn: false }
+  if (quality >= QUALITY_STEP) {
+    const year = breakYear != null && Number.isFinite(breakYear) ? ` around ${Math.round(breakYear)}` : ''
+    return { text: `Possibly: sudden shift${year}`, warn: true }
+  }
+  if (quality === INSUFFICIENT_DATA || quality === OUTSIDE_DOMAIN) return { text: 'Not evaluated', warn: false }
+  return { text: 'No sudden shift detected', warn: false }
+}
+
+function witnessAnswer(code: number | null): { text: string; warn: boolean } {
+  if (code == null) return { text: 'No second dataset for this variable', warn: false }
+  if (code === WITNESS_CORROBORATED) return { text: 'Yes, it agrees', warn: false }
+  if (code === WITNESS_SAME_SIGN) return { text: 'On direction only', warn: false }
+  if (code === WITNESS_OPPOSITE_SIGN) return { text: 'Opposite direction, not significant', warn: true }
+  if (code === WITNESS_CONTRADICTED) return { text: 'No, it disagrees', warn: true }
+  if (code === WITNESS_MAIN_NOT_SIGNIFICANT) return { text: 'Not tested: main trend not significant', warn: false }
+  return { text: 'Not evaluated', warn: false }
 }
 
 function InfoPanel({
@@ -1013,11 +1240,14 @@ function InfoPanel({
           )}
         </dd>
       </dl>
-      <p>{METHOD_ONE_LINER}</p>
-      <p>{COVERAGE_NOTE}</p>
-      <p>
-        Registry slope unit: {variable.slope_unit}. The rate layer is labelled {variable.display_unit} per decade.
-      </p>
+      <Disclosure summary="Technical details">
+        <p>{METHOD_ONE_LINER}</p>
+        <p>{COVERAGE_NOTE}</p>
+        <p>
+          Registry slope unit: {formatUnit(variable.slope_unit)}. The rate layer is labelled{' '}
+          {formatUnit(variable.display_unit)} per decade.
+        </p>
+      </Disclosure>
       <h3>Caveats</h3>
       {variable.caveats.length > 0 ? (
         <ul>
@@ -1062,6 +1292,16 @@ function buildLayerImage(
     return colour
   }
   const stippleTrend = (value: number) => value === TREND_NOT_SIGNIFICANT
+  if (layer === 'verdict') {
+    const classes = verdictGrid(grids.trend, grids.quality, grids.witness)
+    const image = renderClassImage(
+      classes,
+      (value, index) => verdictColour(value, grids.trend[index], palette, index),
+      undefined,
+      { coastalFill: true, isStippled: (value) => value === VERDICT_NOT_YET },
+    )
+    return applyContradictedStripes(image, classes, PIXELS_PER_DEG)
+  }
   if (layer === 'trend') {
     return renderClassImage(grids.trend, trendPaint, undefined, {
       coastalFill: true,
@@ -1192,6 +1432,14 @@ function readCell(grids: GridBundle, cell: CellPick) {
   }
 }
 
+function notSignificantSentence(values: ReturnType<typeof readCell>, unit: string): string | null {
+  if (values.trend !== TREND_NOT_SIGNIFICANT) return null
+  if (!Number.isFinite(values.slope) || values.slope === 0) return null
+  const direction = values.slope > 0 ? 'rise' : 'fall'
+  const q = Number.isFinite(values.q) ? ` (q = ${formatStat(values.q)})` : ''
+  return `A ${direction} of about ${formatStat(Math.abs(values.slope))} ${unit} per decade, not significant yet${q}. A longer record could change this.`
+}
+
 function witnessLine(code: number, standardizedChange: number | null, label: string): string {
   const change =
     standardizedChange != null && Number.isFinite(standardizedChange)
@@ -1216,16 +1464,25 @@ function hoverDetail(
   index: number,
   variable: DataIndex['variables'][number],
 ): string {
-  if (layer === 'trend') return `${trendWords(grids.trend[index], variable.increase_means)} · ${formatStat(grids.slope[index])} ${variable.display_unit}/decade`
-  if (layer === 'pattern') {
-    return `${patternWords(grids.pattern[index], 'Temperature', 'Moisture')} · ${formatStat(grids.slope[index])} ${variable.display_unit}/decade`
+  const unit = formatUnit(variable.display_unit)
+  if (layer === 'verdict') {
+    const code = verdictClass(
+      grids.trend[index],
+      grids.quality ? grids.quality[index] : null,
+      grids.witness ? grids.witness[index] : null,
+    )
+    return `${verdictClassWords(code)} · ${formatStat(grids.slope[index])} ${unit}/decade`
   }
-  if (layer === 'quality') return `${qualityWords(grids.quality ? grids.quality[index] : null)} · ${formatStat(grids.slope[index])} ${variable.display_unit}/decade`
+  if (layer === 'trend') return `${trendWords(grids.trend[index], variable.increase_means)} · ${formatStat(grids.slope[index])} ${unit}/decade`
+  if (layer === 'pattern') {
+    return `${patternWords(grids.pattern[index], 'Temperature', 'Moisture')} · ${formatStat(grids.slope[index])} ${unit}/decade`
+  }
+  if (layer === 'quality') return `${qualityWords(grids.quality ? grids.quality[index] : null)} · ${formatStat(grids.slope[index])} ${unit}/decade`
   if (layer === 'witness') {
     const std = grids.witnessStd ? grids.witnessStd[index] : Number.NaN
     return `${witnessWords(grids.witness ? grids.witness[index] : OUTSIDE_DOMAIN)} · ${formatStat(std)}/decade`
   }
-  if (layer === 'rate') return `Sen slope ${formatStat(grids.slope[index])} ${variable.display_unit}/decade`
+  if (layer === 'rate') return `Sen slope ${formatStat(grids.slope[index])} ${unit}/decade`
   if (layer === 'std') return `Standardized change ${formatStat(grids.stdChange[index])} per decade`
   if (layer === 'significance') return `q ${formatStat(grids.qValue[index])}`
   return `Coverage ${formatStat(grids.coverage[index])}`

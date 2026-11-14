@@ -3,26 +3,41 @@ import { AnomalyTrendChart } from '../../charts/AnomalyTrendChart'
 import { ComparisonChart } from '../../charts/ComparisonChart'
 import { MonthlyValuesChart } from '../../charts/MonthlyValuesChart'
 import { PlaceSearch } from '../../components/PlaceSearch'
+import { Disclosure, Exhibit, GlossaryTip, HelpTip, IntervalBar } from '../../components/ui'
+
 import { useApp } from '../../data/AppState'
 import { loadCountries, loadRegions } from '../../data/loaders'
 import type { Country, Region, Selection } from '../../data/types'
-import { CountryLocator } from './CountryLocator'
+import { GLOSSARY, formatUnit, sourceLabel, plainVerdict, type PlainVerdict } from '../../lib/format'
+import { CaseHeader } from './CaseHeader'
+import { buildCheckYourself, type CheckYourselfModel } from './checkYourself'
+import { regionDetection, type RegionDetection } from './detection'
+import { CheckYourselfPanel } from './RegionCheckYourself'
 import { buildCitation, buildRegionCsv, copyText, downloadTextFile } from './download'
 import { loadAnomalies, loadCellSpearman, loadPlace, type PlaceData } from './loadPlace'
 import {
   annualMeanSeries,
   correlationPairId,
+  formatInterval,
+  formatSignedRate,
+  senTrendBandSeries,
   senTrendSeries,
   spearmanInWindow,
   spearmanLabel,
+  trendClassCode,
   validateBbox,
   zScoresInWindow,
   type EvidenceModel,
 } from './model'
 import { qualityBannerText, qualityDetailText, type QualitySummary } from './quality'
 import { summarySentence } from './summary'
+import { VerdictStrip, witnessIsCaution } from './VerdictStrip'
 import { witnessAgreementText, type WitnessInfo } from './witness'
 import './region.css'
+
+/** Region and box evidence is one test on the averaged series, not the per-cell test (WAVE4 Finding 4). */
+const REGION_TEST_TECHNICAL =
+  'Hamed–Rao modified Mann–Kendall on the region average; no false-discovery correction.'
 
 type RhoState = 'idle' | 'loading' | 'missing' | { rho: number; n: number | null }
 
@@ -186,6 +201,22 @@ export default function RegionPage() {
 
   const trendSeries =
     place?.trend && windowMeta ? senTrendSeries(place.months, windowMeta.start, windowMeta.end, place.trend) : null
+  const trendBand =
+    place?.trend && windowMeta && place.evidence.senSlopeDecadeCI
+      ? senTrendBandSeries(place.months, windowMeta.start, windowMeta.end, place.trend, {
+          lower: place.evidence.senSlopeDecadeCI.lower / 10,
+          upper: place.evidence.senSlopeDecadeCI.upper / 10,
+        })
+      : null
+  const verdict: PlainVerdict | null = place
+    ? plainVerdict({
+        trendClass: trendClassCode(place.evidence.trendClass),
+        flagged: place.quality?.available === true && (place.quality.flaggedShare ?? 0) > 0.2,
+        witnessCode: place.witness?.agreement ?? null,
+        increaseMeans: place.evidence.increaseMeans,
+        slope: place.evidence.senSlopeDecade,
+      })
+    : null
   const annualMeans = useMemo(
     () =>
       place && windowMeta
@@ -199,6 +230,8 @@ export default function RegionPage() {
   const qualityBanner = place
     ? qualityBannerText(place.quality, place.evidence.product, place.evidence.productVersion, knownForcingPeriod)
     : null
+  const detection =
+    place && windowMeta ? regionDetection(place, windowMeta.start, windowMeta.end) : null
   const summary =
     place && windowMeta
       ? summarySentence({
@@ -209,43 +242,52 @@ export default function RegionPage() {
           quality: place.quality,
           knownForcingPeriod,
           witness: place.witness ? { label: place.witness.label, agreement: place.witness.agreement } : null,
+          interval: place.evidence.senSlopeDecadeCI,
+          detection: detection?.sentence ?? null,
         })
       : null
   const others = index.variables.filter((item) => item.id !== variableId)
   const categories = [...new Set(others.map((item) => item.category))]
+  const checkYourself =
+    selection && windowMeta
+      ? buildCheckYourself({
+          selection,
+          variable,
+          window: windowMeta,
+          regions: regions ?? [],
+          countries: countries.length > 0 ? countries : place?.country ? [place.country] : [],
+        })
+      : null
 
   return (
     <section className="region-page">
-      <div className="region-heading">
-        <h1>{selection ? (place?.title ?? 'Region Explorer') : 'Choose a place'}</h1>
-        {selection && (
-          <button type="button" className="region-button secondary" onClick={() => setSelection(null)}>
-            Choose a different place
-          </button>
-        )}
-      </div>
       {selection == null ? (
-        <Picker
-          regions={regions}
-          countries={countries}
-          regionsError={regionsError}
-          draft={draft}
-          formError={formError}
-          onDraft={(field, value) => {
-            setDraft((prev) => ({ ...prev, [field]: value }))
-            setFormError(null)
-          }}
-          onRegion={(regionId) => setSelection({ kind: 'region', regionId })}
-          onSubmit={() => {
-            const parsed = validateBbox(draft)
-            if (!parsed.ok) {
-              setFormError(parsed.message)
-              return
-            }
-            setFormError(null)
-            setSelection({ kind: 'bbox', bbox: parsed.bbox })
-          }}
-        />
+        <>
+          <div className="region-heading">
+            <h1>Choose a place</h1>
+          </div>
+          <Picker
+            regions={regions}
+            countries={countries}
+            regionsError={regionsError}
+            draft={draft}
+            formError={formError}
+            onDraft={(field, value) => {
+              setDraft((prev) => ({ ...prev, [field]: value }))
+              setFormError(null)
+            }}
+            onRegion={(regionId) => setSelection({ kind: 'region', regionId })}
+            onSubmit={() => {
+              const parsed = validateBbox(draft)
+              if (!parsed.ok) {
+                setFormError(parsed.message)
+                return
+              }
+              setFormError(null)
+              setSelection({ kind: 'bbox', bbox: parsed.bbox })
+            }}
+          />
+        </>
       ) : (
         <Explorer
           place={place}
@@ -260,6 +302,7 @@ export default function RegionPage() {
           secondId={resolvedSecond}
           secondLabel={secondVariable?.label ?? 'Second variable'}
           onSecond={setSecondId}
+          onChoose={() => setSelection(null)}
           zPrimary={zPrimary}
           zSecond={zSecond}
           witnessZ={zWitness}
@@ -271,10 +314,14 @@ export default function RegionPage() {
           rhoLabel={rhoText(canPrecompute, rhoState, place, secondAnomalies, loadingSecond, windowMeta)}
           trendMonths={trendSeries?.months ?? null}
           trendY={trendSeries?.y ?? null}
+          trendBand={trendBand}
           annualMeans={annualMeans}
           summary={summary}
+          verdict={verdict}
           qualityBanner={qualityBanner}
           witnessMethod={index.witness?.method ?? null}
+          checkYourself={checkYourself}
+          detection={detection}
         />
       )}
     </section>
@@ -324,7 +371,7 @@ function Picker({
       </p>
       {PlaceSearch && (
         <article className="region-card">
-          <h3>Search places</h3>
+          <h2>Search places</h2>
           <PlaceSearch
             onPick={(selection) => onRegion(selection.regionId)}
             placeholder="Search a country or region"
@@ -334,7 +381,7 @@ function Picker({
       )}
       {countries.length > 0 && (
         <article className="region-card">
-          <h3>Countries</h3>
+          <h2>Countries</h2>
           <p className="muted">
             Natural Earth country regions with at least three cells in the common mask.
           </p>
@@ -351,7 +398,7 @@ function Picker({
         </article>
       )}
       <article className="region-card">
-        <h3>Predefined regions</h3>
+        <h2>Predefined regions</h2>
         <p className="muted">These boxes are approximate.</p>
         {regionsError && (
           <p className="inline-error" role="alert">
@@ -380,7 +427,7 @@ function Picker({
         )}
       </article>
       <article className="region-card">
-        <h3>Custom box</h3>
+        <h2>Custom box</h2>
         <form
           onSubmit={(event) => {
             event.preventDefault()
@@ -431,6 +478,7 @@ function Explorer({
   secondId,
   secondLabel,
   onSecond,
+  onChoose,
   zPrimary,
   zSecond,
   witnessZ,
@@ -442,10 +490,14 @@ function Explorer({
   rhoLabel,
   trendMonths,
   trendY,
+  trendBand,
   annualMeans,
   summary,
+  verdict,
   qualityBanner,
   witnessMethod,
+  checkYourself,
+  detection,
 }: {
   place: PlaceData | null
   placeError: string | null
@@ -454,11 +506,12 @@ function Explorer({
   windowStart: string
   windowEnd: string
   variableLabel: string
-  others: { id: string; label: string; category: string; source_type: 'model' | 'mission_observation' }[]
+  others: { id: string; label: string; category: string; source_type: 'model' | 'mission_observation' | 'reanalysis' }[]
   categories: string[]
   secondId: string
   secondLabel: string
   onSecond: (id: string) => void
+  onChoose: () => void
   zPrimary: (number | null)[]
   zSecond: (number | null)[]
   witnessZ: (number | null)[]
@@ -470,49 +523,49 @@ function Explorer({
   rhoLabel: string
   trendMonths: string[] | null
   trendY: number[] | null
+  trendBand: { months: string[]; lower: number[]; upper: number[] } | null
   annualMeans: { x: string[]; y: number[] } | null
   summary: string | null
+  verdict: PlainVerdict | null
   qualityBanner: string | null
   witnessMethod: string | null
+  checkYourself: CheckYourselfModel | null
+  detection: RegionDetection | null
 }) {
   const caption =
     place?.evidence.source === 'precomputed'
       ? 'Shaded band is the current window. The Sen line uses the precomputed per-year slope. Dots are annual means of the monthly anomalies.'
       : 'Shaded band is the current window. The Sen line is the fit used in the evidence card. Dots are annual means of the monthly anomalies.'
+  const bandCaption = trendBand ? ' The faint band is the 95% interval of the trend.' : ''
   return (
     <div className="region-stack">
-      {place && <p className="muted">{place.detail}</p>}
-      {loadingPlace && (
-        <p className="region-status" role="status">
-          {loadingMessage}
-        </p>
-      )}
-      {placeError && (
-        <p className="inline-error" role="alert">
-          {placeError}
-        </p>
+      {loadingPlace && !place && <RegionSkeleton message={loadingMessage} />}
+      {!loadingPlace && placeError && (
+        <article className="region-card region-empty">
+          <h1 className="label-caps region-empty-title">No data for this selection</h1>
+          <p className="inline-error" role="alert">
+            {placeError}
+          </p>
+          <button type="button" className="region-button secondary" onClick={onChoose}>
+            Choose a different place
+          </button>
+        </article>
       )}
       {place && (
         <>
           {place.note && <p className="region-warn">{place.note}</p>}
-          {summary && <p className="plain-summary">{summary}</p>}
-          <DownloadActions
-            place={place}
+          <CaseHeader
+            title={place.title}
             variableLabel={variableLabel}
             windowStart={windowStart}
             windowEnd={windowEnd}
-            witnessMethod={witnessMethod}
+            detail={place.detail}
+            country={place.country}
+            verdict={verdict}
+            onChoose={onChoose}
           />
-          {place.country && (
-            <article className="region-card">
-              <CountryLocator key={place.country.id} country={place.country} />
-            </article>
-          )}
-          <EvidenceCard evidence={place.evidence} quality={place.quality} qualityBanner={qualityBanner} witness={place.witness} />
-          <article className="region-card">
-            <MonthlyValuesChart months={place.months} values={place.values} unit={place.unit} label={variableLabel} />
-          </article>
-          <article className="region-card">
+          <VerdictStrip evidence={place.evidence} quality={place.quality} witness={place.witness} />
+          <article className="region-card region-chart-card">
             <AnomalyTrendChart
               months={place.months}
               anomalies={place.anomalies}
@@ -522,81 +575,231 @@ function Explorer({
               windowEnd={windowEnd}
               trendMonths={trendMonths}
               trendY={trendY}
+              trendBand={trendBand}
               annualMeans={annualMeans}
               breakYear={place.quality?.breakYear ?? null}
               witnessZ={witnessZ}
               witnessLabel={witnessLabel}
               witnessUnit={witnessUnit}
               mainZ={zPrimary}
-              caption={trendY ? caption : `${caption} Not enough valid months to draw a Sen line.`}
+              caption={trendY ? `${caption}${bandCaption}` : `${caption} Not enough valid months to draw a Sen line.`}
             />
           </article>
-          <article className="region-card">
-            <fieldset className="compare-box">
-              <legend>Second variable</legend>
-              {others.length === 0 ? (
-                <p className="muted">No second variable is available.</p>
-              ) : (
-                <label className="control">
-                  <span>Compare anomalies with</span>
-                  <select value={secondId} onChange={(event) => onSecond(event.target.value)}>
-                    {categories.map((category) => (
-                      <optgroup key={category} label={category}>
-                        {others
-                          .filter((item) => item.category === category)
-                          .map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.label} ({item.source_type === 'model' ? 'model' : 'satellite'})
-                            </option>
-                          ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </label>
-              )}
-            </fieldset>
-            {secondError && (
-              <p className="inline-error" role="alert">
-                {secondError}
-              </p>
-            )}
-            {loadingSecond && (
-              <p className="region-status" role="status">
-                Loading the second variable…
-              </p>
-            )}
-            {secondAnomalies && others.length > 0 && (
-              <ComparisonChart
-                months={place.months}
-                seriesA={zPrimary}
-                seriesB={zSecond}
-                labelA={variableLabel}
-                labelB={secondLabel}
-                rhoLabel={rhoLabel}
+          <div className={`region-exhibits${place.witness ? '' : ' region-exhibits--two'}`}>
+            <RateExhibit evidence={place.evidence} />
+            <SignificanceExhibit evidence={place.evidence} />
+            {place.witness && <SecondDatasetExhibit witness={place.witness} />}
+          </div>
+          <p className="region-computed muted">{place.evidence.method}</p>
+          {place.evidence.source === 'browser' ? (
+            <p className="region-computed muted">
+              These figures use the average over the whole place. Published cases report the middle value across
+              grid cells, so the two can differ slightly.
+            </p>
+          ) : null}
+          {summary && <p className="plain-summary">{summary}</p>}
+          <DownloadActions
+            place={place}
+            variableLabel={variableLabel}
+            windowStart={windowStart}
+            windowEnd={windowEnd}
+            witnessMethod={witnessMethod}
+          />
+          <div className="region-disclosure-stack">
+            <Disclosure summary="Full evidence" className="region-full-evidence">
+              <EvidenceBody
+                evidence={place.evidence}
+                quality={place.quality}
+                qualityBanner={qualityBanner}
+                witness={place.witness}
+                country={place.country}
+                detection={detection}
               />
+            </Disclosure>
+            {checkYourself && (
+              <Disclosure summary="Check it yourself" className="region-check-yourself">
+                <CheckYourselfPanel check={checkYourself} />
+              </Disclosure>
             )}
-          </article>
+            <Disclosure summary="Monthly values · Compare with another variable" className="region-tools">
+              <div className="region-tool-chart">
+                <MonthlyValuesChart
+                  months={place.months}
+                  values={place.values}
+                  unit={place.unit}
+                  label={variableLabel}
+                />
+              </div>
+              <div className="region-tool-chart">
+                <fieldset className="compare-box">
+                  <legend>Second variable</legend>
+                  {others.length === 0 ? (
+                    <p className="muted">No second variable is available.</p>
+                  ) : (
+                    <label className="control">
+                      <span>Compare anomalies with</span>
+                      <select value={secondId} onChange={(event) => onSecond(event.target.value)}>
+                        {categories.map((category) => (
+                          <optgroup key={category} label={category}>
+                            {others
+                              .filter((item) => item.category === category)
+                              .map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.label} ({sourceLabel(item.source_type)})
+                                </option>
+                              ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </fieldset>
+                {secondError && (
+                  <p className="inline-error" role="alert">
+                    {secondError}
+                  </p>
+                )}
+                {loadingSecond && (
+                  <p className="region-status" role="status">
+                    Loading the second variable…
+                  </p>
+                )}
+                {secondAnomalies && others.length > 0 && (
+                  <ComparisonChart
+                    months={place.months}
+                    seriesA={zPrimary}
+                    seriesB={zSecond}
+                    labelA={variableLabel}
+                    labelB={secondLabel}
+                    rhoLabel={rhoLabel}
+                  />
+                )}
+              </div>
+            </Disclosure>
+          </div>
         </>
       )}
     </div>
   )
 }
 
-function EvidenceCard({
+function RegionSkeleton({ message }: { message: string }) {
+  return (
+    <div className="region-skeleton" role="status">
+      <h1 className="sr-only">Loading the case file</h1>
+      <span className="sr-only">{message}</span>
+      <div className="region-skeleton-head" aria-hidden="true">
+        <span className="region-skeleton-block region-skeleton-outline" />
+        <span className="region-skeleton-lines">
+          <span className="region-skeleton-block region-skeleton-line region-skeleton-line--eyebrow" />
+          <span className="region-skeleton-block region-skeleton-line region-skeleton-line--title" />
+          <span className="region-skeleton-block region-skeleton-line" />
+        </span>
+        <span className="region-skeleton-block region-skeleton-stamp" />
+      </div>
+      <div className="region-skeleton-strip" aria-hidden="true">
+        <span className="region-skeleton-block region-skeleton-cell" />
+        <span className="region-skeleton-block region-skeleton-cell" />
+        <span className="region-skeleton-block region-skeleton-cell" />
+      </div>
+      <span className="region-skeleton-block region-skeleton-chart" aria-hidden="true" />
+    </div>
+  )
+}
+
+function RateExhibit({ evidence }: { evidence: EvidenceModel }) {
+  const slope = evidence.senSlopeDecade
+  const interval = evidence.senSlopeDecadeCI
+  const direction: 'increase' | 'decrease' | 'none' =
+    slope == null || slope === 0 ? 'none' : slope > 0 ? 'increase' : 'decrease'
+  const crosses = interval != null && interval.lower <= 0 && interval.upper >= 0
+  const unit = formatUnit(evidence.slopeUnit)
+  return (
+    <Exhibit
+      label="Exhibit A · Rate of change"
+      value={slope == null ? '—' : formatSignedRate(slope)}
+      unit={slope == null ? undefined : unit}
+      tone={direction === 'none' ? 'default' : direction}
+    >
+      {interval != null && slope != null ? (
+        <>
+          <IntervalBar
+            value={slope}
+            lower={interval.lower}
+            upper={interval.upper}
+            valueLabel={formatSignedRate(slope)}
+            lowerLabel={formatSignedRate(interval.lower)}
+            upperLabel={formatSignedRate(interval.upper)}
+            direction={direction}
+            summary={`95% interval ${crosses ? 'crosses' : 'does not cross'} zero.`}
+          />
+          <p>
+            95% interval {formatInterval(interval) ?? '—'} {unit}.
+          </p>
+        </>
+      ) : (
+        <p>No 95% interval is exported for this selection.</p>
+      )}
+    </Exhibit>
+  )
+}
+
+function SignificanceExhibit({ evidence }: { evidence: EvidenceModel }) {
+  const significant = evidence.trendClass === 'increasing' || evidence.trendClass === 'decreasing'
+  const notYet = evidence.trendClass === 'not significant'
+  const sentence = significant
+    ? 'The trend is unlikely to be ordinary year-to-year noise.'
+    : notYet
+      ? 'A direction is visible, but the trend is not significant yet.'
+      : 'Not enough data to test the trend.'
+  return (
+    <Exhibit
+      label="Exhibit B · How sure are we?"
+      value={evidence.p == null ? '—' : `p = ${formatStat(evidence.p)}`}
+    >
+      {evidence.showQ && <p>False-discovery q = {formatStat(evidence.q)}.</p>}
+      <p>{sentence}</p>
+    </Exhibit>
+  )
+}
+
+function SecondDatasetExhibit({ witness }: { witness: WitnessInfo }) {
+  const slope = witness.trend?.slopeDecade ?? null
+  const unit = witness.unit ? `${formatUnit(witness.unit)} per decade` : undefined
+  const p = witness.trend?.p ?? null
+  return (
+    <Exhibit
+      label="Exhibit C · Second dataset"
+      value={slope == null ? undefined : formatSignedRate(slope)}
+      unit={slope == null ? undefined : unit}
+      tone={witnessIsCaution(witness.agreement) ? 'caution' : 'default'}
+    >
+      <p>
+        {witness.label}: {witnessAgreementText(witness.agreement)}.
+        {p == null ? '' : ` p = ${formatStat(p)}.`}
+      </p>
+    </Exhibit>
+  )
+}
+
+function EvidenceBody({
   evidence,
   quality,
   qualityBanner,
   witness,
+  country,
+  detection,
 }: {
   evidence: EvidenceModel
   quality: QualitySummary | null
   qualityBanner: string | null
   witness: WitnessInfo | null
+  country: Country | null
+  detection: RegionDetection | null
 }) {
   const qualityDetail = qualityDetailText(quality)
   return (
-    <article className="region-card">
-      <h3>Evidence</h3>
+    <div className="region-evidence-body">
       {evidence.shortWindow && (
         <p className="region-warn" role="status">
           This window is shorter than 10 years. The trend test on a short window is not reliable.
@@ -607,7 +810,11 @@ function EvidenceCard({
           {qualityBanner}
         </p>
       )}
-      <p className="method-banner">{evidence.method}</p>
+      {country && (
+        <p className="muted">
+          Approximate bbox [west, south, east, north]: {country.bbox.join(', ')}.
+        </p>
+      )}
       <dl className="evidence-grid">
         <dt>Variable</dt>
         <dd>{evidence.variableLabel}</dd>
@@ -629,23 +836,73 @@ function EvidenceCard({
         <dd>{evidence.sourceVariable}</dd>
         <dt>Window</dt>
         <dd>{evidence.windowLabel}</dd>
-        <dt>Sen slope per decade</dt>
-        <dd>{evidence.senSlopeDecade == null ? '—' : `${formatSlope(evidence.senSlopeDecade)} ${evidence.slopeUnit}`}</dd>
-        <dt>Mann–Kendall p</dt>
+        <dt>
+          Rate of change <GlossaryTip term="rate_of_change" />
+        </dt>
+        <dd>
+          {evidence.senSlopeDecade == null ? (
+            '—'
+          ) : (
+            <>
+              {formatSignedRate(evidence.senSlopeDecade)} {formatUnit(evidence.slopeUnit)}
+              {evidence.senSlopeDecadeCI && (
+                <> (95% interval {formatInterval(evidence.senSlopeDecadeCI)})</>
+              )}
+              {evidence.senSlopeDecadeCI && evidence.source === 'browser' && (
+                <div className="muted">95% interval: {evidence.varianceFallback ? 'original' : 'Hamed–Rao corrected'} Mann–Kendall variance, computed in browser.</div>
+              )}
+            </>
+          )}
+        </dd>
+        {detection && (
+          <>
+            <dt>
+              Years to detect a trend{' '}
+              <HelpTip
+                label="Years to detect a trend"
+                description="Estimated years of data needed for a trend of this size to stand out from the natural variability, if the same rate continued; not a forecast."
+              >
+                if the same rate continued; not a forecast. The natural variability is assumed unchanged.
+              </HelpTip>
+            </dt>
+            <dd>{detection.sentence}</dd>
+          </>
+        )}
+        <dt>
+          How sure are we?{' '}
+          {evidence.source === 'browser' ? (
+            <HelpTip
+              label={GLOSSARY.significant.term}
+              description={`${GLOSSARY.significant.plain} (${REGION_TEST_TECHNICAL})`}
+            >
+              {GLOSSARY.significant.plain}{' '}
+              <span className="ui-help-technical">({REGION_TEST_TECHNICAL})</span>
+            </HelpTip>
+          ) : (
+            <GlossaryTip term="significant" />
+          )}{' '}
+          <span className="muted">(Mann–Kendall p)</span>
+        </dt>
         <dd>{formatStat(evidence.p)}</dd>
         {evidence.showQ && (
           <>
-            <dt>Mann–Kendall q</dt>
+            <dt>
+              False-discovery q <GlossaryTip term="q_value" />
+            </dt>
             <dd>{formatStat(evidence.q)}</dd>
           </>
         )}
-        <dt>Kendall τ</dt>
+        <dt>
+          Kendall τ <GlossaryTip term="trend" />
+        </dt>
         <dd>{formatStat(evidence.tau)}</dd>
         <dt>Valid months</dt>
         <dd>
           {evidence.validMonths == null ? '—' : Math.round(evidence.validMonths)} / {evidence.monthsInWindow}
         </dd>
-        <dt>Coverage</dt>
+        <dt>
+          Coverage <GlossaryTip term="coverage" />
+        </dt>
         <dd>
           <div>{formatCoverage(evidence.coverage)}</div>
           {evidence.coverageNote && <div className="muted">{evidence.coverageNote}</div>}
@@ -654,23 +911,41 @@ function EvidenceCard({
         <dd>{evidence.trendClass}</dd>
         {qualityDetail && (
           <>
-            <dt>Data-quality check</dt>
+            <dt>
+              Data-quality check <GlossaryTip term="sudden_shift" />
+            </dt>
             <dd>{qualityDetail}</dd>
           </>
         )}
         {witness && (
           <>
-            <dt>Second witness</dt>
+            <dt>
+              Second witness <GlossaryTip term="second_witness" />
+            </dt>
             <dd>
               {witness.label} · {witness.product} {witness.version}
             </dd>
             <dt>Witness trend</dt>
             <dd>
-              {witness.trend == null
-                ? 'Not available'
-                : `${witness.trend.slopeDecade == null ? '—' : `${formatSlope(witness.trend.slopeDecade)} ${witness.unit ?? ''} per decade`}; p = ${formatStat(
-                    witness.trend.p,
-                  )}; ${witness.trend.trendClass} (browser Sen/MK on the witness anomalies)`}
+              {witness.trend == null ? (
+                'Not available'
+              ) : (
+                <>
+                  {witness.trend.slopeDecade == null ? (
+                    '—'
+                  ) : (
+                    <>
+                      {formatSignedRate(witness.trend.slopeDecade)}
+                      {witness.unit ? ` ${formatUnit(witness.unit)}` : ''} per decade
+                    </>
+                  )}
+                  {witness.trend.slopeDecadeCI && (
+                    <> (95% interval {formatInterval(witness.trend.slopeDecadeCI)})</>
+                  )}
+                  ; p = {formatStat(witness.trend.p)}; {witness.trend.trendClass} (browser Sen/MK on the witness
+                  anomalies)
+                </>
+              )}
             </dd>
             <dt>Agreement</dt>
             <dd>{witnessAgreementText(witness.agreement)}</dd>
@@ -702,7 +977,7 @@ function EvidenceCard({
           ))}
         </ul>
       )}
-    </article>
+    </div>
   )
 }
 
@@ -771,16 +1046,11 @@ function DownloadActions({
         </button>
       </div>
       <p className="region-status" role="status">
-        {status ?? 'CSV includes months, values, anomalies, witness anomalies and valid-cell fraction.'}
+        {status ??
+          'CSV includes months, values, anomalies, witness anomalies and valid-cell fraction. Values stay in the raw data units.'}
       </p>
     </div>
   )
-}
-
-function formatSlope(value: number): string {
-  const abs = Math.abs(value)
-  if (abs !== 0 && (abs < 0.001 || abs >= 10000)) return value.toExponential(3)
-  return value.toFixed(4)
 }
 
 function formatStat(value: number | null): string {

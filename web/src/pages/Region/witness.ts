@@ -8,11 +8,13 @@ import {
   WITNESS_SAME_SIGN,
 } from '../../data/contract'
 import type { DataIndex } from '../../data/types'
-import { mannKendall, senSlope } from '../../lib/stats'
-import { browserTrendClass, countValid, monthsSince, normalizeValue } from './model'
+import { senSlope, type SenSlopeCI } from '../../lib/stats'
+import { browserTrendClass, countValid, monthsSince, normalizeValue, regionTest } from './model'
 
 export interface WitnessTrend {
   slopeDecade: number | null
+  /** 95% rank-based Sen interval in the per-decade unit; null when it cannot be computed. */
+  slopeDecadeCI: SenSlopeCI | null
   p: number | null
   tau: number | null
   validMonths: number
@@ -64,15 +66,17 @@ export function witnessTrendFromSeries(
   const t = windowMonths.map((month) => monthsSince(origin, month) / 12)
   const numeric = windowValues.map((value) => (value == null ? Number.NaN : value))
   const fit = windowMonths.length > 0 ? senSlope(t, numeric) : null
-  const mk = mannKendall(numeric)
+  const test = windowMonths.length > 0 ? regionTest(t, numeric) : { p: null, tau: null, ci: null }
+  const ci = test.ci
   const validMonths = countValid(windowValues)
   return {
     slopeDecade: fit ? fit.slope * 10 : null,
-    p: mk ? mk.p : null,
-    tau: mk ? mk.tau : null,
+    slopeDecadeCI: ci ? { lower: ci.lower * 10, upper: ci.upper * 10 } : null,
+    p: test.p,
+    tau: test.tau,
     validMonths,
     monthsInWindow: windowMonths.length,
-    trendClass: browserTrendClass(mk ? mk.p : null, fit ? fit.slope : null, validMonths, windowMonths.length),
+    trendClass: browserTrendClass(test.p, fit ? fit.slope : null, validMonths, windowMonths.length),
   }
 }
 
@@ -106,8 +110,8 @@ export function witnessAgreementCode(
 
 export function witnessAgreementText(code: number): string {
   if (code === WITNESS_CORROBORATED) return 'agrees: both trends are significant and point the same way'
-  if (code === WITNESS_SAME_SIGN) return 'same direction, but the witness trend is not significant'
-  if (code === WITNESS_OPPOSITE_SIGN) return 'opposite direction, but the witness trend is not significant'
+  if (code === WITNESS_SAME_SIGN) return 'same direction, but the trend in the second dataset is not significant'
+  if (code === WITNESS_OPPOSITE_SIGN) return 'opposite direction, but the trend in the second dataset is not significant'
   if (code === WITNESS_CONTRADICTED) return 'disagrees: both trends are significant and point opposite ways'
   if (code === 0) return 'not applicable: the main trend is not significant'
   return 'not evaluated'

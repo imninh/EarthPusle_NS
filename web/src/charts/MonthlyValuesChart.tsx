@@ -1,3 +1,4 @@
+import { formatUnit } from '../lib/format'
 import { ChartFrame } from './ChartFrame'
 
 interface MonthlyValuesChartProps {
@@ -8,19 +9,12 @@ interface MonthlyValuesChartProps {
 }
 
 export function MonthlyValuesChart({ months, values, unit, label }: MonthlyValuesChartProps) {
+  const displayUnit = formatUnit(unit)
   return (
     <ChartFrame
-      title={`Monthly values (${unit})`}
-      yTitle={unit}
-      traces={[{ x: months, y: values, name: label, color: 'accent' }]}
-      footer={
-        <p className="chart-note">
-          <span className="chart-swatch">
-            <span className="swatch swatch-accent" />
-            {label}
-          </span>
-        </p>
-      }
+      title={`Monthly values (${displayUnit})`}
+      yTitle={displayUnit}
+      traces={[{ x: months, y: values, name: label, color: 'accent', label }]}
     />
   )
 }

@@ -40,11 +40,13 @@ export async function horizontalOverflow(page: Page): Promise<number> {
  * Vertical position may be below the fold; the caller scrolls it into view first
  * without counting a sideways scroll as success.
  */
-export async function controlOffscreen(page: Page, name: string): Promise<string | null> {
+export async function controlOffscreen(page: Page, name: string | RegExp): Promise<string | null> {
   const target = page
     .getByRole('button', { name })
     .or(page.getByRole('radio', { name }))
     .or(page.getByRole('combobox', { name }))
+    .or(page.getByRole('checkbox', { name }))
+    .or(page.getByRole('link', { name }))
     .first()
   if ((await target.count()) === 0) return `${name}: not in the page`
   await target.evaluate((node) => {

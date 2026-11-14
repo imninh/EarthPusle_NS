@@ -7,7 +7,7 @@ export interface VariableMeta {
   product: string
   product_version: string
   doi: string | null
-  source_type: 'model' | 'mission_observation'
+  source_type: 'model' | 'mission_observation' | 'reanalysis'
   source_variable: string
   display_unit: string
   slope_unit: string
@@ -182,4 +182,4 @@ export type Selection =
   | { kind: 'bbox'; bbox: [number, number, number, number] }
   | null
 
-export type Page = 'home' | 'screener' | 'discovery' | 'region' | 'story' | 'method'
+export type Page = 'home' | 'investigate' | 'screener' | 'discovery' | 'region' | 'story' | 'method'

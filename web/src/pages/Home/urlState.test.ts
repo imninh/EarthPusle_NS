@@ -40,6 +40,9 @@ describe('parseHash', () => {
       route({ page: 'discovery', variableId: 'air_temperature', windowId: '2001-2024', layer: 'witness' }),
     )
     expect(parseHash('#/method')).toEqual(route({ page: 'method' }))
+    expect(parseHash('#/investigate?w=2001-2024')).toEqual(
+      route({ page: 'investigate', windowId: '2001-2024' }),
+    )
   })
 
   it('ignores malformed selections and keeps the page', () => {
@@ -86,6 +89,9 @@ describe('serializeHash', () => {
       '#/region?bbox=-80,-20,-45,5',
     )
     expect(serializeHash(route({ page: 'story', caseId: 'case-01' }))).toBe('#/story?case=case-01')
+    expect(serializeHash(route({ page: 'investigate', windowId: '2001-2024', variableId: 'x' }))).toBe(
+      '#/investigate?w=2001-2024',
+    )
     expect(
       serializeHash(route({ page: 'discovery', variableId: 'x', windowId: 'w', layer: 'witness' })),
     ).toBe('#/discovery?v=x&w=w&layer=witness')
@@ -125,6 +131,7 @@ describe('serializeHash', () => {
       }),
       route({ page: 'story', caseId: 'case-01' }),
       route({ page: 'method' }),
+      route({ page: 'investigate', windowId: '2001-2024' }),
     ]
     for (const value of routes) expect(parseHash(serializeHash(value))).toEqual(value)
   })
