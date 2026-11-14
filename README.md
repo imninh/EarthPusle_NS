@@ -1,24 +1,32 @@
 # EarthPulse
 
-**Evidence-first Earth system change detection.** EarthPulse turns 24 years of NASA
-land-surface data into an explorable evidence trail: which variables are changing, where, how
-much, and whether the change is statistically significant — with a visible warning when a
-change looks like a data discontinuity rather than a climate trend.
+**EarthPulse tells high-school and college students whether a trend in NASA Earth data is real: it
+tests every place on the land map, then cross-examines each result with a data-quality check and,
+where one exists, a second NASA dataset.** Built for the NASA Space Apps Challenge 2026, challenge *Be An Earth System
+Trend Detective!* (<https://www.spaceappschallenge.org/2026/challenges/earth-system-trend-detective/>).
 
-Built for the NASA Space Apps Challenge 2026, challenge *Be An Earth System Trend Detective!*
-(<https://www.spaceappschallenge.org/2026/challenges/earth-system-trend-detective/>).
+**Try it:** <https://imninh.github.io/EarthPusle_NS/> (public, no login) · Source: <https://github.com/imninh/EarthPusle_NS>
 
-> **Status (2026-11-10):** the app and pipeline work end to end on real data. The published
-> export is schema **1.3**: **3,600 files, 299.1 MB**, validated with `--release`, no synthetic
-> flag. It includes the Greenland/snow-ice mask (**14,250** cells), data-quality layers,
-> **143 country domains**, five Detective Cases and the **second witness** — the same trend test
-> on an independent NASA product (MERRA-2 / GPCP). The local climax is the **Vietnam caution
-> case**: two NASA datasets, one disagreement, a documented cause.
+### Your first 60 seconds (three clicks)
+
+1. On Home, click **Start an investigation**.
+2. Under the place question, click the **Vietnam** shortcut.
+3. On the first card, click **Open the evidence**. You see the monthly series, the rate of change
+   with its 95% interval, any data-quality warning, and a switch for the second dataset.
+   (To see air temperature specifically, choose the **Heat** topic first; that is one more click.)
+
+> **Status (2026-11-14):** the app and pipeline work end to end on real data. The published
+> export is schema **1.3**: **11 variables, 5,348 files, 458.5 MiB**, validated with `--release`,
+> no synthetic flag, with the Greenland/snow-ice mask (**14,250** cells), data-quality layers,
+> **143 country domains**, five Detective Cases and the **second dataset** (MERRA-2 / GPCP) for the
+> seven land variables. The local example is the **Vietnam caution case**: two NASA datasets, one
+> disagreement, a documented kind of cause.
 
 ## What it does
 
-- **Screens variables.** Ranks seven land-surface variables by the area with a statistically
-  significant trend, median standardized change, signed Sen slope and regional contrast.
+- **Screens variables.** Ranks 11 variables (seven land variables from GLDAS and IMERG, and four
+  atmosphere variables from MERRA-2: air temperature at 850 hPa and 500 hPa, column water vapour,
+  total ozone) by the area with a statistically significant trend, median standardized change, signed Sen slope and regional contrast.
 - **Maps change.** Shows where a variable increases, decreases, is not significant, or has
   insufficient data; pattern classes expose opposite trends in the temperature/soil-moisture
   pair.
@@ -34,43 +42,45 @@ Built for the NASA Space Apps Challenge 2026, challenge *Be An Earth System Tren
   caution.” **Code 1:** “Sudden shift around {year}: this could be a real jump in the climate
   or a data artefact. The trend is still significant; a step fits slightly better than a
   straight line.” A flag is a warning to read the evidence, never “wrong” or “error”.
-- **Checks with a second witness.** Every significant trend is compared with the same test on
-  an independent NASA product. Agreement is corroboration, not ground truth: MERRA-2 is a
+- **Checks with a second witness.** Every significant trend in the seven land variables is
+  compared with the same test on an independent NASA product; the four atmosphere variables have
+  no second dataset. Agreement is corroboration, not ground truth: MERRA-2 is a
   reanalysis and GPCP shares gauge inputs with IMERG.
 - **Tells a story.** Detective Cases are selected from computed results, and Story mode walks
   through the evidence. Findings exclude flagged cells; the Vietnam caution case includes them
   on purpose so the warming trend can be read with its warning and witness disagreement attached.
+- **Guides an investigation.** Three questions — where, what, which years — become a ranked
+  shortlist of published variables for that place, with a plain-language verdict, the area
+  share, a data-quality warning where one applies, a worked example when a published case
+  matches, and one-click links to the evidence (`#/investigate`). The question-to-variable
+  mapping is a fixed, documented rule; no language model chooses it.
+- **Shows how sure the numbers are.** Region and custom-box evidence carries a **95%
+  confidence interval** for the rate of change, and a non-significant trend is read as “a
+  direction, not yet significant”, never “no change”. For such a trend the Region page also
+  estimates how many years of data it would need to stand out (Weatherhead et al., 1998); it is
+  an estimate if the same rate continued, not a forecast. The Method page explains each term.
 
 ## At a glance (2001–2024, published schema 1.3)
 
-- **Air temperature:** **58.4%** of land shows a significant increase and **4.0%** a significant
-  decrease; **35.1%** of the area carries a quality flag (49% of the significant area), so the
-  warming map is evidence to inspect, not a finished finding.
+- **Air temperature:** **58.5%** of land shows a significant increase and **4.0%** a significant
+  decrease; **35.1%** of the area carries a quality flag (48.8% of the significant area), so the
+  warming map is evidence to inspect, not a finished finding. A simple Mann–Kendall test per cell
+  would mark **78.0%** of land significant; the published rule marks **62.5%**
+  (`scripts/c2_baseline_compare.py`).
 - **Precipitation (IMERG):** **5.7%** significant increase vs **6.2%** significant decrease,
-  regional contrast **0.479** — the challenge's “same process, opposite trends” pattern.
-- **Vietnam caution case (30 cells):** GLDAS air temperature rises **+0.42 °C per decade**
-  (q = **1.70e-3**), but **53.6%** of the area is flagged with a median break at **≈ 2012**,
-  inside the documented GLDAS **2008–2012** input change. MERRA-2 agrees on direction but is
-  **+0.07 °C/decade, p = 0.28** in the region check (**+0.14 °C/decade, q = 0.08** in the
-  case); the lasting 2012 shift is **+0.73 °C** vs **+0.12 °C**. **Two NASA datasets, one
-  disagreement, a documented cause:** warming in both, direction agreed, size uncertain.
+  regional contrast **0.480** — the challenge's “same process, opposite trends” pattern.
+- **Vietnam caution case (30 cells).** Case figures (precomputed, cell by cell): GLDAS air
+  temperature rises **+0.42 °C per decade** (q = **1.70e-3**), but **53.6%** of the area is flagged
+  with a median break at **≈ 2012**, and MERRA-2 gives **+0.14 °C/decade, q = 0.08**. Region-average
+  figures (computed in the browser, Hamed–Rao modified Mann–Kendall on the region average): GLDAS
+  **+0.43 °C/decade, 95% interval +0.22 to +0.63, p = 0.0001**; MERRA-2 **+0.07 °C/decade, 95%
+  interval −0.11 to +0.24, p = 0.4549, not significant**. The lasting 2012 shift is **+0.73 °C**
+  vs **+0.12 °C**. **Two NASA datasets, one disagreement, a documented kind of cause:** warming in
+  both, direction agreed, size uncertain.
 
-Every figure comes from `web/public/data/screener/2001-2024/global.json` and
-`country_704.json`; see `docs/submission/PROJECT_SUMMARY.md` for the full table.
-
-## Screenshots
-
-Real screenshots from the published schema-1.2 app, captured after P06d and the Finding 1
-wording:
-
-| Screen | Screenshot |
-|---|---|
-| Home / headline insights | ![Home](docs/submission/screenshots/home.png) |
-| Variable Screener | ![Screener](docs/submission/screenshots/screener.png) |
-| Global Discovery map | ![Discovery](docs/submission/screenshots/discovery.png) |
-| Region / country explorer (Vietnam) | ![Region](docs/submission/screenshots/region.png) |
-| Story mode / Vietnam caution case | ![Story](docs/submission/screenshots/story.png) |
-| Data-quality layer and flag wording | ![Quality flag](docs/submission/screenshots/quality_flag.png) |
+Area figures come from the published export (`screener/2001-2024/global.json` and
+`country_704.json`); the Vietnam second-dataset and lasting-shift numbers come from the published
+`cases.json`.
 
 ## How it works
 
@@ -82,13 +92,14 @@ NASA GES DISC files
   → Sen slope + Hamed–Rao modified Mann–Kendall + BH-FDR
   → data-quality flags (Pettitt + ΔBIC)
   → validated static export (schema 1.3)
-  → React + TypeScript app (Screener, Discovery, Region, Story)
+  → React + TypeScript app (Home, Investigate, Screener, Discovery, Region, Story, Method)
 ```
 
-The web app reads a precomputed, validated export. No scientific result is computed in the
-browser and no language model generates a finding. Live region/box statistics are explicitly
-labelled “computed in browser: single test on the region average, original Mann–Kendall, no FDR
-correction”.
+The web app reads a precomputed, validated export, and no language model generates a finding.
+Every per-cell result (map, Screener, cases) is precomputed by the Python pipeline. The only
+statistics computed in the browser are the live region and custom-box summaries, and they are
+labelled as such: a single Hamed–Rao modified Mann–Kendall test on the region average, with no
+FDR correction.
 
 ## Quick start
 
@@ -108,8 +119,9 @@ npm install
 npm run dev
 ```
 
-Open the URL printed by Vite. The app serves the dataset in `web/public/data/`; the current
-folder contains the real schema-1.3 export. To regenerate synthetic mock data for UI work:
+Open the URL printed by Vite. The app serves the dataset in `web/public/data/`, which is not in
+the repository (it is about 460 MiB); the public site carries the real schema-1.3 export. To
+generate synthetic mock data for UI work:
 
 ```bash
 .venv/Scripts/python scripts/make_mock_data.py
@@ -119,7 +131,7 @@ Mock files carry `"synthetic": true` and the UI shows a visible “SYNTHETIC DAT
 
 ### Running the real pipeline
 
-The full order is in `docs/SCIENTIFIC_METHODOLOGY.md` §12. The short version:
+The steps, in order:
 
 ```bash
 .venv/Scripts/python scripts/p02_download.py      # resumable, needs Earthdata login
@@ -143,31 +155,19 @@ from a local `.netrc`/`_netrc` file or environment variables and **must never be
 |---|---|---|---|
 | GLDAS Noah Land Surface Model L4 monthly 1.0° (`GLDAS_NOAH10_M`) | 2.1 | skin temperature, root-zone and surface soil moisture, evapotranspiration, air temperature, specific humidity | `10.5067/LWTYSMP3VM5Z` |
 | GPM IMERG Final Precipitation L3 monthly 0.1° (`GPM_3IMERGM`) | 07 | precipitation | `10.5067/GPM/IMERG/3B-MONTH/07` |
+| MERRA-2 single-level monthly (`M2TMNXSLV`) | 5.12.4 | second dataset: air temperature, skin temperature, specific humidity; also four atmosphere variables: air temperature at 850 hPa and 500 hPa, column water vapour, total ozone | `10.5067/AP1B0BA5PD2K` |
+| MERRA-2 land monthly (`M2TMNXLND`) | 5.12.4 | second dataset: evapotranspiration, soil wetness | `10.5067/8S35XF81C28F` |
+| GPCP monthly (`GPCPMON`) | 3.3 | second dataset: precipitation | `10.5067/MEASURES/GPCP/DATA306` |
 
-Both are NASA GES DISC products. The analysis uses the **1°** GLDAS product; its native cell
+All five are NASA GES DISC products. The analysis uses the **1°** GLDAS product; its native cell
 centres match the contract grid, so no GLDAS regridding is needed. IMERG is aggregated from
 0.1° to 1° with `cos(latitude)` weights and a 50% valid-area rule.
 
-Exact collection IDs, file-level units, fill values, access dates and checksums are in
-`docs/DATA_PROVENANCE.md` and `docs/DATA_DICTIONARY.md`. The product versions and DOIs above
-come from `config/variables.yaml`.
+The product versions and DOIs above come from `config/variables.yaml` and `config/witnesses.yaml`.
 
 **Boundaries.** Country regions use Natural Earth admin-0 (`countries-50m`), which is public
 domain: <https://www.naturalearthdata.com/>. Natural Earth is credited in the app; it is not a
 NASA product.
-
-## Documentation
-
-| Document | Contents |
-|---|---|
-| `docs/SCIENTIFIC_METHODOLOGY.md` | Scope, data, harmonization, anomalies, trends, FDR, quality flags, Screener, patterns, validation, reproducibility, AI use, references |
-| `docs/LIMITATIONS.md` | What each limitation is and how it changes the reading of a result |
-| `docs/DATA_CONTRACT.md` | The producer/consumer contract (grid, files, schema 1.3) |
-| `docs/DATA_PROVENANCE.md` | Verified product, collection, file and checksum facts |
-| `docs/DATA_DICTIONARY.md` | Variable-level units, fill values and semantics |
-| `docs/submission/` | Project summary, demo script, slide outline, checklist, requirements verification |
-| `docs/packages/` | Work-package specs, reports and coordination rules |
-| `EarthPulse_NASA_Space_Apps_2026_Project_Plan.md` | Full project plan |
 
 ## Project layout
 
@@ -177,16 +177,27 @@ NASA product.
 | `scripts/` | Command-line pipeline steps |
 | `tests/` | pytest suite (synthetic data only) |
 | `data/` | Local data; raw/interim/processed are git-ignored |
-| `docs/` | Methodology, contract, provenance, limitations, submission kit |
 | `web/` | React + TypeScript + Vite frontend |
 
-## AI use
+## SI use
 
-AI coding assistants, including OpenCode and Claude Code, assisted with code, tests,
-documentation and review. They are not the scientific engine: every slope, p-value, q-value,
-correlation, class and quality flag comes from the statistical pipeline and the downloaded
-NASA data. No LLM runs in the scientific path, and no LLM is allowed to invent a value,
-metadata field or finding. The app works without an LLM.
+AI coding assistants (OpenCode and Claude Code) were used during development.
+
+The tools were used to help write and review code, tests, documentation and the text of this
+submission, and to draft screens of the web app. NASA asks that SI-generated code and data be
+acknowledged in descriptive text and metadata: this statement is that acknowledgement, and the same
+statement is in the project page on the NASA Space Apps site. Much of the code, test and documentation text in this repository
+was generated with SI tools.
+
+No language model produces any number in the app. Every slope, interval, p-value, q-value, quality
+flag, agreement code and share comes from the Python pipeline run on the NASA files, or from a
+fixed formula in the app code applied to the validated export. The app does not call a language
+model and works without one. The "Start an investigation" suggestions are a fixed, documented
+rule, not a model.
+
+The challenge idea (a cross-examination of every trend) and the method choices (Sen's slope,
+Hamed–Rao Mann–Kendall, Benjamini–Hochberg control, a change-point flag and a second NASA dataset)
+were the team's, and SI was not used to come up with the idea.
 
 ## License
 
