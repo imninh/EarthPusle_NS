@@ -7,9 +7,11 @@ import { feature } from 'topojson-client'
 import type { Feature, Geometry, Position } from 'geojson'
 import type { GeometryCollection, Topology } from 'topojson-specification'
 import { VerdictStamp } from '../../components/ui'
+import { useStrings } from '../../i18n'
 import type { Country } from '../../data/types'
-import { VERDICT_LABELS, type PlainVerdict } from '../../lib/format'
+import { verdictKindOfLabel, type PlainVerdict } from '../../lib/format'
 import { CountryLocator } from './CountryLocator'
+import { HEADER_STRINGS } from './strings'
 
 export type StampTone = 'strong' | 'caution' | 'not-yet' | 'none'
 
@@ -19,14 +21,12 @@ export type StampTone = 'strong' | 'caution' | 'not-yet' | 'none'
  */
 export function verdictStampTone(verdict: PlainVerdict | null): StampTone {
   if (!verdict) return 'none'
-  if (verdict.tone === 'warn' || verdict.label === VERDICT_LABELS.caution) return 'caution'
-  if (
-    verdict.label === VERDICT_LABELS.notYet ||
-    verdict.label === VERDICT_LABELS.noClear ||
-    verdict.label === VERDICT_LABELS.notEnough
-  ) {
-    return verdict.label === VERDICT_LABELS.notEnough ? 'none' : 'not-yet'
-  }
+  if (verdict.tone === 'warn') return 'caution'
+  // The kind is recognised in either language, so a Vietnamese label gives the same tone.
+  const kind = verdictKindOfLabel(verdict.label)
+  if (kind === 'caution') return 'caution'
+  if (kind === 'notEnough') return 'none'
+  if (kind === 'notYet' || kind === 'noClear') return 'not-yet'
   return 'strong'
 }
 
@@ -201,6 +201,7 @@ export function CaseHeader({
   verdict,
   onChoose,
 }: CaseHeaderProps) {
+  const s = useStrings(HEADER_STRINGS)
   const from = windowStart.slice(0, 4)
   const to = windowEnd.slice(0, 4)
   const years = from && to ? `${from}–${to}` : `${windowStart}–${windowEnd}`
@@ -209,22 +210,22 @@ export function CaseHeader({
       {country && (
         <div className="region-case-outline">
           <CountryOutline country={country} />
-          <p className="region-case-outline-caption">country boundary: Natural Earth</p>
+          <p className="region-case-outline-caption">{s.boundary}</p>
         </div>
       )}
       <div className="region-case-title">
-        <p className="label-caps region-case-eyebrow">Case file · {variableLabel} · {years}</p>
+        <p className="label-caps region-case-eyebrow">{s.caseFile} · {variableLabel} · {years}</p>
         <h1 className="display region-case-place">{title}</h1>
         {detail && <p className="region-case-detail">{detail}</p>}
         <div className="region-case-actions">
           <button type="button" className="region-button secondary" onClick={onChoose}>
-            Choose a different place
+            {s.chooseDifferent}
           </button>
         </div>
       </div>
       {verdict && (
         <div className="region-case-stamp">
-          <p className="label-caps region-case-stamp-caps">Verdict</p>
+          <p className="label-caps region-case-stamp-caps">{s.verdict}</p>
           <VerdictStamp label={verdict.label} tone={verdictStampTone(verdict)} size="lg" />
         </div>
       )}

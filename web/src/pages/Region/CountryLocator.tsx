@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { N_COLS } from '../../data/contract'
 import { loadCountryGrid } from '../../data/loaders'
 import type { Country } from '../../data/types'
+import { useStrings } from '../../i18n'
 import { countryCellExtent } from './country'
+import { LOCATOR_STRINGS } from './strings'
 
 const WIDTH = 320
 const HEIGHT = 170
@@ -63,6 +65,7 @@ function drawCountry(canvas: HTMLCanvasElement, country: Country, grid: Int16Arr
 export function CountryLocator({ country }: { country: Country }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [status, setStatus] = useState<LocatorStatus>('loading')
+  const s = useStrings(LOCATOR_STRINGS)
 
   useEffect(() => {
     let cancelled = false
@@ -91,14 +94,13 @@ export function CountryLocator({ country }: { country: Country }) {
         width={WIDTH}
         height={HEIGHT}
         role="img"
-        aria-label={`Locator map of ${country.label}`}
+        aria-label={s.ariaLabel(country.label)}
       />
       <figcaption>
-        {status === 'loading' && 'Loading the country locator…'}
-        {status === 'ready' &&
-          `${country.label}: ${country.n_cells} cells inside the common mask. Approximate locator, not a border map.`}
-        {status === 'missing' && 'Country locator unavailable: this export has no country grid for this area.'}
-        {status === 'error' && 'Country locator could not be loaded.'}
+        {status === 'loading' && s.loading}
+        {status === 'ready' && s.ready(country.label, String(country.n_cells))}
+        {status === 'missing' && s.missing}
+        {status === 'error' && s.error}
       </figcaption>
     </figure>
   )

@@ -9,6 +9,7 @@ import {
   WITNESS_OPPOSITE_SIGN,
   WITNESS_SAME_SIGN,
 } from '../data/contract'
+import { defineStrings, pick, type Lang } from '../i18n'
 import type { Rgba } from './gridImage'
 
 export interface WitnessPalette {
@@ -51,15 +52,46 @@ export function witnessColour(
   return [0, 0, 0, 0]
 }
 
-export function witnessWords(code: number): string {
-  if (code === WITNESS_CORROBORATED) return 'A second, independent NASA dataset agrees'
-  if (code === WITNESS_SAME_SIGN) return 'Same direction, but not significant in the second dataset'
-  if (code === WITNESS_OPPOSITE_SIGN) return 'Opposite direction, but not significant in the second dataset'
-  if (code === WITNESS_CONTRADICTED) return 'An independent NASA dataset disagrees: read with caution'
-  if (code === WITNESS_MAIN_NOT_SIGNIFICANT) return 'Main trend not significant'
-  if (code === INSUFFICIENT_DATA) return 'Not evaluated (main or witness not eligible)'
-  if (code === OUTSIDE_DOMAIN) return 'Outside domain'
-  return `Unknown witness code (${code})`
+export const WITNESS_TEXTS = defineStrings(
+  {
+    corroborated: 'A second, independent NASA dataset agrees',
+    sameSign: 'Same direction, but not significant in the second dataset',
+    opposite: 'Opposite direction, but not significant in the second dataset',
+    contradicted: 'An independent NASA dataset disagrees: read with caution',
+    mainNotSignificant: 'Main trend not significant',
+    insufficient: 'Not evaluated (main or witness not eligible)',
+    outside: 'Outside domain',
+    unknown: (code: string) => `Unknown witness code (${code})`,
+    combinedCorroborated: (label: string) =>
+      `Sudden shift, but ${label} shows the same trend: more likely a real change`,
+    combinedNotSeen: (label: string) => `Sudden shift not seen in ${label}: more likely a data artefact`,
+  },
+  {
+    corroborated: 'Một bộ dữ liệu NASA thứ hai, độc lập, khớp với xu hướng này',
+    sameSign: 'Cùng chiều thay đổi, nhưng chưa có ý nghĩa thống kê ở bộ dữ liệu thứ hai',
+    opposite: 'Ngược chiều thay đổi, nhưng chưa có ý nghĩa thống kê ở bộ dữ liệu thứ hai',
+    contradicted: 'Một bộ dữ liệu NASA độc lập không khớp: đọc thận trọng',
+    mainNotSignificant: 'Xu hướng chính chưa có ý nghĩa thống kê',
+    insufficient: 'Chưa đánh giá (xu hướng chính hoặc bộ dữ liệu thứ hai chưa đủ điều kiện)',
+    outside: 'Ngoài phạm vi dữ liệu',
+    unknown: (code: string) => `Mã bộ dữ liệu thứ hai không xác định (${code})`,
+    combinedCorroborated: (label: string) =>
+      `Có bước nhảy đột ngột, nhưng ${label} cho thấy cùng xu hướng: nhiều khả năng là thay đổi thật`,
+    combinedNotSeen: (label: string) =>
+      `Bước nhảy đột ngột không thấy ở ${label}: nhiều khả năng là sai lệch của dữ liệu`,
+  },
+)
+
+export function witnessWords(code: number, lang: Lang = 'en'): string {
+  const texts = pick(WITNESS_TEXTS, lang)
+  if (code === WITNESS_CORROBORATED) return texts.corroborated
+  if (code === WITNESS_SAME_SIGN) return texts.sameSign
+  if (code === WITNESS_OPPOSITE_SIGN) return texts.opposite
+  if (code === WITNESS_CONTRADICTED) return texts.contradicted
+  if (code === WITNESS_MAIN_NOT_SIGNIFICANT) return texts.mainNotSignificant
+  if (code === INSUFFICIENT_DATA) return texts.insufficient
+  if (code === OUTSIDE_DOMAIN) return texts.outside
+  return texts.unknown(String(code))
 }
 
 /**
@@ -70,13 +102,15 @@ export function combinedQualityWitness(
   quality: number | null,
   witness: number | null,
   witnessLabel: string,
+  lang: Lang = 'en',
 ): string | null {
   if (quality == null || witness == null || quality < 1) return null
+  const texts = pick(WITNESS_TEXTS, lang)
   if (witness === WITNESS_CORROBORATED) {
-    return `Sudden shift, but ${witnessLabel} shows the same trend: more likely a real change`
+    return texts.combinedCorroborated(witnessLabel)
   }
   if (witness === WITNESS_SAME_SIGN || witness === WITNESS_MAIN_NOT_SIGNIFICANT || witness === WITNESS_OPPOSITE_SIGN || witness === WITNESS_CONTRADICTED) {
-    return `Sudden shift not seen in ${witnessLabel}: more likely a data artefact`
+    return texts.combinedNotSeen(witnessLabel)
   }
   return null
 }

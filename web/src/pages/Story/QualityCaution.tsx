@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Chip } from '../../components/ui'
+import { useLang, useStrings } from '../../i18n'
 import { useApp } from '../../data/AppState'
 import { loadBreakpointYear, loadQualityFlag } from '../../data/loaders'
 import type { DetectiveCase } from '../../data/types'
 import { cellsInsideBbox } from '../Region/model'
-import { documentedInputChange, qualityShareForRange } from '../Region/quality'
+import { qualityShareForRange } from '../Region/quality'
+import { CAUTION_STRINGS } from './strings'
 import { caseWindowYears, cautionShare, combinedQualityWitnessText, qualityBreakYearLead, yearPosition } from './model'
 
 type Status = 'loading' | 'ready' | 'unavailable'
@@ -27,6 +29,8 @@ export function QualityCaution({
   const [layerShare, setLayerShare] = useState<number | null>(null)
   const [breakYear, setBreakYear] = useState<number | null>(null)
   const { index } = useApp()
+  const s = useStrings(CAUTION_STRINGS)
+  const { lang } = useLang()
 
   useEffect(() => {
     if (!qualityAvailable) {
@@ -78,19 +82,17 @@ export function QualityCaution({
   const witnessLabel = witness
     ? index.witness?.products?.[variableId]?.label ?? witness.product
     : null
-  const combinedWitness = witness ? combinedQualityWitnessText(witness.agreement) : null
+  const combinedWitness = witness ? combinedQualityWitnessText(witness.agreement, lang) : null
 
   return (
-    <aside className="story-caution" aria-label="Data-quality caution">
+    <aside className="story-caution" aria-label={s.ariaLabel}>
       <div className="story-caution-head">
-        <Chip tone="warn">Read with caution</Chip>
+        <Chip tone="warn">{s.chip}</Chip>
         <strong>
-          {sharePercent == null
-            ? 'Flagged share not available'
-            : `${sharePercent}% of the case's source cells carry a sudden-shift flag`}
+          {sharePercent == null ? s.shareUnavailable : s.shareText(sharePercent)}
         </strong>
       </div>
-      <div className="story-caution-chart" role="img" aria-label={cautionLabel(sharePercent, breakYear)}>
+      <div className="story-caution-chart" role="img" aria-label={cautionLabel(s, sharePercent, breakYear)}>
         <div className="story-caution-bar" aria-hidden="true">
           <span className="story-caution-fill" style={{ width: `${sharePercent ?? 0}%` }} />
         </div>
@@ -106,11 +108,11 @@ export function QualityCaution({
       </div>
       <p className="story-caution-note">
         {breakYear == null
-          ? 'The published quality layers do not give a break year for this case.'
+          ? s.noBreakYear
           : inKnownForcing
-            ? `${qualityBreakYearLead(breakYear)}, inside a ${documentedInputChange(product, knownForcingPeriod)}: possible data discontinuity. Read the trend with caution.`
-            : `${qualityBreakYearLead(breakYear)}. A sudden shift can be a real jump in the climate or a data artefact. The trend is still significant; read the evidence rather than treating the flag as a verdict.`}
-        {status === 'loading' ? ' Checking the published quality layers…' : null}
+            ? s.inForcing(qualityBreakYearLead(breakYear, lang), inputChange(s, product, knownForcingPeriod))
+            : s.notForcing(qualityBreakYearLead(breakYear, lang))}
+        {status === 'loading' ? s.checking : null}
       </p>
       {combinedWitness != null ? (
         <p className="story-caution-combined">
@@ -121,8 +123,17 @@ export function QualityCaution({
   )
 }
 
-function cautionLabel(sharePercent: number | null, breakYear: number | null): string {
-  const share = sharePercent == null ? 'Flagged share not available' : `${sharePercent}% of cells flagged`
-  const year = breakYear == null ? 'break year not available' : `median break year ${Math.round(breakYear)}`
-  return `${share}; ${year}.`
+type CautionText = typeof CAUTION_STRINGS.en
+
+/** Same wording as the Region page helper: "documented GLDAS input change (2008–2012)". */
+function inputChange(s: CautionText, product: string, period: readonly [number, number] | null): string {
+  const [start, end] = period ?? [2008, 2012]
+  const family = product.startsWith('GLDAS') ? 'GLDAS' : product
+  return s.inputChange(family, start === end ? `${start}` : `${start}–${end}`)
+}
+
+function cautionLabel(s: CautionText, sharePercent: number | null, breakYear: number | null): string {
+  const share = sharePercent == null ? s.shareUnavailable : s.labelShare(sharePercent)
+  const year = breakYear == null ? s.labelNoBreak : s.labelBreak(Math.round(breakYear))
+  return s.labelJoin(share, year)
 }

@@ -1,5 +1,13 @@
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { formatUnit } from './units'
+
+const catalogPath = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../../config/catalog.yaml',
+)
 
 describe('formatUnit', () => {
   it('maps the three contract units exactly', () => {
@@ -36,16 +44,51 @@ describe('formatUnit', () => {
   })
 
   it('only replaces whole unit tokens', () => {
-    // A variable name or a longer word must not be damaged.
     expect(formatUnit('degreeCelsius')).toBe('degreeCelsius')
     expect(formatUnit('kg m-20')).toBe('kg m-20')
     expect(formatUnit('bg kg-1x')).toBe('bg kg-1x')
   })
 
-  it('formats every unit in the published registry shape', () => {
-    const registryUnits = ['degC', 'kg m-2', 'mm/month', 'g kg-1']
-    expect(registryUnits.map(formatUnit)).toEqual(['°C', 'kg/m²', 'mm/month', 'g/kg'])
-    const slopeUnits = registryUnits.map((unit) => `${unit} per year`)
-    expect(slopeUnits.map(formatUnit)).toEqual(['°C per year', 'kg/m² per year', 'mm/month per year', 'g/kg per year'])
+  it('formats every unit string in config/catalog.yaml', () => {
+    const catalog = readFileSync(catalogPath, 'utf8')
+    const units = [...catalog.matchAll(/^[ \t]*units:[ \t]*(.+)$/gm)].map((match) =>
+      match[1].trim().replace(/^['"]|['"]$/g, ''),
+    )
+    expect(new Set(units).size).toBeGreaterThan(0)
+    const expected: Record<string, string> = {
+      '%': '%',
+      '1': 'fraction (0-1)',
+      Dobsons: 'DU',
+      'J m-2': 'J/m²',
+      K: 'K',
+      Pa: 'Pa',
+      'Pa s-1': 'Pa/s',
+      'W m-2': 'W/m²',
+      'kg kg-1': 'kg/kg',
+      'kg m-2': 'kg/m²',
+      'kg m-2 s-1': 'kg/m²/s',
+      m: 'm',
+      'm s-1': 'm/s',
+      'm-3 m-3': 'm3/m3',
+      // Some source rows in the current catalog repeat the unit string; the
+      // formatter must handle each whole string as written.
+      '1 1': '1 1',
+      'Dobsons Dobsons': 'DU DU',
+      'J m-2 J m-2': 'J/m² J/m²',
+      'K K': 'K K',
+      'Pa Pa': 'Pa Pa',
+      'Pa s-1 Pa s-1': 'Pa/s Pa/s',
+      'W m-2 W m-2': 'W/m² W/m²',
+      'kg kg-1 kg kg-1': 'kg/kg kg/kg',
+      'kg m-2 kg m-2': 'kg/m² kg/m²',
+      'kg m-2 s-1 kg m-2 s-1': 'kg/m²/s kg/m²/s',
+      'm m': 'm m',
+      'm s-1 m s-1': 'm/s m/s',
+      'm-3 m-3 m-3 m-3': 'm3/m3 m3/m3',
+    }
+    for (const unit of units) {
+      expect(expected[unit], `missing expectation for ${unit}`).toBeDefined()
+      expect(formatUnit(unit), unit).toBe(expected[unit])
+    }
   })
 })

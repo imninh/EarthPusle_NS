@@ -12,6 +12,11 @@ const REQUIRED: TermId[] = [
   'second_witness',
   'confidence_interval',
   'not_yet_significant',
+  'standardized_change',
+  'data_quality',
+  'kendall_tau',
+  'years_to_detect',
+  'screened_only',
 ]
 
 /** Count sentence ends, ignoring decimals such as 0.05 and abbreviations. */
@@ -69,5 +74,17 @@ describe('GLOSSARY', () => {
   it('explains confidence intervals without claiming proof', () => {
     expect(GLOSSARY.confidence_interval.plain).toContain('includes zero')
     expect(GLOSSARY.confidence_interval.technical).toContain('Sen 1968')
+  })
+
+  it('states the years-to-detect wording rule', () => {
+    expect(GLOSSARY.years_to_detect.plain).toContain('not a forecast')
+    expect(GLOSSARY.years_to_detect.plain).toContain('natural variability')
+    expect(GLOSSARY.years_to_detect.technical).toContain('Weatherhead')
+    expect(GLOSSARY.years_to_detect.technical).toContain('range')
+  })
+
+  it('explains screened-only without implying a second dataset', () => {
+    expect(GLOSSARY.screened_only.plain).toContain('no second dataset')
+    expect(GLOSSARY.screened_only.technical).toContain('§14')
   })
 })

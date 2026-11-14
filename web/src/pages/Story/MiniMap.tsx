@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { N_COLS, N_ROWS, latToRow, lonToCol } from '../../data/contract'
 import { loadTrendClass } from '../../data/loaders'
+import { useStrings } from '../../i18n'
 import { paintTrendClass, trendColoursFrom } from '../Screener/thumbnail'
+import { MAP_STRINGS } from './strings'
 
 function clamp(value: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, value))
@@ -41,7 +43,7 @@ export function CaseMiniMap({
   windowId,
   bbox,
   label,
-  caption = 'Approximate case box. Not a country boundary.',
+  caption,
 }: {
   variableId: string
   windowId: string
@@ -49,6 +51,8 @@ export function CaseMiniMap({
   label: string
   caption?: string | null
 }) {
+  const s = useStrings(MAP_STRINGS)
+  const shownCaption = caption === undefined ? s.defaultCaption : caption
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = useState<string | null>(null)
@@ -84,16 +88,14 @@ export function CaseMiniMap({
         height={N_ROWS}
         role="img"
         aria-label={
-          caption
-            ? `Global trend map for ${label}, with the approximate case box outlined.`
-            : `Global trend map for ${label}, with the case area outlined.`
+          shownCaption ? s.ariaBox(label) : s.ariaArea(label)
         }
       />
-      {status === 'loading' ? <figcaption>Loading case map…</figcaption> : null}
+      {status === 'loading' ? <figcaption>{s.loading}</figcaption> : null}
       {status === 'error' ? (
-        <figcaption role="alert">{error ?? 'Could not draw the case map.'}</figcaption>
+        <figcaption role="alert">{error ?? s.failed}</figcaption>
       ) : null}
-      {caption ? <figcaption>{caption}</figcaption> : null}
+      {shownCaption ? <figcaption>{shownCaption}</figcaption> : null}
     </figure>
   )
 }

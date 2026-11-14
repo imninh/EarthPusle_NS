@@ -1,20 +1,55 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useApp } from '../data/AppState'
 import type { Page } from '../data/types'
+import { LANGS, defineStrings, useLang, useStrings } from '../i18n'
 import { CoachMark, shouldShowCoach } from './ui'
 import { VariableSelect, WindowSelect } from './VariableSelect'
 
-const VIEWS: { id: Page; label: string }[] = [
-  { id: 'home', label: 'Home' },
-  { id: 'investigate', label: 'Investigate' },
-  { id: 'screener', label: 'Variables' },
-  { id: 'discovery', label: 'Map' },
-  { id: 'story', label: 'Cases' },
-  { id: 'method', label: 'How it works' },
-]
+const VIEW_IDS: Extract<Page, 'home' | 'investigate' | 'screener' | 'discovery' | 'story' | 'method'>[] = ['home', 'investigate', 'screener', 'discovery', 'story', 'method']
+
+export const STRINGS = defineStrings(
+  {
+    home: 'Home',
+    investigate: 'Investigate',
+    screener: 'Variables',
+    discovery: 'Map',
+    story: 'Cases',
+    method: 'How it works',
+    tourOpen: 'Open the guided tour',
+    tourTitle: 'Guided tour',
+    skip: 'Skip to content',
+    synthetic: '{s.synthetic}',
+    views: 'Views',
+    dataControls: 'Data controls',
+    language: 'Language',
+    footerData:
+      "Data: NASA GES DISC (GLDAS-2.1, GPM IMERG). Map coastlines: Natural Earth. Method: Sen's slope + Hamed–Rao Mann–Kendall with FDR correction.",
+    footerNote: 'Not a verdict: a significant trend is evidence to read, not proof of cause.',
+  },
+  {
+    home: 'Trang chủ',
+    investigate: 'Điều tra',
+    screener: 'Các biến',
+    discovery: 'Bản đồ',
+    story: 'Vụ việc',
+    method: 'Cách hoạt động',
+    tourOpen: 'Mở phần hướng dẫn',
+    tourTitle: 'Hướng dẫn nhanh',
+    skip: 'Chuyển đến nội dung chính',
+    synthetic: 'DỮ LIỆU GIẢ LẬP: bản thử nghiệm, không phải kết quả của NASA',
+    views: 'Các trang',
+    dataControls: 'Chọn dữ liệu',
+    language: 'Ngôn ngữ',
+    footerData:
+      'Dữ liệu: NASA GES DISC (GLDAS-2.1, GPM IMERG). Đường bờ biển trên bản đồ: Natural Earth. Phương pháp: độ dốc Sen + kiểm định Mann–Kendall Hamed–Rao, có kiểm soát tỷ lệ phát hiện giả (FDR).',
+    footerNote: 'Đây không phải phán quyết: xu hướng có ý nghĩa thống kê là bằng chứng để đọc, không phải bằng chứng về nguyên nhân.',
+  },
+)
 
 export function Layout({ children }: { children: ReactNode }) {
   const { index, page, setPage } = useApp()
+  const s = useStrings(STRINGS)
+  const { lang, setLang } = useLang()
   // The first-visit coach mark belongs on Home only. A deep link must never be
   // covered by it, even when the dismissal flag has not been stored yet.
   const [coachOpen, setCoachOpen] = useState(() => page === 'home' && shouldShowCoach())
@@ -37,8 +72,8 @@ export function Layout({ children }: { children: ReactNode }) {
       type="button"
       className={showContextBar ? 'help-button' : 'help-button help-button--night'}
       onClick={() => setCoachOpen(true)}
-      aria-label="Open the guided tour"
-      title="Guided tour"
+      aria-label={s.tourOpen}
+      title={s.tourTitle}
     >
       ?
     </button>
@@ -47,11 +82,11 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="app">
       <a className="skip-link" href="#main">
-        Skip to content
+        {s.skip}
       </a>
       {index.synthetic && (
         <div className="synthetic-banner" role="alert">
-          SYNTHETIC DATA: development mock, not NASA results
+          {s.synthetic}
         </div>
       )}
       <header className="app-header">
@@ -65,26 +100,43 @@ export function Layout({ children }: { children: ReactNode }) {
           </span>
         </button>
 
-        <nav className="tabs" aria-label="Views">
-          {VIEWS.map((view) => (
+        <nav className="tabs" aria-label={s.views}>
+          {VIEW_IDS.map((id) => (
             <button
-              key={view.id}
+              key={id}
               type="button"
-              className={view.id === page ? 'tab active' : 'tab'}
-              onClick={() => setPage(view.id)}
-              aria-current={view.id === page ? 'page' : undefined}
+              className={id === page ? 'tab active' : 'tab'}
+              onClick={() => setPage(id)}
+              aria-current={id === page ? 'page' : undefined}
             >
-              {view.label}
+              {s[id]}
             </button>
           ))}
         </nav>
 
-        {showContextBar ? null : <div className="header-tools">{helpButton}</div>}
+        <div className="header-tools">
+          <div className="lang-switch" role="group" aria-label={s.language}>
+            {LANGS.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                className="lang-switch__button"
+                lang={entry.id}
+                title={entry.name}
+                aria-pressed={entry.id === lang}
+                onClick={() => setLang(entry.id)}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+          {showContextBar ? null : helpButton}
+        </div>
       </header>
       {showContextBar ? (
         <div className="context-bar">
           <div className="context-bar-inner">
-            <div className="controls" role="group" aria-label="Data controls">
+            <div className="controls" role="group" aria-label={s.dataControls}>
               {showVariable ? <VariableSelect /> : null}
               {showPeriod ? <WindowSelect /> : null}
             </div>
@@ -96,13 +148,10 @@ export function Layout({ children }: { children: ReactNode }) {
         {children}
       </main>
       <footer className="app-footer">
-        <span>
-          Data: NASA GES DISC (GLDAS-2.1, GPM IMERG). Map coastlines: Natural Earth. Method: Sen&apos;s slope +
-          Hamed–Rao Mann–Kendall with FDR correction.
-        </span>
-        <span>Not a verdict: a significant trend is evidence to read, not proof of cause.</span>
+        <span>{s.footerData}</span>
+        <span>{s.footerNote}</span>
         <button type="button" className="button ghost" onClick={() => setPage('method')}>
-          How it works
+          {s.method}
         </button>
       </footer>
       <CoachMark

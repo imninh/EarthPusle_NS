@@ -3,7 +3,9 @@
 // models as the page; nothing is computed here except bar widths.
 import type { CardModel } from './model'
 import { formatPercent } from './model'
+import { pick, type Lang } from '../../i18n'
 import { wrapLines, type ReportHeader } from './report'
+import { STRINGS } from './strings'
 
 export const IMAGE_WIDTH = 1200
 export const IMAGE_HEIGHT = 630
@@ -49,14 +51,17 @@ export interface ImageInput {
   topic: string
   cards: readonly CardModel[]
   url: string
+  /** Language of the words drawn on the image; English by default. */
+  lang?: Lang
 }
 
 export function drawReportImage(canvas: HTMLCanvasElement, input: ImageInput): void {
   const p = readPalette()
+  const t = pick(STRINGS, input.lang ?? 'en')
   canvas.width = IMAGE_WIDTH
   canvas.height = IMAGE_HEIGHT
   const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas is not available in this browser.')
+  if (!ctx) throw new Error(t.imageNoCanvas)
 
   const sans = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
   const mono = 'ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace'
@@ -69,7 +74,7 @@ export function drawReportImage(canvas: HTMLCanvasElement, input: ImageInput): v
   // Header
   ctx.fillStyle = p.onNightMuted
   ctx.font = `600 18px ${sans}`
-  ctx.fillText('EARTHPULSE · COUNTRY REPORT', pad, 62)
+  ctx.fillText(t.imageKicker, pad, 62)
   ctx.fillStyle = p.onNight
   ctx.font = `700 46px ${sans}`
   ctx.fillText(fit(ctx, input.header.title, IMAGE_WIDTH - pad * 2), pad, 116)
@@ -155,7 +160,7 @@ export function drawReportImage(canvas: HTMLCanvasElement, input: ImageInput): v
   ctx.fillText(fit(ctx, input.url, IMAGE_WIDTH - pad * 2), pad, IMAGE_HEIGHT - 52)
   ctx.font = `400 14px ${sans}`
   ctx.fillText(
-    fit(ctx, `${input.header.limitation} Warm = increase, cool = decrease.`, IMAGE_WIDTH - pad * 2),
+    fit(ctx, `${input.header.limitation} ${t.imageLegend}`, IMAGE_WIDTH - pad * 2),
     pad,
     IMAGE_HEIGHT - 26,
   )
@@ -169,7 +174,7 @@ export function downloadReportImage(input: ImageInput, filename: string): Promis
       drawReportImage(canvas, input)
       canvas.toBlob((blob) => {
         if (!blob) {
-          reject(new Error('The browser could not create the image.'))
+          reject(new Error(pick(STRINGS, input.lang ?? 'en').imageNoBlob))
           return
         }
         const href = URL.createObjectURL(blob)

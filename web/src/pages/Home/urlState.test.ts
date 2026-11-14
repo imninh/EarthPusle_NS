@@ -43,6 +43,30 @@ describe('parseHash', () => {
     expect(parseHash('#/investigate?w=2001-2024')).toEqual(
       route({ page: 'investigate', windowId: '2001-2024' }),
     )
+    expect(
+      parseHash('#/investigate?place=country_704&topic=heat&w=2001-2024&view=casefile'),
+    ).toEqual(
+      route({
+        page: 'investigate',
+        place: 'country_704',
+        topic: 'heat',
+        windowId: '2001-2024',
+        view: 'casefile',
+      }),
+    )
+  })
+
+  it('keeps unknown investigate values as plain route fields', () => {
+    expect(
+      parseHash('#/investigate?place=not-a-place&topic=not-a-topic&view=not-a-view'),
+    ).toEqual(
+      route({
+        page: 'investigate',
+        place: 'not-a-place',
+        topic: 'not-a-topic',
+        view: 'not-a-view',
+      }),
+    )
   })
 
   it('ignores malformed selections and keeps the page', () => {
@@ -93,6 +117,17 @@ describe('serializeHash', () => {
       '#/investigate?w=2001-2024',
     )
     expect(
+      serializeHash(
+        route({
+          page: 'investigate',
+          place: 'country_704',
+          topic: 'heat',
+          windowId: '2001-2024',
+          view: 'casefile',
+        }),
+      ),
+    ).toBe('#/investigate?place=country_704&topic=heat&w=2001-2024&view=casefile')
+    expect(
       serializeHash(route({ page: 'discovery', variableId: 'x', windowId: 'w', layer: 'witness' })),
     ).toBe('#/discovery?v=x&w=w&layer=witness')
   })
@@ -132,6 +167,19 @@ describe('serializeHash', () => {
       route({ page: 'story', caseId: 'case-01' }),
       route({ page: 'method' }),
       route({ page: 'investigate', windowId: '2001-2024' }),
+      route({
+        page: 'investigate',
+        place: 'country_704',
+        topic: 'heat',
+        windowId: '2001-2024',
+        view: 'casefile',
+      }),
+      route({
+        page: 'investigate',
+        place: 'not-a-place',
+        topic: 'not-a-topic',
+        view: 'not-a-view',
+      }),
     ]
     for (const value of routes) expect(parseHash(serializeHash(value))).toEqual(value)
   })

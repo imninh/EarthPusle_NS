@@ -1,10 +1,13 @@
 // Plain-language one-sentence summary of the evidence card.
 // Wording follows the numbers: no causal claims, and "not significant" is never
 // phrased as "no change".
+import { pick, type Lang } from '../../i18n'
 import { formatUnit } from '../../lib/format'
 import type { SenSlopeCI } from '../../lib/stats'
 import { formatInterval, type EvidenceModel } from './model'
 import { documentedInputChange, isKnownForcingShift, type QualitySummary } from './quality'
+import { SUMMARY_STRINGS } from './strings.text'
+import { unitLabel } from './strings.place'
 import { witnessSummaryClause, type SummaryWitness } from './witness'
 
 export interface SummaryInput {
@@ -22,6 +25,7 @@ export interface SummaryInput {
   interval?: SenSlopeCI | null
   /** A4/P27 sentence for a non-significant trend; omitted when not evaluated. */
   detection?: string | null
+  lang?: Lang
 }
 
 function lowerFirst(text: string): string {
@@ -46,10 +50,10 @@ function formatStat(value: number | null): string | null {
   return String(Number(value.toFixed(4)))
 }
 
-function windowYears(start: string, end: string): string {
+function windowYears(start: string, end: string, fallback: string): string {
   const startYear = start.slice(0, 4)
   const endYear = end.slice(0, 4)
-  if (!startYear) return endYear || 'the selected window'
+  if (!startYear) return endYear || fallback
   if (!endYear || startYear === endYear) return startYear
   return `${startYear}–${endYear}`
 }
@@ -57,14 +61,15 @@ function windowYears(start: string, end: string): string {
 function caution(
   quality: QualitySummary | null | undefined,
   product: string,
-  knownForcingPeriod?: readonly [number, number] | null,
+  knownForcingPeriod: readonly [number, number] | null | undefined,
+  lang: Lang,
 ): string {
   if (!quality?.available || !quality.flagged) return ''
+  const s = pick(SUMMARY_STRINGS, lang)
   if (isKnownForcingShift(quality, knownForcingPeriod)) {
-    return `; a sudden shift during a ${documentedInputChange(product, knownForcingPeriod)}: possible data discontinuity; read the trend with caution`
+    return s.cautionKnown(documentedInputChange(product, knownForcingPeriod, lang))
   }
-  const year = quality.breakYear == null ? '' : ` around ${Math.round(quality.breakYear)}`
-  return `; a sudden shift${year} could be a real jump in the climate or a data artefact; the trend is still significant, and a step fits slightly better than a straight line`
+  return s.cautionOther(quality.breakYear == null ? null : Math.round(quality.breakYear))
 }
 
 /**
@@ -73,55 +78,59 @@ function caution(
  */
 export function summarySentence(input: SummaryInput): string {
   const { evidence, placeLabel, windowStart, windowEnd } = input
-  const range = windowYears(windowStart, windowEnd)
+  const lang = input.lang ?? 'en'
+  const s = pick(SUMMARY_STRINGS, lang)
+  const range = windowYears(windowStart, windowEnd, s.selectedWindow)
   const variable = lowerFirst(evidence.variableLabel)
   const witnessTrail = witnessSummaryClause({
     mainTrendClass: evidence.trendClass,
     warm: evidence.category === 'temperature',
     qualityFlagged: Boolean(input.quality?.available && input.quality.flagged),
     witness: input.witness,
+    lang,
   })
-  const trail = witnessTrail ?? caution(input.quality, evidence.product, input.knownForcingPeriod)
+  const trail = witnessTrail ?? caution(input.quality, evidence.product, input.knownForcingPeriod, lang)
   const subject = `${variable} ${placeLabel}`
 
   if (evidence.trendClass === 'insufficient data') {
-    return `Over ${range}, there are not enough valid months for ${subject} to estimate a trend reliably.`
+    return s.insufficient(range, subject)
   }
   if (
     evidence.trendClass === 'not available' ||
     evidence.trendClass === 'outside domain' ||
     evidence.senSlopeDecade == null
   ) {
-    return `Over ${range}, there is not enough information to summarise the trend in ${subject}.`
+    return s.noInfo(range, subject)
   }
 
-  const magnitude = `${formatMagnitude(evidence.senSlopeDecade)} ${formatUnit(evidence.slopeUnit)}`
+  const magnitude = `${formatMagnitude(evidence.senSlopeDecade)} ${unitLabel(formatUnit(evidence.slopeUnit), lang)}`
   if (evidence.trendClass === 'not significant') {
     if (evidence.senSlopeDecade !== 0) {
       const warm = evidence.category === 'temperature'
-      const verb = evidence.senSlopeDecade > 0 ? (warm ? 'rose' : 'increased') : (warm ? 'fell' : 'decreased')
+      const verb = evidence.senSlopeDecade > 0 ? s.magnitudeUp(warm) : s.magnitudeDown(warm)
       const useQ = evidence.showQ && evidence.q != null
       const statLabel = useQ ? 'q' : 'p'
       const statValue = formatStat(useQ ? evidence.q : evidence.p)
       const pieces: string[] = []
       if (statValue != null) pieces.push(`${statLabel} = ${statValue}`)
-      const intervalText = formatInterval(input.interval ?? null)
-      if (intervalText) pieces.push(`the 95% interval ${intervalText} includes zero`)
+      const intervalText = formatInterval(input.interval ?? null, lang)
+      if (intervalText) pieces.push(s.intervalIncludesZero(intervalText))
       const parenthetical = pieces.length === 0 ? '' : ` (${pieces.join('; ')})`
-      const tail = input.detection ?? 'A longer record could change this.'
-      return `Over ${range}, ${subject} ${verb} by about ${magnitude}, but the evidence is not strong enough yet to call this significant${parenthetical}. ${tail}`
+      const tail = input.detection ?? s.defaultTail
+      return s.notSignificantMoved(range, subject, verb, magnitude, parenthetical, tail)
     }
-    return `Over ${range}, the trend in ${subject} is not statistically significant. A longer record could change this.`
+    return s.notSignificantFlat(range, subject)
   }
   if (evidence.trendClass !== 'increasing' && evidence.trendClass !== 'decreasing') {
-    return `Over ${range}, there is not enough information to summarise the trend in ${subject}.`
+    return s.noInfo(range, subject)
   }
 
   const warm = evidence.category === 'temperature'
-  const verb = evidence.senSlopeDecade >= 0 ? (warm ? 'rose' : 'increased') : (warm ? 'fell' : 'decreased')
+  const verb = evidence.senSlopeDecade >= 0 ? s.magnitudeUp(warm) : s.magnitudeDown(warm)
   const useQ = evidence.showQ && evidence.q != null
   const statLabel = useQ ? 'q' : 'p'
   const statValue = formatStat(useQ ? evidence.q : evidence.p)
-  const significance = statValue == null ? 'this trend is statistically significant' : `this trend is statistically significant (${statLabel} = ${statValue})`
-  return `Over ${range}, ${subject} ${verb} by about ${magnitude}; ${significance}${trail}.`
+  const significance =
+    statValue == null ? s.significancePlain : s.significanceWithStat(statLabel, statValue)
+  return s.significant(range, subject, verb, magnitude, significance, trail)
 }

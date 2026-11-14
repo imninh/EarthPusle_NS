@@ -8,7 +8,12 @@ import {
   WITNESS_CONTRADICTED,
 } from '../../data/contract'
 import type { DetectiveCase, ScreenerRow, VariableMeta } from '../../data/types'
-import { GLOSSARY, plainVerdict, type PlainVerdict } from '../../lib/format'
+import { GLOSSARY, VERDICT_LABELS, plainVerdict, type PlainVerdict } from '../../lib/format'
+import { pick, type Lang } from '../../i18n'
+import { variableLabel } from '../../i18n/terms'
+import { STRINGS, type FixedTopicId, type VerdictKind } from './strings'
+
+export type { VerdictKind } from './strings'
 
 /** Place id used for "The whole world (land)". */
 export const GLOBAL_PLACE = 'global'
@@ -82,15 +87,13 @@ export const FIXED_TOPICS: readonly FixedTopic[] = [
   },
 ]
 
-const ALL_BLURB = 'Every published variable, one card each.'
-
 /** Category label for a "card named after its category" (P23 may add variables). */
-function categoryTopic(category: string): { id: string; label: string } {
+function categoryTopic(category: string, lang: Lang): { id: string; label: string } {
   const slug = category
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-  const label = category.trim() === '' ? 'Other' : category.charAt(0).toUpperCase() + category.slice(1)
+  const label = pick(STRINGS, lang).categoryLabel(category)
   return { id: `category-${slug || 'other'}`, label }
 }
 
@@ -102,7 +105,8 @@ function categoryTopic(category: string): { id: string; label: string } {
  * - A variable the fixed table does not list is shown under a card named after
  *   its `category`, and under "Show me everything".
  */
-export function topicVariables(variables: readonly VariableMeta[]): TopicDefinition[] {
+export function topicVariables(variables: readonly VariableMeta[], lang: Lang = 'en'): TopicDefinition[] {
+  const t = pick(STRINGS, lang)
   const present = new Set(variables.map((variable) => variable.id))
   const topics: TopicDefinition[] = []
   const listed = new Set<string>()
@@ -111,7 +115,8 @@ export function topicVariables(variables: readonly VariableMeta[]): TopicDefinit
     const ids = fixed.variables.filter((id) => present.has(id) && !listed.has(id))
     ids.forEach((id) => listed.add(id))
     if (ids.length === 0) continue
-    topics.push({ id: fixed.id, label: fixed.label, blurb: fixed.blurb, variableIds: ids })
+    const words = t.topics[fixed.id as FixedTopicId] ?? { label: fixed.label, blurb: fixed.blurb }
+    topics.push({ id: fixed.id, label: words.label, blurb: words.blurb, variableIds: ids })
   }
 
   const categories = new Map<string, string[]>()
@@ -123,19 +128,19 @@ export function topicVariables(variables: readonly VariableMeta[]): TopicDefinit
     else categories.set(key, [variable.id])
   }
   for (const [category, ids] of categories) {
-    const { id, label } = categoryTopic(category)
+    const { id, label } = categoryTopic(category, lang)
     topics.push({
       id,
       label,
-      blurb: `Other ${label.toLowerCase()} variables published in this export.`,
+      blurb: t.categoryBlurb(label),
       variableIds: ids,
     })
   }
 
   topics.push({
     id: ALL_TOPIC,
-    label: 'Show me everything',
-    blurb: ALL_BLURB,
+    label: t.topics.all.label,
+    blurb: t.topics.all.blurb,
     variableIds: variables.map((variable) => variable.id),
   })
   return topics
@@ -190,11 +195,12 @@ export function topicRows(rows: readonly ScreenerRow[], topic: TopicDefinition):
 export type PlaceKind = 'global' | 'country' | 'region'
 
 /** "global land", "Vietnam's land", "the Mekong basin". */
-export function landPhrase(kind: PlaceKind, label: string): string {
-  if (kind === 'global') return 'global land'
-  if (kind === 'country') return `${label}'s land`
+export function landPhrase(kind: PlaceKind, label: string, lang: Lang = 'en'): string {
+  const t = pick(STRINGS, lang)
+  if (kind === 'global') return t.landGlobal
+  if (kind === 'country') return t.landCountry(label)
   const plain = label.replace(/\s*\(approx\. box\)$/i, '')
-  return `the ${plain}`
+  return t.landRegion(plain)
 }
 
 /** Percent, whole by default, e.g. 0.6345 → "63%"; digits = 1 matches the Screener ("63.5%"). Null is an em dash. */
@@ -226,6 +232,8 @@ export interface CardModel {
   share: number
   direction: 'increase' | 'decrease' | 'none'
   verdict: PlainVerdict
+  /** Which of the six verdicts this is, whatever the language of `verdict.label`. */
+  verdictKind: VerdictKind
   /** One sentence built from `plainVerdict` and the row's dominant area share. */
   headline: string
   /** Contract wording about a data discontinuity or a disagreeing witness, when present. */
@@ -253,7 +261,8 @@ function directionOf(row: ScreenerRow): 'increase' | 'decrease' | 'none' {
  * "A direction, not yet significant" (never "no change"); a flagged or
  * contradicted row is "Read with caution" and keeps its direction.
  */
-export function cardModel({ variable, row, land }: CardInput): CardModel {
+export function cardModel({ variable, row, land }: CardInput, lang: Lang = 'en'): CardModel {
+  const t = pick(STRINGS, lang)
   const increase = finiteOrNull(row.sig_increase_area_fraction)
   const decrease = finiteOrNull(row.sig_decrease_area_fraction)
   const rankedArea = significantArea(row)
@@ -271,63 +280,70 @@ export function cardModel({ variable, row, land }: CardInput): CardModel {
       ? TREND_INCREASE
       : TREND_DECREASE
     : TREND_NOT_SIGNIFICANT
-  const verdict = plainVerdict({
+  const englishVerdict = plainVerdict({
     trendClass,
     flagged,
     witnessCode: contradicted ? WITNESS_CONTRADICTED : null,
     increaseMeans: variable.increase_means,
     slope,
   })
+  const verdictKind = classifyVerdict(englishVerdict.label)
+  const dirPhrase = t.dirPhrase(variable.increase_means ?? '', trendClass === TREND_DECREASE ? 'decrease' : 'increase')
+  // English keeps the shared verdict words; other languages are worded from the kind.
+  const verdict: PlainVerdict =
+    lang === 'en'
+      ? englishVerdict
+      : { label: t.verdictLabel(verdictKind, dirPhrase), tone: englishVerdict.tone }
 
   // The direction word comes from the same vocabulary, even when the row is below
   // the "broad enough" threshold and the verdict is "not yet significant".
   const wordClass =
     direction === 'increase' ? TREND_INCREASE : direction === 'decrease' ? TREND_DECREASE : TREND_NOT_SIGNIFICANT
-  const directionWord = plainVerdict({ trendClass: wordClass, increaseMeans: variable.increase_means }).label.replace(
-    /,\s*strong evidence$/,
-    '',
-  )
+  const directionWord =
+    lang === 'en'
+      ? plainVerdict({ trendClass: wordClass, increaseMeans: variable.increase_means }).label.replace(
+          /,\s*strong evidence$/,
+          '',
+        )
+      : capitalise(t.dirPhrase(variable.increase_means ?? '', direction === 'decrease' ? 'decrease' : 'increase'))
   const percent = formatPercent(share, 1)
 
   let headline: string
   if (significant) {
     headline =
-      verdict.label === 'Read with caution'
-        ? `${directionWord} over ${percent} of ${land}, read with caution`
-        : `${directionWord} over ${percent} of ${land}, strong evidence`
-  } else if (share > 0 && verdict.label !== 'No clear trend' && direction !== 'none') {
-    headline = `${verdict.label}: ${directionWord.toLowerCase()} over ${percent} of ${land}`
+      verdictKind === 'caution'
+        ? t.headlineCaution(directionWord, percent, land)
+        : t.headlineStrong(directionWord, percent, land)
+  } else if (share > 0 && verdictKind !== 'noClear' && direction !== 'none') {
+    headline = t.headlineNotYet(verdict.label, directionWord.toLowerCase(), percent, land)
   } else {
-    headline = `${verdict.label} across ${land}`
+    headline = t.headlineNone(verdict.label, land)
   }
 
   const cautions: string[] = []
   const flaggedShare = finiteOrNull(row.sig_trend_flagged_fraction)
   const contradictedShare = finiteOrNull(row.witness_contradicted_fraction)
   if (flaggedShare != null && flaggedShare > CAUTION_ABOVE) {
-    cautions.push(
-      `Sudden-shift flags cover ${formatPercent(flaggedShare)} of the area with a significant trend: possible data discontinuity; read the trend with caution.`,
-    )
+    cautions.push(t.cautionFlagged(formatPercent(flaggedShare)))
   }
   if (contradictedShare != null && contradictedShare > CAUTION_ABOVE) {
-    cautions.push(
-      `An independent NASA dataset points the opposite way over ${formatPercent(contradictedShare)} of the significant area: read the trend with caution.`,
-    )
+    cautions.push(t.cautionContradicted(formatPercent(contradictedShare)))
   }
 
   const corroborated = finiteOrNull(row.witness_corroborated_fraction)
-  const witnessNote =
-    corroborated == null ? null : `${formatPercent(corroborated)} confirmed by a second NASA dataset`
+  const witnessNote = corroborated == null ? null : t.witnessNote(formatPercent(corroborated))
 
   const showsDirection = slope != null || direction !== 'none'
   const notYetNote =
-    (rankedArea ?? 0) < NOT_YET_BELOW && showsDirection && verdict.label !== 'No clear trend'
-      ? GLOSSARY.not_yet_significant.plain
+    (rankedArea ?? 0) < NOT_YET_BELOW && showsDirection && verdictKind !== 'noClear'
+      ? lang === 'en'
+        ? GLOSSARY.not_yet_significant.plain
+        : t.notYetNote
       : null
 
   return {
     variableId: variable.id,
-    label: variable.label,
+    label: variableLabel(variable, lang),
     description: variable.description,
     category: variable.category,
     unit: variable.display_unit,
@@ -339,11 +355,26 @@ export function cardModel({ variable, row, land }: CardInput): CardModel {
     share,
     direction,
     verdict,
+    verdictKind,
     headline,
     cautions,
     witnessNote,
     notYetNote,
   }
+}
+
+function capitalise(value: string): string {
+  return value.length === 0 ? value : value.charAt(0).toUpperCase() + value.slice(1)
+}
+
+/** Map the shared English verdict label to its kind (the label is the only thing plainVerdict returns). */
+function classifyVerdict(label: string): VerdictKind {
+  if (label === VERDICT_LABELS.caution) return 'caution'
+  if (label === VERDICT_LABELS.falling) return 'strongDecrease'
+  if (label === VERDICT_LABELS.notYet) return 'notYet'
+  if (label === VERDICT_LABELS.noClear) return 'noClear'
+  if (label === VERDICT_LABELS.notEnough) return 'notEnough'
+  return 'strongIncrease'
 }
 
 export interface WorkedExampleInput {

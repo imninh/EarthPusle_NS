@@ -25,6 +25,8 @@ import {
   type SpearmanResult,
 } from '../../lib/stats'
 import type { VariableMeta } from '../../data/types'
+import { pick, type Lang } from '../../i18n'
+import { MODEL_STRINGS } from './strings.text'
 
 export const CELL_METHOD = 'precomputed: Hamed–Rao modified Mann–Kendall, FDR-corrected'
 export const BROWSER_METHOD =
@@ -188,9 +190,9 @@ export function formatSignedRate(value: number): string {
 }
 
 /** "lower to upper" for a signed interval, or null when there is no interval. */
-export function formatInterval(interval: SenSlopeCI | null): string | null {
+export function formatInterval(interval: SenSlopeCI | null, lang: Lang = 'en'): string | null {
   if (!interval) return null
-  return `${formatSignedRate(interval.lower)} to ${formatSignedRate(interval.upper)}`
+  return `${formatSignedRate(interval.lower)} ${pick(MODEL_STRINGS, lang).to} ${formatSignedRate(interval.upper)}`
 }
 
 function variableFields(variable: VariableMeta, windowLabel: string, monthsInWindow: number) {
@@ -461,12 +463,14 @@ export function spearmanLabel(
   kind: 'precomputed' | 'computed',
   rho: number | null,
   n: number | null,
+  lang: Lang = 'en',
 ): string {
   if (n === 0 || rho == null || !Number.isFinite(rho)) return '—'
   const rhoText = rho.toFixed(3)
   const nText = n == null || !Number.isFinite(n) ? '—' : String(Math.round(n))
-  if (kind === 'precomputed') return `precomputed Spearman ρ = ${rhoText} (n = ${nText})`
-  return `computed here: Spearman ρ = ${rhoText} (n = ${nText})`
+  const s = pick(MODEL_STRINGS, lang)
+  if (kind === 'precomputed') return s.precomputedRho(rhoText, nText)
+  return s.computedRho(rhoText, nText)
 }
 
 export type BboxParse =
@@ -480,23 +484,27 @@ function parseFinite(raw: string): number | null {
   return Number.isFinite(value) ? value : null
 }
 
-export function validateBbox(input: { west: string; south: string; east: string; north: string }): BboxParse {
+export function validateBbox(
+  input: { west: string; south: string; east: string; north: string },
+  lang: Lang = 'en',
+): BboxParse {
+  const s = pick(MODEL_STRINGS, lang)
   const west = parseFinite(input.west)
   const south = parseFinite(input.south)
   const east = parseFinite(input.east)
   const north = parseFinite(input.north)
   if (west == null || south == null || east == null || north == null) {
-    return { ok: false, message: 'Enter finite numbers for west, south, east, and north.' }
+    return { ok: false, message: s.bboxNumbers }
   }
   if (south < -90 || south > 90 || north < -90 || north > 90) {
-    return { ok: false, message: 'Latitude must be between −90 and 90.' }
+    return { ok: false, message: s.bboxLatitude }
   }
   if (west < -180 || west > 180 || east < -180 || east > 180) {
-    return { ok: false, message: 'Longitude must be between −180 and 180.' }
+    return { ok: false, message: s.bboxLongitude }
   }
-  if (!(south < north)) return { ok: false, message: 'South must be less than north.' }
+  if (!(south < north)) return { ok: false, message: s.bboxSouthNorth }
   if (!(west < east)) {
-    return { ok: false, message: 'West must be less than east. Boxes that cross the dateline are not supported.' }
+    return { ok: false, message: s.bboxWestEast }
   }
   return { ok: true, bbox: [west, south, east, north] }
 }

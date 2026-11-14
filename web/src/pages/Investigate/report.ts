@@ -2,7 +2,10 @@
 // values that already exist in index.json and in the card models; it computes no
 // statistic and invents no DOI.
 import type { VariableMeta } from '../../data/types'
+import { pick, type Lang } from '../../i18n'
+import { variableLabel } from '../../i18n/terms'
 import type { CardModel } from './model'
+import { STRINGS } from './strings'
 
 export const REPORT_CREDIT = 'Report generated from NASA data by EarthPulse'
 export const REPORT_LIMITATION = 'A country figure is an area-weighted summary of 1° grid cells.'
@@ -53,16 +56,14 @@ export interface ReportHeaderInput {
   variables: readonly VariableMeta[]
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
 /** "2026-11-09T21:51:32Z" → "9 Nov 2026" (the UTC calendar date); null if unreadable. */
-export function formatExportDate(generatedAt: string): string | null {
+export function formatExportDate(generatedAt: string, lang: Lang = 'en'): string | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(generatedAt ?? '')
   if (!match) return null
   const month = Number(match[2])
   const day = Number(match[3])
   if (month < 1 || month > 12 || day < 1 || day > 31) return null
-  return `${day} ${MONTHS[month - 1]} ${match[1]}`
+  return pick(STRINGS, lang).exportDate(day, month, match[1])
 }
 
 function cleanDoi(doi: string | null | undefined): string | null {
@@ -76,7 +77,8 @@ function isSignificantVerdict(tone: string): boolean {
   return tone === 'accent' || tone === 'warn'
 }
 
-export function buildReportHeader(input: ReportHeaderInput): ReportHeader {
+export function buildReportHeader(input: ReportHeaderInput, lang: Lang = 'en'): ReportHeader {
+  const t = pick(STRINGS, lang)
   const byId = new Map(input.variables.map((variable) => [variable.id, variable]))
   const groups = new Map<string, ReportProduct>()
   for (const card of input.cards) {
@@ -86,42 +88,39 @@ export function buildReportHeader(input: ReportHeaderInput): ReportHeader {
     const key = `${variable.product}\u0000${variable.product_version}\u0000${doi ?? ''}`
     const existing = groups.get(key)
     if (existing) {
-      existing.variables.push(variable.label)
+      existing.variables.push(variableLabel(variable, lang))
       continue
     }
     const version = variable.product_version
     groups.set(key, {
-      variables: [variable.label],
+      variables: [variableLabel(variable, lang)],
       product: variable.product,
       version,
       doi,
       doiUrl: doi ? `https://doi.org/${doi}` : null,
-      text: `${variable.product}${version ? ` ${version}` : ''} · ${doi ? `DOI ${doi}` : 'DOI not listed'}`,
+      text: t.productText(`${variable.product}${version ? ` ${version}` : ''}`, doi),
     })
   }
 
   const significantCount = input.cards.filter((card) => isSignificantVerdict(card.verdict.tone)).length
   const total = input.cards.length
   let summary: string
-  if (total === 0) summary = 'No variable is shown for this selection.'
-  else if (significantCount === 0) {
-    summary = `None of the ${total} variables shown has a significant change over a broad area of ${input.placeLabel}.`
-  } else {
-    summary = `${significantCount} of ${total} variables shown ${significantCount === 1 ? 'has' : 'have'} a significant change over a broad area of ${input.placeLabel}.`
-  }
+  if (total === 0) summary = t.summaryNone
+  else if (significantCount === 0) summary = t.summaryNoSignificant(total, input.placeLabel)
+  else summary = t.summarySome(significantCount, total, input.placeLabel)
 
-  const exportDate = formatExportDate(input.generatedAt)
+  const exportDate = formatExportDate(input.generatedAt, lang)
   return {
     title: `${input.placeLabel} · ${input.period}`,
     period: input.period,
-    credit: REPORT_CREDIT,
+    credit: lang === 'en' ? REPORT_CREDIT : t.reportCredit,
     exportDate,
-    exportLine: exportDate ? `Data export of ${exportDate}` : 'Data export date not available',
+    exportLine: exportDate ? t.exportLine(exportDate) : t.exportLineMissing,
     products: [...groups.values()],
     significantCount,
     summary,
-    limitation: REPORT_LIMITATION,
-    localLine: input.placeId === VIETNAM_PLACE_ID ? VIETNAM_LINE : null,
+    limitation: lang === 'en' ? REPORT_LIMITATION : t.reportLimitation,
+    localLine: lang === 'en' && input.placeId === VIETNAM_PLACE_ID ? VIETNAM_LINE : null,
   }
 }
 

@@ -8,8 +8,11 @@ import {
   WITNESS_OPPOSITE_SIGN,
   WITNESS_SAME_SIGN,
 } from '../../data/contract'
+import { pick, useLang, type Lang } from '../../i18n'
 import type { EvidenceModel } from './model'
 import { qualityDetailText, type QualitySummary } from './quality'
+import { STRIP_STRINGS } from './strings'
+import { witnessLabelText } from './strings.place'
 import { witnessAgreementText, type WitnessInfo } from './witness'
 
 type StripTone = 'default' | 'caution'
@@ -39,32 +42,34 @@ export function witnessIsCaution(code: number | null | undefined): boolean {
   return code === WITNESS_SAME_SIGN || code === WITNESS_OPPOSITE_SIGN || code === WITNESS_CONTRADICTED
 }
 
-function significanceAnswer(evidence: EvidenceModel): CrossAnswer {
+function significanceAnswer(evidence: EvidenceModel, lang: Lang): CrossAnswer {
+  const s = pick(STRIP_STRINGS, lang)
   const significant = evidence.trendClass === 'increasing' || evidence.trendClass === 'decreasing'
   const notYet = evidence.trendClass === 'not significant'
-  const answer = significant ? 'Yes' : notYet ? 'Not yet' : 'Not enough data'
-  const pText = evidence.p == null ? 'p not available' : `p = ${formatStat(evidence.p)}`
+  const answer = significant ? s.yes : notYet ? s.notYet : s.notEnoughData
+  const pText = evidence.p == null ? s.pUnavailable : `p = ${formatStat(evidence.p)}`
   const qText = evidence.showQ ? ` · q = ${formatStat(evidence.q)}` : ''
   return {
-    question: '1 · Is it significant?',
+    question: s.q1,
     answer,
     detail: `${pText}${qText}`,
     tone: 'default',
     icon: significant ? 'check' : notYet ? 'clock' : 'question',
-    iconLabel: significant ? 'Significant trend' : notYet ? 'Not yet significant' : 'Not enough data',
+    iconLabel: significant ? s.significantIcon : notYet ? s.notYetIcon : s.notEnoughIcon,
   }
 }
 
-function qualityAnswer(quality: QualitySummary | null): CrossAnswer {
-  const question = '2 · Could it be a data glitch?'
+function qualityAnswer(quality: QualitySummary | null, lang: Lang): CrossAnswer {
+  const s = pick(STRIP_STRINGS, lang)
+  const question = s.q2
   if (!quality?.available) {
     return {
       question,
-      answer: 'Not checked',
-      detail: 'No data-quality flag was exported for this selection.',
+      answer: s.notChecked,
+      detail: s.noFlagExported,
       tone: 'default',
       icon: 'question',
-      iconLabel: 'Data quality not checked',
+      iconLabel: s.notCheckedIcon,
     }
   }
   const notEvaluated =
@@ -73,36 +78,34 @@ function qualityAnswer(quality: QualitySummary | null): CrossAnswer {
   if (notEvaluated) {
     return {
       question,
-      answer: 'Not checked',
+      answer: s.notChecked,
       detail:
-        qualityDetailText(quality) ??
-        (quality.scope === 'cell'
-          ? 'This cell was not evaluated for sudden shifts.'
-          : 'No cells in this region were evaluated for sudden shifts.'),
+        qualityDetailText(quality, lang) ??
+        (quality.scope === 'cell' ? s.cellNotEvaluated : s.regionNotEvaluated),
       tone: 'default',
       icon: 'question',
-      iconLabel: 'Data quality not checked',
+      iconLabel: s.notCheckedIcon,
     }
   }
-  const detail = qualityDetailText(quality)
+  const detail = qualityDetailText(quality, lang)
   if (!quality.flagged) {
     return {
       question,
-      answer: 'No flag',
-      detail: detail ?? 'No sudden shift detected in the evaluated area.',
+      answer: s.noFlag,
+      detail: detail ?? s.noShiftArea,
       tone: 'default',
       icon: 'check',
-      iconLabel: 'No data-quality flag',
+      iconLabel: s.noFlagIcon,
     }
   }
   if (quality.scope === 'cell') {
     return {
       question,
-      answer: 'Sudden shift flagged',
-      detail: detail ?? 'This cell carries a sudden-shift flag.',
+      answer: s.shiftFlagged,
+      detail: detail ?? s.cellFlag,
       tone: 'caution',
       icon: 'warning',
-      iconLabel: 'Data-quality warning',
+      iconLabel: s.warningIcon,
     }
   }
   const pct =
@@ -110,93 +113,69 @@ function qualityAnswer(quality: QualitySummary | null): CrossAnswer {
       ? Math.round(quality.flaggedShare * 100)
       : null
   const year = quality.breakYear == null ? null : Math.round(quality.breakYear)
-  const where = year == null ? '' : `around ${year}, `
-  const detailText =
-    pct == null
-      ? 'Sudden shift flagged; the flagged share of the area is not available.'
-      : `Sudden shift ${where}over ${pct}% of the area.`
+  const detailText = pct == null ? s.shareUnavailable : s.shareLine(year, String(pct))
   return {
     question,
-    answer: 'Sudden shift flagged',
+    answer: s.shiftFlagged,
     detail: detailText,
     tone: 'caution',
     icon: 'warning',
-    iconLabel: 'Data-quality warning',
+    iconLabel: s.warningIcon,
   }
 }
 
-function witnessAnswer(witness: WitnessInfo | null): CrossAnswer {
-  const question = '3 · Does a second NASA dataset agree?'
+function witnessAnswer(witness: WitnessInfo | null, lang: Lang): CrossAnswer {
+  const s = pick(STRIP_STRINGS, lang)
+  const question = s.q3
   if (!witness) {
     return {
       question,
-      answer: 'No second dataset',
-      detail: 'No second NASA dataset is exported for this selection.',
+      answer: s.noSecond,
+      detail: s.noSecondDetail,
       tone: 'default',
       icon: 'question',
-      iconLabel: 'No second dataset',
+      iconLabel: s.noSecondIcon,
     }
   }
   const agreement = witness.agreement
-  const detail = `${witness.label}: ${witnessAgreementText(agreement)}.`
+  const detail = s.witnessDetail(witnessLabelText(witness.label, lang), witnessAgreementText(agreement, lang))
   if (agreement === WITNESS_CONTRADICTED) {
-    return {
-      question,
-      answer: 'Disagrees',
-      detail,
-      tone: 'caution',
-      icon: 'cross',
-      iconLabel: 'Second dataset disagrees',
-    }
+    return { question, answer: s.disagrees, detail, tone: 'caution', icon: 'cross', iconLabel: s.disagreesIcon }
   }
   if (agreement === WITNESS_OPPOSITE_SIGN) {
     return {
       question,
-      answer: 'Not significant there',
+      answer: s.notSignificantThere,
       detail,
       tone: 'caution',
       icon: 'link',
-      iconLabel: 'Second dataset trend not significant',
+      iconLabel: s.notSignificantThereIcon,
     }
   }
   if (agreement === WITNESS_SAME_SIGN) {
     return {
       question,
-      answer: 'Agrees on direction only',
+      answer: s.directionOnly,
       detail,
       tone: 'caution',
       icon: 'link',
-      iconLabel: 'Second dataset agrees on direction only',
+      iconLabel: s.directionOnlyIcon,
     }
   }
   if (agreement === WITNESS_MAIN_NOT_SIGNIFICANT) {
     return {
       question,
-      answer: 'Not applicable',
+      answer: s.notApplicable,
       detail,
       tone: 'default',
       icon: 'question',
-      iconLabel: 'Second dataset not applicable',
+      iconLabel: s.notApplicableIcon,
     }
   }
   if (agreement === WITNESS_CORROBORATED) {
-    return {
-      question,
-      answer: 'Agrees',
-      detail,
-      tone: 'default',
-      icon: 'check',
-      iconLabel: 'Second dataset agrees',
-    }
+    return { question, answer: s.agrees, detail, tone: 'default', icon: 'check', iconLabel: s.agreesIcon }
   }
-  return {
-    question,
-    answer: 'Not evaluated',
-    detail,
-    tone: 'default',
-    icon: 'question',
-    iconLabel: 'Second dataset not evaluated',
-  }
+  return { question, answer: s.notEvaluated, detail, tone: 'default', icon: 'question', iconLabel: s.notEvaluatedIcon }
 }
 
 /** The three answers in order. Pure, so the page and its tests read the same source. */
@@ -204,8 +183,9 @@ export function crossExamination(
   evidence: EvidenceModel,
   quality: QualitySummary | null,
   witness: WitnessInfo | null,
+  lang: Lang = 'en',
 ): [CrossAnswer, CrossAnswer, CrossAnswer] {
-  return [significanceAnswer(evidence), qualityAnswer(quality), witnessAnswer(witness)]
+  return [significanceAnswer(evidence, lang), qualityAnswer(quality, lang), witnessAnswer(witness, lang)]
 }
 
 function AnswerIcon({ name, label }: { name: IconName; label: string }) {
@@ -276,11 +256,13 @@ export function VerdictStrip({
   quality: QualitySummary | null
   witness: WitnessInfo | null
 }) {
-  const answers = crossExamination(evidence, quality, witness)
+  const { lang } = useLang()
+  const s = pick(STRIP_STRINGS, lang)
+  const answers = crossExamination(evidence, quality, witness, lang)
   return (
     <section className="verdict-strip-section" aria-labelledby="region-cross-examination">
       <h2 id="region-cross-examination" className="label-caps verdict-strip-title">
-        Cross-examination
+        {s.title}
       </h2>
       <ol className="verdict-strip">
         {answers.map((item) => (

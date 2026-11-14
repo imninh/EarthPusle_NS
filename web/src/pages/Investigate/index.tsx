@@ -10,7 +10,9 @@ import { Card, Disclosure, GlossaryTip, VerdictStamp } from '../../components/ui
 import { useApp } from '../../data/AppState'
 import { loadCases, loadCountries, loadRegions, loadScreener } from '../../data/loaders'
 import type { CasesFile, Country, DetectiveCase, Region, ScreenerFile, WindowMeta } from '../../data/types'
-import { formatUnit } from '../../lib/format'
+import { formatUnitIn } from '../../lib/format'
+import { useLang, useStrings } from '../../i18n'
+import { caseTitle, variableDescription, variableLabel } from '../../i18n/terms'
 import {
   ALL_TOPIC,
   DEFAULT_INVESTIGATE,
@@ -33,6 +35,7 @@ import {
 import { downloadReportImage } from './image'
 import { CalendarIcon, MagnifierIcon, PinIcon, TopicIcon } from './icons'
 import { buildReportHeader } from './report'
+import { STRINGS } from './strings'
 import './investigate.css'
 
 const STORE_KEY = 'earthpulse.investigate.v1'
@@ -40,13 +43,6 @@ const STORE_KEY = 'earthpulse.investigate.v1'
 interface StoredAnswers {
   state: InvestigateState
   navHash: string | null
-}
-
-/** One plain sentence per published window; unknown ids fall back to the date range. */
-const WINDOW_NOTES: Record<string, string> = {
-  '2001-2024': 'The full record: 24 years, best for slow changes.',
-  '2001-2012': 'The first half: compare it with the recent period.',
-  '2013-2024': 'The recent period: what changed in the last twelve years.',
 }
 
 function messageOf(err: unknown): string {
@@ -117,11 +113,11 @@ function windowYears(window: WindowMeta | undefined, fallback: string): string {
   return `${window.start.slice(0, 4)}–${window.end.slice(0, 4)}`
 }
 
-/** Verdict label to stamp tone; yellow is used for caution only. */
+/** Verdict kind to stamp tone; yellow is used for caution only. */
 function stampTone(card: CardModel): 'strong' | 'caution' | 'not-yet' | 'none' {
   if (card.verdict.tone === 'warn') return 'caution'
   if (card.verdict.tone === 'accent') return 'strong'
-  return card.verdict.label === 'A direction, not yet significant' ? 'not-yet' : 'none'
+  return card.verdictKind === 'notYet' ? 'not-yet' : 'none'
 }
 
 /** Width of a bar segment, clamped to 0-100. */
@@ -130,11 +126,9 @@ function barPercent(fraction: number | null): number {
   return Math.max(0, Math.min(100, fraction * 100))
 }
 
-function topicButtonLabel(count: number): string {
-  return count === 1 ? '1 variable' : `${count} variables`
-}
-
 export default function InvestigatePage() {
+  const s = useStrings(STRINGS)
+  const { lang } = useLang()
   const { index, windowId: appWindowId, setWindowId, navigate } = useApp()
 
   // Read the first answer once: the shared router rewrites the hash to `w` only,
@@ -259,7 +253,7 @@ export default function InvestigatePage() {
     }
   }, [state.windowId, state.place, attempt])
 
-  const topics = useMemo(() => topicVariables(index.variables), [index.variables])
+  const topics = useMemo(() => topicVariables(index.variables, lang), [index.variables, lang])
   const topic = findTopic(topics, state.topic)
 
   // An unknown `topic=` in a hand-edited link falls back to the complete list.
@@ -268,26 +262,26 @@ export default function InvestigatePage() {
   }, [state.topic, topic.id, commit])
 
   const place = useMemo((): { kind: PlaceKind; label: string } => {
-    if (state.place === GLOBAL_PLACE) return { kind: 'global', label: 'the whole world' }
+    if (state.place === GLOBAL_PLACE) return { kind: 'global', label: s.worldLabel }
     const country = countries.find((item) => item.id === state.place)
     if (country) return { kind: 'country', label: country.label }
     const region = regions.find((item) => item.id === state.place)
     if (region) return { kind: 'region', label: region.label }
     return { kind: 'region', label: state.place }
-  }, [state.place, countries, regions])
+  }, [state.place, countries, regions, s.worldLabel])
 
   const windowMeta = index.windows.find((window) => window.id === state.windowId)
   const years = windowYears(windowMeta, state.windowId)
-  const land = landPhrase(place.kind, place.label)
+  const land = landPhrase(place.kind, place.label, lang)
 
   const cards = useMemo((): CardModel[] => {
     if (!screener) return []
     const byId = new Map(index.variables.map((variable) => [variable.id, variable]))
     return topicRows(screener.rows, topic).flatMap((row) => {
       const variable = byId.get(row.variable)
-      return variable ? [cardModel({ variable, row, land })] : []
+      return variable ? [cardModel({ variable, row, land }, lang)] : []
     })
-  }, [screener, index.variables, topic, land])
+  }, [screener, index.variables, topic, land, lang])
 
   const suggestions = useMemo(
     () => (cases ? suggestedPlaces(countries, cases.cases) : []),
@@ -328,18 +322,18 @@ export default function InvestigatePage() {
             generatedAt: index.generated_at,
             cards,
             variables: index.variables,
-          })
+          }, lang)
         : null,
-    [isCountry, state.place, place.label, years, index.generated_at, cards, index.variables],
+    [isCountry, state.place, place.label, years, index.generated_at, cards, index.variables, lang],
   )
   const [shareNote, setShareNote] = useState<string | null>(null)
 
   const copyLink = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(window.location.href)
-      setShareNote('Link copied.')
+      setShareNote(s.linkCopied)
     } catch {
-      setShareNote('Could not copy the link. Copy it from the address bar.')
+      setShareNote(s.linkFailed)
     }
   }
 
@@ -347,12 +341,12 @@ export default function InvestigatePage() {
     if (!header) return
     try {
       await downloadReportImage(
-        { header, topic: topic.label, cards, url: window.location.href },
+        { header, topic: topic.label, cards, url: window.location.href, lang },
         `earthpulse-${state.place}-${topic.id}-${state.windowId}.png`,
       )
-      setShareNote('Image downloaded.')
+      setShareNote(s.imageDone)
     } catch (err) {
-      setShareNote(`Could not create the image. ${messageOf(err)}`)
+      setShareNote(s.imageFailed(messageOf(err)))
     }
   }
 
@@ -369,34 +363,31 @@ export default function InvestigatePage() {
     buttons[(at + step + buttons.length) % buttons.length].focus()
   }
 
-  const labelOf = (variableId: string): string =>
-    index.variables.find((variable) => variable.id === variableId)?.label ?? variableId
+  const labelOf = (variableId: string): string => {
+    const found = index.variables.find((variable) => variable.id === variableId)
+    return found ? variableLabel(found, lang) : variableId
+  }
 
   return (
     <div className="investigate">
       <header className="investigate-head">
-        <p className="eyebrow">Investigate</p>
-        <h1 className="display">Start an investigation</h1>
-        <p className="investigate-promise">
-          Answer three short questions and get a ranked shortlist of NASA variables for that place and period. Every
-          number comes from the published data; nothing is estimated in your browser.
-        </p>
+        <p className="eyebrow">{s.eyebrow}</p>
+        <h1 className="display">{s.title}</h1>
+        <p className="investigate-promise">{s.promise}</p>
       </header>
 
       <div className="investigate-questions">
       <section className="investigate-question" aria-labelledby="investigate-where">
         <div className="investigate-question-top">
           <PinIcon />
-          <p className="label-caps">1 · Where</p>
+          <p className="label-caps">{s.q1Label}</p>
         </div>
-        <h2 id="investigate-where">Where do you want to look?</h2>
-        <p className="investigate-question-help">
-          Pick a country, a published region, or the whole world. The answer uses only land cells with data.
-        </p>
+        <h2 id="investigate-where">{s.q1Title}</h2>
+        <p className="investigate-question-help">{s.q1Help}</p>
         <div className="investigate-place-row">
           <PlaceSearch
             onPick={(selection) => commit({ place: selection.regionId })}
-            placeholder="Search a country or region"
+            placeholder={s.searchPlaceholder}
           />
           <button
             type="button"
@@ -404,15 +395,15 @@ export default function InvestigatePage() {
             aria-pressed={state.place === GLOBAL_PLACE}
             onClick={() => commit({ place: GLOBAL_PLACE })}
           >
-            The whole world (land)
+            {s.worldButton}
           </button>
         </div>
         <p className="investigate-selected" aria-live="polite">
-          Looking at <strong>{place.label}</strong>.
+          {s.lookingAtBefore}<strong>{place.label}</strong>{s.lookingAtAfter}
         </p>
         {suggestions.length > 0 ? (
           <div className="investigate-suggest">
-            <p className="investigate-suggest-label">Or start from a place with a published worked example:</p>
+            <p className="investigate-suggest-label">{s.suggestLabel}</p>
             <div className="investigate-suggest-buttons">
               {suggestions.map((item) => (
                 <button
@@ -433,10 +424,10 @@ export default function InvestigatePage() {
       <section className="investigate-question" aria-labelledby="investigate-topic">
         <div className="investigate-question-top">
           <MagnifierIcon />
-          <p className="label-caps">2 · What</p>
+          <p className="label-caps">{s.q2Label}</p>
         </div>
-        <h2 id="investigate-topic">What are you curious about?</h2>
-        <p className="investigate-question-help">Choose one topic. You can change it at any time.</p>
+        <h2 id="investigate-topic">{s.q2Title}</h2>
+        <p className="investigate-question-help">{s.q2Help}</p>
         <div
           className="investigate-topics"
           role="group"
@@ -456,15 +447,12 @@ export default function InvestigatePage() {
               <TopicIcon id={item.id.startsWith('category-') ? 'other' : item.id} />
               <span className="investigate-topic-title">{item.label}</span>
               <span className="investigate-topic-blurb">{item.blurb}</span>
-              <span className="investigate-topic-count">{topicButtonLabel(item.variableIds.length)}</span>
+              <span className="investigate-topic-count">{s.topicCount(item.variableIds.length)}</span>
             </button>
           ))}
         </div>
-        <Disclosure summary="Why these variables?" className="investigate-why">
-          <p>
-            Each topic is a fixed list written in the code. A variable appears only when this data export contains it;
-            anything new appears under a card named after its category and under &ldquo;Show me everything&rdquo;.
-          </p>
+        <Disclosure summary={s.whySummary} className="investigate-why">
+          <p>{s.whyIntro}</p>
           <ul>
             {topics
               .filter((item) => item.id !== ALL_TOPIC)
@@ -474,7 +462,7 @@ export default function InvestigatePage() {
                 </li>
               ))}
             <li>
-              <strong>Show me everything:</strong> every variable listed above.
+              <strong>{s.whyAllTitle}:</strong> {s.whyAllBody}
             </li>
           </ul>
         </Disclosure>
@@ -483,10 +471,10 @@ export default function InvestigatePage() {
       <section className="investigate-question" aria-labelledby="investigate-when">
         <div className="investigate-question-top">
           <CalendarIcon />
-          <p className="label-caps">3 · When</p>
+          <p className="label-caps">{s.q3Label}</p>
         </div>
-        <h2 id="investigate-when">Which years?</h2>
-        <p className="investigate-question-help">Each period was analysed separately; longer records see slower changes.</p>
+        <h2 id="investigate-when">{s.q3Title}</h2>
+        <p className="investigate-question-help">{s.q3Help}</p>
         <div
           className="investigate-windows"
           role="group"
@@ -505,7 +493,7 @@ export default function InvestigatePage() {
             >
               <span className="investigate-window-years">{windowYears(window, window.id)}</span>
               <span className="investigate-window-note">
-                {WINDOW_NOTES[window.id] ?? `Published analysis period ${window.id}.`}
+                {s.windowNotes[window.id] ?? s.windowNoteFallback(window.id)}
               </span>
             </button>
           ))}
@@ -516,8 +504,8 @@ export default function InvestigatePage() {
       <section className="investigate-answer" aria-labelledby="investigate-answer-title">
         <div className="investigate-answer-head">
           <div>
-            <p className="label-caps">Report</p>
-            <h2 id="investigate-answer-title">What the evidence says</h2>
+            <p className="label-caps">{s.answerKicker}</p>
+            <h2 id="investigate-answer-title">{s.answerTitle}</h2>
           </div>
           <p className="investigate-answer-where">
             {place.label} · {topic.label} · {years}
@@ -526,7 +514,7 @@ export default function InvestigatePage() {
 
         {header ? (
           <div className="investigate-report-head">
-            <p className="label-caps investigate-report-kicker">Country report</p>
+            <p className="label-caps investigate-report-kicker">{s.reportKicker}</p>
             <h3 className="investigate-report-title">{header.title}</h3>
             <p className="investigate-report-credit">
               {header.credit}. {header.exportLine}.
@@ -538,7 +526,7 @@ export default function InvestigatePage() {
             ) : null}
             {cards.length > 0 ? <p className="investigate-report-summary">{header.summary}</p> : null}
             {header.products.length > 0 ? (
-              <ul className="investigate-report-products" aria-label="NASA products used">
+              <ul className="investigate-report-products" aria-label={s.productsAria}>
                 {header.products.map((product) => (
                   <li key={product.text}>
                     <span className="investigate-report-product-vars">{product.variables.join(', ')}:</span>{' '}
@@ -546,13 +534,13 @@ export default function InvestigatePage() {
                     {product.version ? ` ${product.version}` : ''} ·{' '}
                     {product.doi && product.doiUrl ? (
                       <>
-                        DOI{' '}
+                        {s.doi}{' '}
                         <a className="num-mono" href={product.doiUrl} target="_blank" rel="noreferrer">
                           {product.doi}
                         </a>
                       </>
                     ) : (
-                      <span>DOI not listed</span>
+                      <span>{s.doiNotListed}</span>
                     )}
                   </li>
                 ))}
@@ -562,13 +550,13 @@ export default function InvestigatePage() {
             {cards.length > 0 ? (
               <div className="investigate-report-actions">
                 <button type="button" className="button" onClick={() => window.print()}>
-                  Print this report
+                  {s.print}
                 </button>
                 <button type="button" className="button" onClick={() => void copyLink()}>
-                  Copy link
+                  {s.copyLink}
                 </button>
                 <button type="button" className="button" onClick={() => void saveImage()}>
-                  Download image
+                  {s.downloadImage}
                 </button>
                 <span className="investigate-share-note" role="status">
                   {shareNote}
@@ -579,7 +567,7 @@ export default function InvestigatePage() {
         ) : null}
 
         {status === 'loading' ? (
-          <div role="status" aria-label={`Loading the published screener file for ${place.label} and ${years}`}>
+          <div role="status" aria-label={s.loadingAria(place.label, years)}>
             <ol className="investigate-cards investigate-skeletons" aria-hidden="true">
               {[0, 1, 2].map((n) => (
                 <li key={n} className="investigate-skeleton" />
@@ -590,9 +578,9 @@ export default function InvestigatePage() {
 
         {status === 'error' ? (
           <div className="investigate-status" role="alert">
-            <p>Could not load the screener file for {place.label} and {years}. {error}</p>
+            <p>{s.loadError(place.label, years, error ?? '')}</p>
             <button type="button" className="button secondary" onClick={() => setAttempt((value) => value + 1)}>
-              Try again
+              {s.tryAgain}
             </button>
           </div>
         ) : null}
@@ -600,14 +588,11 @@ export default function InvestigatePage() {
         {status === 'ready' && notFound ? (
           <div className="investigate-status" role="status">
             <div>
-              <p className="label-caps">No data for this selection</p>
-              <p>
-                No screener file is published for {place.label} in {years}. The whole-world answer is still
-                available.
-              </p>
+              <p className="label-caps">{s.noDataLabel}</p>
+              <p>{s.notPublished(place.label, years)}</p>
             </div>
             <button type="button" className="button secondary" onClick={() => commit({ place: GLOBAL_PLACE })}>
-              Try the whole world
+              {s.tryWorld}
             </button>
           </div>
         ) : null}
@@ -615,32 +600,30 @@ export default function InvestigatePage() {
         {status === 'ready' && !notFound && cards.length === 0 ? (
           <div className="investigate-status" role="status">
             <div>
-              <p className="label-caps">No data for this selection</p>
-              <p>This period has no evaluated rows for {place.label} in these topics.</p>
+              <p className="label-caps">{s.noDataLabel}</p>
+              <p>{s.noRows(place.label)}</p>
             </div>
             <button type="button" className="button secondary" onClick={() => commit({ place: GLOBAL_PLACE })}>
-              Try the whole world
+              {s.tryWorld}
             </button>
           </div>
         ) : null}
 
         {example && status === 'ready' && !notFound ? (
-          <aside className="investigate-example" aria-label="Worked example">
+          <aside className="investigate-example" aria-label={s.exampleAria}>
             <div>
               <p className="investigate-example-kicker">
-                {example.kind === 'caution' ? 'Published caution case' : 'Published finding'}
+                {example.kind === 'caution' ? s.exampleCaution : s.exampleFinding}
               </p>
-              <p className="investigate-example-title">{example.title}</p>
-              <p className="investigate-example-note">
-                A worked example from the same published data, chosen for this place or these variables.
-              </p>
+              <p className="investigate-example-title">{caseTitle(example, lang)}</p>
+              <p className="investigate-example-note">{s.exampleNote}</p>
             </div>
             <button
               type="button"
               className="button secondary"
               onClick={() => navigate('story', { caseId: example.id })}
             >
-              Watch a worked example
+              {s.exampleButton}
             </button>
           </aside>
         ) : null}
@@ -653,7 +636,7 @@ export default function InvestigatePage() {
                   <div className="investigate-card-head">
                     <div>
                       <h3>{card.label}</h3>
-                      <p className="investigate-card-description">{card.description}</p>
+                      <p className="investigate-card-description">{variableDescription({ id: card.variableId, description: card.description }, lang)}</p>
                     </div>
                     <div className="investigate-card-chips">
                       <VerdictStamp label={card.verdict.label} tone={stampTone(card)} />
@@ -665,7 +648,7 @@ export default function InvestigatePage() {
                     <div
                       className="investigate-bar"
                       role="img"
-                      aria-label={`Significant increase ${formatPercent(card.sigIncrease, 1)}, significant decrease ${formatPercent(card.sigDecrease, 1)}, the rest not significant`}
+                      aria-label={s.barAria(formatPercent(card.sigIncrease, 1), formatPercent(card.sigDecrease, 1))}
                     >
                       <span
                         className="investigate-bar-inc"
@@ -677,9 +660,9 @@ export default function InvestigatePage() {
                       />
                     </div>
                     <p className="investigate-card-numbers num-mono">
-                      <span className="investigate-num-inc">▲ {formatPercent(card.sigIncrease, 1)} increase</span>
-                      <span className="investigate-num-dec">▼ {formatPercent(card.sigDecrease, 1)} decrease</span>
-                      <span className="investigate-num-unit">{formatUnit(card.unit)}</span>
+                      <span className="investigate-num-inc">{s.numIncrease(formatPercent(card.sigIncrease, 1))}</span>
+                      <span className="investigate-num-dec">{s.numDecrease(formatPercent(card.sigDecrease, 1))}</span>
+                      <span className="investigate-num-unit">{formatUnitIn(card.unit, lang)}</span>
                     </p>
                   </div>
 
@@ -691,7 +674,7 @@ export default function InvestigatePage() {
                   ))}
                   {card.witnessNote ? <p className="investigate-card-witness">{card.witnessNote}.</p> : null}
 
-                  <Disclosure summary="How do we know?" className="investigate-how">
+                  <Disclosure summary={s.howSummary} className="investigate-how">
                     <ul className="investigate-glossary">
                       <li>
                         <GlossaryTip term="significant" />
@@ -710,9 +693,9 @@ export default function InvestigatePage() {
                       type="button"
                       className="button primary"
                       onClick={() => openEvidence(card)}
-                      aria-label={`Open the evidence for ${card.label}`}
+                      aria-label={s.openEvidenceAria(card.label)}
                     >
-                      Open the evidence
+                      {s.openEvidence}
                     </button>
                     <button
                       type="button"
@@ -720,9 +703,9 @@ export default function InvestigatePage() {
                       onClick={() =>
                         navigate('discovery', { variableId: card.variableId, windowId: state.windowId })
                       }
-                      aria-label={`See it on the map: ${card.label}`}
+                      aria-label={s.seeOnMapAria(card.label)}
                     >
-                      See it on the map
+                      {s.seeOnMap}
                     </button>
                   </div>
                 </Card>
@@ -732,11 +715,7 @@ export default function InvestigatePage() {
         ) : null}
 
         {cards.length > 0 ? (
-          <p className="investigate-rule">
-            Ordered by the share of land with a significant change (increase + decrease), largest first. Each share is
-            the area-weighted fraction of evaluated land cells in the published screener file for {place.label} and{' '}
-            {years}.
-          </p>
+          <p className="investigate-rule">{s.rule(place.label, years)}</p>
         ) : null}
       </section>
     </div>

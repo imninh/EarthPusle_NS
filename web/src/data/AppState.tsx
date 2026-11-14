@@ -21,6 +21,9 @@ export interface NavigationOptions {
   domain?: string
   caseId?: string | null
   mapLayer?: string
+  place?: string | null
+  topic?: string | null
+  view?: string | null
 }
 
 export interface AppState {
@@ -42,6 +45,13 @@ export interface AppState {
   setCaseId: (id: string | null) => void
   /** Discovery layer requested by a link, e.g. "witness". */
   mapLayer: string | null
+  /** Investigate page: selected place id, topic id and optional view. */
+  place: string | null
+  setPlace: (place: string | null) => void
+  topic: string | null
+  setTopic: (topic: string | null) => void
+  view: string | null
+  setView: (view: string | null) => void
   /** Select something and open a page in one call. */
   navigate: (page: Page, opts?: NavigationOptions) => void
 }
@@ -98,6 +108,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [domain, setDomainState] = useState(start.domain ?? 'global')
   const [caseId, setCaseIdState] = useState<string | null>(start.caseId)
   const [mapLayer, setMapLayerState] = useState<string | null>(start.layer)
+  const [place, setPlaceState] = useState<string | null>(start.place)
+  const [topic, setTopicState] = useState<string | null>(start.topic)
+  const [view, setViewState] = useState<string | null>(start.view)
 
   const stateRef = useRef<RouteState>({
     page,
@@ -107,8 +120,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     domain,
     caseId,
     layer: mapLayer,
+    place,
+    topic,
+    view,
   })
-  stateRef.current = { page, variableId, windowId, selection, domain, caseId, layer: mapLayer }
+  stateRef.current = {
+    page,
+    variableId,
+    windowId,
+    selection,
+    domain,
+    caseId,
+    layer: mapLayer,
+    place,
+    topic,
+    view,
+  }
 
   const apply = useCallback((next: RouteState) => {
     stateRef.current = next
@@ -119,6 +146,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setDomainState(next.domain ?? 'global')
     setCaseIdState(next.caseId)
     setMapLayerState(next.layer)
+    setPlaceState(next.place)
+    setTopicState(next.topic)
+    setViewState(next.view)
   }, [])
 
   const commit = useCallback(
@@ -159,6 +189,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const setSelection = useCallback((s: Selection) => commit({ selection: s }, 'push'), [commit])
   const setDomain = useCallback((id: string) => commit({ domain: id }, 'replace'), [commit])
   const setCaseId = useCallback((id: string | null) => commit({ caseId: id }, 'replace'), [commit])
+  const setPlace = useCallback((id: string | null) => commit({ place: id }, 'replace'), [commit])
+  const setTopic = useCallback((id: string | null) => commit({ topic: id }, 'replace'), [commit])
+  const setView = useCallback((id: string | null) => commit({ view: id }, 'replace'), [commit])
 
   const value = useMemo<AppState | null>(() => {
     if (!index) return null
@@ -179,6 +212,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       caseId,
       setCaseId,
       mapLayer,
+      place,
+      setPlace,
+      topic,
+      setTopic,
+      view,
+      setView,
       navigate: (p, opts) => {
         const patch: Partial<RouteState> = { page: p }
         if (opts?.variableId) patch.variableId = opts.variableId
@@ -187,6 +226,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         if (opts?.domain) patch.domain = opts.domain
         if (opts && 'caseId' in opts) patch.caseId = opts.caseId ?? null
         if (opts?.mapLayer) patch.layer = opts.mapLayer
+        if (opts && 'place' in opts) patch.place = opts.place ?? null
+        if (opts && 'topic' in opts) patch.topic = opts.topic ?? null
+        if (opts && 'view' in opts) patch.view = opts.view ?? null
         commit(patch, 'push')
       },
     }
@@ -199,12 +241,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     domain,
     caseId,
     mapLayer,
+    place,
+    topic,
+    view,
     setPage,
     setVariableId,
     setWindowId,
     setSelection,
     setDomain,
     setCaseId,
+    setPlace,
+    setTopic,
+    setView,
     commit,
   ])
 

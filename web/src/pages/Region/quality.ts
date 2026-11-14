@@ -2,8 +2,10 @@
 // Flag codes: 0 = no sudden shift, 1 = sudden shift, 2 = sudden shift
 // in a documented forcing-change period, −9 = not evaluated, −99 = outside domain.
 import { N_COLS, N_ROWS, QUALITY_STEP_KNOWN_FORCING, cellAreaWeight, cellIndex } from '../../data/contract'
+import { pick, type Lang } from '../../i18n'
 import type { CellRange } from './model'
 import { rangeColSegments } from './model'
+import { QUALITY_STRINGS } from './strings.text'
 
 export type QualityScope = 'cell' | 'region'
 
@@ -175,10 +177,11 @@ const DEFAULT_FORCING_PERIOD: readonly [number, number] = [2008, 2012]
 export function documentedInputChange(
   product: string,
   knownForcingPeriod?: readonly [number, number] | null,
+  lang: Lang = 'en',
 ): string {
   const [start, end] = knownForcingPeriod ?? DEFAULT_FORCING_PERIOD
   const period = start === end ? `${start}` : `${start}–${end}`
-  return `documented ${productFamily(product)} input change (${period})`
+  return pick(QUALITY_STRINGS, lang).documentedChange(productFamily(product), period)
 }
 
 function breakYearWithin(year: number | null, period?: readonly [number, number] | null): boolean {
@@ -196,13 +199,12 @@ export function isKnownForcingShift(
   return quality.scope === 'region' && breakYearWithin(quality.breakYear, knownForcingPeriod)
 }
 
-function codeTwoSentence(product: string, period?: readonly [number, number] | null): string {
-  return `Sudden shift during a ${documentedInputChange(product, period)}: possible data discontinuity. Read the trend with caution.`
+function codeTwoSentence(product: string, period: readonly [number, number] | null | undefined, lang: Lang): string {
+  return pick(QUALITY_STRINGS, lang).codeTwo(documentedInputChange(product, period, lang))
 }
 
-function codeOneSentence(year: number | null): string {
-  const around = year == null ? '' : ` around ${year}`
-  return `Sudden shift${around}: this could be a real jump in the climate or a data artefact. The trend is still significant; a step fits slightly better than a straight line.`
+function codeOneSentence(year: number | null, lang: Lang): string {
+  return pick(QUALITY_STRINGS, lang).codeOne(year)
 }
 
 /**
@@ -215,49 +217,44 @@ export function qualityBannerText(
   product: string,
   version: string,
   knownForcingPeriod: readonly [number, number] | null | undefined,
+  lang: Lang = 'en',
 ): string | null {
   if (!quality?.available || !quality.flagged) return null
+  const s = pick(QUALITY_STRINGS, lang)
   const year = quality.breakYear == null ? null : Math.round(quality.breakYear)
   const knownForcing = isKnownForcingShift(quality, knownForcingPeriod)
   void version
   if (quality.scope === 'cell') {
-    return knownForcing ? codeTwoSentence(product, knownForcingPeriod) : codeOneSentence(year)
+    return knownForcing ? codeTwoSentence(product, knownForcingPeriod, lang) : codeOneSentence(year, lang)
   }
   const pct =
     quality.flaggedShare != null && quality.flaggedShare > 0
       ? Math.max(1, Math.round(quality.flaggedShare * 100))
       : null
-  const prefix =
-    pct == null
-      ? 'Part of this change shows'
-      : `About ${pct}% of evaluated cells in this region show`
-  if (knownForcing) {
-    return `${prefix} a sudden shift during a ${documentedInputChange(product, knownForcingPeriod)}: possible data discontinuity. Read the trend with caution.`
-  }
-  const around = year == null ? '' : ` around ${year}`
-  return `${prefix} a sudden shift${around}: this could be a real jump in the climate or a data artefact. The trend is still significant; a step fits slightly better than a straight line.`
+  const lead = pct == null ? s.leadBannerPart : s.leadBannerPct(pct)
+  if (knownForcing) return s.regionKnown(lead, documentedInputChange(product, knownForcingPeriod, lang))
+  return s.regionOther(lead, year)
 }
 
 /** Short row for the evidence card; null when the export has no quality layers. */
-export function qualityDetailText(quality: QualitySummary | null | undefined): string | null {
+export function qualityDetailText(quality: QualitySummary | null | undefined, lang: Lang = 'en'): string | null {
   if (!quality?.available) return null
+  const s = pick(QUALITY_STRINGS, lang)
   if (quality.scope === 'cell') {
-    if (quality.flag == null) return 'No quality flag for this cell.'
-    if (quality.flag < 0) return 'This cell was not evaluated for sudden shifts.'
-    if (!quality.flagged) return 'No sudden shift detected in this cell.'
+    if (quality.flag == null) return s.cellNoFlag
+    if (quality.flag < 0) return s.cellNotEvaluated
+    if (!quality.flagged) return s.cellNoShift
     return quality.flag === QUALITY_STEP_KNOWN_FORCING
-      ? codeTwoSentence('GLDAS_NOAH10_M', null)
-      : codeOneSentence(quality.breakYear == null ? null : Math.round(quality.breakYear))
+      ? codeTwoSentence('GLDAS_NOAH10_M', null, lang)
+      : codeOneSentence(quality.breakYear == null ? null : Math.round(quality.breakYear), lang)
   }
-  if (quality.evaluatedCells === 0) return 'No cells in this region were evaluated for sudden shifts.'
-  if (!quality.flagged) return 'No sudden shift detected in the evaluated cells.'
+  if (quality.evaluatedCells === 0) return s.regionNotEvaluated
+  if (!quality.flagged) return s.regionNoShift
   const pct = quality.flaggedShare == null ? null : Math.round(quality.flaggedShare * 100)
-  const share = pct == null ? '' : `${pct}% of evaluated cells`
+  const lead = pct == null ? s.leadDetailFlagged : s.leadDetailPct(pct)
   const year = quality.breakYear == null ? null : Math.round(quality.breakYear)
-  const knownForcing = isKnownForcingShift(quality, DEFAULT_FORCING_PERIOD)
-  if (knownForcing) {
-    return `${share ? `${share} show` : 'The flagged cells show'} a sudden shift during a ${documentedInputChange('GLDAS_NOAH10_M', null)}: possible data discontinuity. Read the trend with caution.`
+  if (isKnownForcingShift(quality, DEFAULT_FORCING_PERIOD)) {
+    return s.regionKnown(lead, documentedInputChange('GLDAS_NOAH10_M', null, lang))
   }
-  const around = year == null ? '' : ` around ${year}`
-  return `${share ? `${share} show` : 'The flagged cells show'} a sudden shift${around}: this could be a real jump in the climate or a data artefact. The trend is still significant; a step fits slightly better than a straight line.`
+  return s.regionOther(lead, year)
 }

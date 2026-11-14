@@ -2,13 +2,13 @@
 // buildCheckYourself; the links are the three tools listed in the challenge's
 // Resources tab, with no deep links or query strings added.
 
+import { useStrings } from '../../i18n'
 import type { CheckYourselfModel } from './checkYourself'
-
-const SERIES_NOTE =
-  'These tools draw and test one series at a time. EarthPulse adds screening across variables, correction for many tests, data-quality flags and a second dataset.'
+import { CHECK_STRINGS } from './strings'
 
 export function CheckYourselfPanel({ check }: { check: CheckYourselfModel }) {
   const { values, tools } = check
+  const s = useStrings(CHECK_STRINGS)
   return (
     <div className="region-check">
       <ul className="region-check-links">
@@ -22,29 +22,28 @@ export function CheckYourselfPanel({ check }: { check: CheckYourselfModel }) {
       </ul>
 
       <div className="region-check-entry">
-        <p className="label-caps region-check-heading">Values to enter</p>
+        <p className="label-caps region-check-heading">{s.valuesToEnter}</p>
         <dl className="region-check-values">
-          <dt>Product short name</dt>
+          <dt>{s.productShortName}</dt>
           <dd className="num-mono">{values.product}</dd>
-          <dt>Product version</dt>
+          <dt>{s.productVersion}</dt>
           <dd className="num-mono">{values.productVersion}</dd>
-          <dt>Source variable</dt>
+          <dt>{s.sourceVariable}</dt>
           <dd className="num-mono">{values.sourceVariable}</dd>
           {values.box && (
             <>
-              <dt>Bounding box</dt>
+              <dt>{s.boundingBox}</dt>
               <dd className="num-mono">
-                west {values.box.west}, south {values.box.south}, east {values.box.east}, north{' '}
-                {values.box.north}
+                {s.box(values.box.west, values.box.south, values.box.east, values.box.north)}
               </dd>
             </>
           )}
-          <dt>Period</dt>
+          <dt>{s.period}</dt>
           <dd className="num-mono">{values.period}</dd>
         </dl>
       </div>
 
-      <p className="region-check-sentence">{SERIES_NOTE}</p>
+      <p className="region-check-sentence">{s.note}</p>
     </div>
   )
 }

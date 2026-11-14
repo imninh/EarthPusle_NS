@@ -1,6 +1,36 @@
 import { useEffect, useState } from 'react'
 import { formatUnit } from '../lib/format'
+import { defineStrings, useStrings } from '../i18n'
 import { ChartFrame, type ChartMarker, type ChartTrace, type ChartTrendBand } from './ChartFrame'
+
+export const STRINGS = defineStrings(
+  {
+    title: (unit: string) => `Anomalies (${unit})`,
+    zScore: 'z-score',
+    senTrend: 'Sen trend',
+    annualMean: 'Annual mean',
+    band: '95% interval of the trend',
+    shift: (year: number) => `sudden shift ≈ ${year}`,
+    showWitness: 'Show second witness',
+    witnessLegend: (label: string, unit: string | null) => `${label} (z-score${unit ? `, ${unit}` : ''})`,
+    witnessSeries: (label: string) => `${label} (z-score)`,
+    witnessNote:
+      'Both series are standardized inside the same window on the right axis; the left axis keeps the main anomaly units. Compare direction and shape, not raw height.',
+  },
+  {
+    title: (unit: string) => `Độ lệch so với mức trung bình (${unit})`,
+    zScore: 'điểm z',
+    senTrend: 'Xu hướng Sen',
+    annualMean: 'Trung bình năm',
+    band: 'Khoảng tin cậy 95% của xu hướng',
+    shift: (year: number) => `bước nhảy đột ngột ≈ ${year}`,
+    showWitness: 'Hiện bộ dữ liệu NASA thứ hai',
+    witnessLegend: (label: string, unit: string | null) => `${label} (điểm z${unit ? `, ${unit}` : ''})`,
+    witnessSeries: (label: string) => `${label} (điểm z)`,
+    witnessNote:
+      'Cả hai chuỗi được chuẩn hóa trong cùng một giai đoạn và vẽ theo trục bên phải; trục bên trái giữ đơn vị gốc của độ lệch. Hãy so sánh hướng và hình dạng, đừng so sánh độ cao tuyệt đối.',
+  },
+)
 
 interface AnomalyTrendChartProps {
   months: readonly string[]
@@ -48,6 +78,7 @@ export function AnomalyTrendChart({
   mainZ,
   caption,
 }: AnomalyTrendChartProps) {
+  const s = useStrings(STRINGS)
   const displayUnit = formatUnit(unit)
   const displayWitnessUnit = witnessUnit ? formatUnit(witnessUnit) : null
   const hasWitness = Boolean(witnessZ && witnessZ.length > 0 && witnessLabel)
@@ -62,7 +93,7 @@ export function AnomalyTrendChart({
       traces.push({
         x: months,
         y: mainZ,
-        name: `${label} (z-score)`,
+        name: s.witnessSeries(label),
         color: 'ink',
         width: 1,
         opacity: 0.45,
@@ -72,7 +103,7 @@ export function AnomalyTrendChart({
     traces.push({
       x: months,
       y: witnessZ,
-      name: `${witnessLabel} (z-score)`,
+      name: s.witnessSeries(witnessLabel ?? ''),
       color: 'muted',
       dash: 'dash',
       width: 2,
@@ -81,14 +112,14 @@ export function AnomalyTrendChart({
     })
   }
   if (trendMonths && trendY) {
-    traces.push({ x: trendMonths, y: trendY, name: 'Sen trend', color: 'ink', width: 2.5, label: 'Sen trend' })
+    traces.push({ x: trendMonths, y: trendY, name: s.senTrend, color: 'ink', width: 2.5, label: s.senTrend })
   }
   const hasAnnualMeans = Boolean(annualMeans && annualMeans.x.length > 0)
   if (annualMeans && hasAnnualMeans) {
     traces.push({
       x: annualMeans.x,
       y: annualMeans.y,
-      name: 'Annual mean',
+      name: s.annualMean,
       color: 'mean',
       mode: 'markers',
     })
@@ -96,12 +127,12 @@ export function AnomalyTrendChart({
   const markers: ChartMarker[] =
     breakYear == null || !Number.isFinite(breakYear)
       ? []
-      : [{ x: breakYearIso(breakYear), label: `sudden shift ≈ ${Math.round(breakYear)}` }]
+      : [{ x: breakYearIso(breakYear), label: s.shift(Math.round(breakYear)) }]
   return (
     <ChartFrame
-      title={`Anomalies (${displayUnit})`}
+      title={s.title(displayUnit)}
       yTitle={displayUnit}
-      yTitle2={showWitness && hasWitness ? 'z-score' : undefined}
+      yTitle2={showWitness && hasWitness ? s.zScore : undefined}
       traces={traces}
       band={{ start: windowStart, end: windowEnd }}
       trendBand={trendBand ?? null}
@@ -115,7 +146,7 @@ export function AnomalyTrendChart({
                 checked={showWitness}
                 onChange={(event) => setShowWitness(event.target.checked)}
               />
-              Show second witness
+              {s.showWitness}
             </label>
           ) : null}
           <div className="chart-swatches">
@@ -127,34 +158,31 @@ export function AnomalyTrendChart({
             {trendY && (
               <span className="chart-swatch">
                 <span className="swatch swatch-trend" />
-                Sen trend
+                {s.senTrend}
               </span>
             )}
             {trendBand && (
               <span className="chart-swatch">
                 <span className="swatch swatch-band" />
-                95% interval of the trend
+                {s.band}
               </span>
             )}
             {hasAnnualMeans && (
               <span className="chart-swatch">
                 <span className="swatch swatch-mean" />
-                Annual mean
+                {s.annualMean}
               </span>
             )}
             {showWitness && hasWitness ? (
               <span className="chart-swatch">
                 <span className="swatch swatch-muted" />
-                {witnessLabel} (z-score{displayWitnessUnit ? `, ${displayWitnessUnit}` : ''})
+                {s.witnessLegend(witnessLabel ?? '', displayWitnessUnit)}
               </span>
             ) : null}
           </div>
           <p className="chart-note">{caption}</p>
           {showWitness && hasWitness ? (
-            <p className="chart-note">
-              Both series are standardized inside the same window on the right axis; the left axis keeps the main
-              anomaly units. Compare direction and shape, not raw height.
-            </p>
+            <p className="chart-note">{s.witnessNote}</p>
           ) : null}
         </>
       }

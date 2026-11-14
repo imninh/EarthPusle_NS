@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Chip } from '../../components/ui'
 import { useApp } from '../../data/AppState'
 import type { VariableMeta } from '../../data/types'
-import { GLOSSARY, GLOSSARY_ORDER, formatUnit } from '../../lib/format'
+import { useLang, useStrings, variableLabel, type Lang } from '../../i18n'
+import { GLOSSARY_ORDER, formatUnitIn, glossaryEntry } from '../../lib/format'
 import {
   CHALLENGE_ROWS,
   CHECK_TOOLS,
@@ -15,6 +16,8 @@ import {
   sheetSourceLine,
   type SheetLang,
 } from './content'
+import * as VI from './content.vi'
+import { METHOD_STRINGS } from './strings'
 import './method.css'
 
 interface ProductCard {
@@ -26,13 +29,13 @@ interface ProductCard {
   units: string[]
 }
 
-function collectProducts(variables: readonly VariableMeta[]): ProductCard[] {
+function collectProducts(variables: readonly VariableMeta[], lang: Lang): ProductCard[] {
   const byKey = new Map<string, ProductCard>()
   for (const variable of variables) {
     const key = `${variable.product}::${variable.product_version}::${variable.doi ?? ''}`
     const current = byKey.get(key)
     if (current) {
-      current.variables.push(variable.label)
+      current.variables.push(variableLabel(variable, lang))
       if (!current.units.includes(variable.display_unit)) current.units.push(variable.display_unit)
     } else {
       byKey.set(key, {
@@ -40,7 +43,7 @@ function collectProducts(variables: readonly VariableMeta[]): ProductCard[] {
         product: variable.product,
         version: variable.product_version,
         doi: variable.doi ?? null,
-        variables: [variable.label],
+        variables: [variableLabel(variable, lang)],
         units: [variable.display_unit],
       })
     }
@@ -54,9 +57,25 @@ function doiHref(doi: string | null): string | null {
 
 export default function MethodPage() {
   const { index, navigate } = useApp()
-  const products = useMemo(() => collectProducts(index.variables), [index.variables])
+  const { lang } = useLang()
+  const s = useStrings(METHOD_STRINGS)
+  const isVi = lang === 'vi'
+  const steps = isVi ? VI.METHOD_STEPS : METHOD_STEPS
+  const limitations = isVi ? VI.METHOD_LIMITATIONS : METHOD_LIMITATIONS
+  const docLinks = isVi ? VI.METHOD_DOC_LINKS : METHOD_DOC_LINKS
+  const challengeRows = isVi ? VI.CHALLENGE_ROWS : CHALLENGE_ROWS
+  const checkTools = isVi ? VI.CHECK_TOOLS : CHECK_TOOLS
+  const checkToolsSentence = isVi ? VI.CHECK_TOOLS_SENTENCE : CHECK_TOOLS_SENTENCE
+  const products = useMemo(() => collectProducts(index.variables, lang), [index.variables, lang])
   const witnessProducts = Object.entries(index.witness?.products ?? {})
-  const [sheetLang, setSheetLang] = useState<SheetLang>('en')
+  const [sheetLang, setSheetLang] = useState<SheetLang>(lang)
+  useEffect(() => {
+    setSheetLang(lang)
+  }, [lang])
+  const witnessVariableName = (variableId: string): string => {
+    const known = index.variables.find((variable) => variable.id === variableId)
+    return known && isVi ? variableLabel(known, lang) : variableId.replaceAll('_', ' ')
+  }
   const sheet = SHEET_TEXT[sheetLang]
   const sourceLine = sheetSourceLine(sheet.sourcePrefix, [
     ...products.map((p) => ({ product: p.product, version: p.version, doi: p.doi })),
@@ -66,42 +85,39 @@ export default function MethodPage() {
   return (
     <section className="method">
       <header className="method-head">
-        <p className="eyebrow">How it works</p>
-        <h1>From a NASA file to a trend you can question</h1>
-        <p className="method-lede">
-          EarthPulse turns monthly satellite and model data into one comparable grid, tests every cell for a trend,
-          checks whether a sudden shift could explain it, and asks a second NASA dataset whether it sees the same thing.
-        </p>
+        <p className="eyebrow">{s.eyebrow}</p>
+        <h1>{s.title}</h1>
+        <p className="method-lede">{s.lede}</p>
         <div className="method-meta">
-          <Chip tone="accent">{index.variables.length} published variables</Chip>
-          <Chip tone="accent">FDR q &lt; {index.q_threshold}</Chip>
-          <Chip>{index.witness ? 'Second witness available' : 'Second witness not in this export'}</Chip>
+          <Chip tone="accent">{s.publishedVariables(index.variables.length)}</Chip>
+          <Chip tone="accent">{s.fdrChip(index.q_threshold)}</Chip>
+          <Chip>{index.witness ? s.witnessAvailable : s.witnessMissing}</Chip>
         </div>
       </header>
 
       <section className="method-section method-section--wide" aria-labelledby="method-challenge-title">
-        <h2 id="method-challenge-title">How EarthPulse answers the challenge</h2>
-        <p className="method-section-note">
-          The challenge asks for four things and names a few ideas worth adding. Here is where each one lives in the app.
-        </p>
+        <h2 id="method-challenge-title">{s.challengeTitle}</h2>
+        <p className="method-section-note">{s.challengeNote}</p>
         <div className="method-table-wrap">
           <table className="method-table">
             <thead>
               <tr>
-                <th scope="col">The challenge says</th>
-                <th scope="col">Where in EarthPulse</th>
-                <th scope="col">Go there</th>
+                <th scope="col">{s.thChallenge}</th>
+                <th scope="col">{s.thWhere}</th>
+                <th scope="col">{s.thGo}</th>
               </tr>
             </thead>
             <tbody>
-              {CHALLENGE_ROWS.map((row) => (
+              {challengeRows.map((row) => (
                 <tr key={row.id}>
-                  <td data-label="The challenge says">
-                    <span className="label-caps method-table-kind">{row.kind}</span>
+                  <td data-label={s.thChallenge}>
+                    <span className="label-caps method-table-kind">
+                      {row.kind === 'Objective' ? s.kindObjective : s.kindConsideration}
+                    </span>
                     <q className="method-table-phrase">{row.phrase}</q>
                   </td>
-                  <td data-label="Where in EarthPulse">{row.where}</td>
-                  <td data-label="Go there">
+                  <td data-label={s.thWhere}>{row.where}</td>
+                  <td data-label={s.thGo}>
                     <a
                       className="method-table-link"
                       href={challengeHref(row.page)}
@@ -121,9 +137,9 @@ export default function MethodPage() {
       </section>
 
       <section className="method-section method-section--wide" aria-labelledby="method-flow-title">
-        <h2 id="method-flow-title">The pipeline at a glance</h2>
-        <ol className="method-flow" aria-label="Analysis steps">
-          {METHOD_STEPS.map((step, position) => (
+        <h2 id="method-flow-title">{s.flowTitle}</h2>
+        <ol className="method-flow" aria-label={s.flowAria}>
+          {steps.map((step, position) => (
             <li key={step.id} className="method-flow-item">
               <span className="method-flow-number" aria-hidden="true">
                 {position + 1}
@@ -136,9 +152,9 @@ export default function MethodPage() {
       </section>
 
       <section className="method-section" aria-labelledby="method-steps-title">
-        <h2 id="method-steps-title">Each step, in plain language</h2>
+        <h2 id="method-steps-title">{s.stepsTitle}</h2>
         <div className="method-steps">
-          {METHOD_STEPS.map((step, position) => (
+          {steps.map((step, position) => (
             <article key={step.id} className="method-step ui-card">
               <div className="method-step-head">
                 <span className="method-step-number">{position + 1}</span>
@@ -149,7 +165,7 @@ export default function MethodPage() {
               </div>
               <p>{step.body}</p>
               <p className="method-why">
-                <strong>Why it matters:</strong> {step.why}
+                <strong>{s.whyItMatters}</strong> {step.why}
               </p>
             </article>
           ))}
@@ -157,14 +173,11 @@ export default function MethodPage() {
       </section>
 
       <section className="method-section" aria-labelledby="method-words-title">
-        <h2 id="method-words-title">Words we use</h2>
-        <p className="method-section-note">
-          Plain words first, with the exact method name in brackets for anyone who wants it. The same explanations
-          appear behind the &ldquo;?&rdquo; buttons across the app.
-        </p>
+        <h2 id="method-words-title">{s.wordsTitle}</h2>
+        <p className="method-section-note">{s.wordsNote}</p>
         <dl className="method-glossary">
           {GLOSSARY_ORDER.map((id) => {
-            const entry = GLOSSARY[id]
+            const entry = glossaryEntry(id, lang)
             return (
               <div key={id} className="method-glossary-item ui-card">
                 <dt>{entry.term}</dt>
@@ -179,11 +192,8 @@ export default function MethodPage() {
       </section>
 
       <section className="method-section" aria-labelledby="method-products-title">
-        <h2 id="method-products-title">Products and DOIs</h2>
-        <p className="method-section-note">
-          Every card is read from the published index. A DOI link opens the product landing page; the product version is
-          part of the card.
-        </p>
+        <h2 id="method-products-title">{s.productsTitle}</h2>
+        <p className="method-section-note">{s.productsNote}</p>
         <div className="method-products">
           {products.map((product) => (
             <article key={product.key} className="method-product ui-card">
@@ -192,21 +202,19 @@ export default function MethodPage() {
                 <Chip>{product.version}</Chip>
               </div>
               <p className="method-product-vars">{product.variables.join(' · ')}</p>
-              <p className="method-product-units">
-                Reported in {product.units.map(formatUnit).join(' · ')}
-              </p>
+              <p className="method-product-units">{s.reportedIn(product.units.map((unit) => formatUnitIn(unit, lang)).join(' · '))}</p>
               {doiHref(product.doi) ? (
                 <a href={doiHref(product.doi) ?? '#'} target="_blank" rel="noreferrer">
-                  DOI {product.doi}
+                  {s.doi(product.doi ?? '')}
                 </a>
               ) : (
-                <span className="method-muted">DOI not available in the index</span>
+                <span className="method-muted">{s.doiMissing}</span>
               )}
             </article>
           ))}
         </div>
 
-        <h3 className="method-subhead">Second-witness products</h3>
+        <h3 className="method-subhead">{s.witnessProductsTitle}</h3>
         {witnessProducts.length > 0 ? (
           <div className="method-products">
             {witnessProducts.map(([variableId, witness]) => (
@@ -216,38 +224,33 @@ export default function MethodPage() {
                   <Chip tone="good">{witness.product}</Chip>
                 </div>
                 <p className="method-product-vars">
-                  Checks {variableId.replaceAll('_', ' ')} via {witness.source_variable} · version {witness.version}
+                  {s.witnessChecks(witnessVariableName(variableId), witness.source_variable, witness.version)}
                 </p>
                 <a href={doiHref(witness.doi) ?? '#'} target="_blank" rel="noreferrer">
-                  DOI {witness.doi}
+                  {s.doi(witness.doi)}
                 </a>
               </article>
             ))}
           </div>
         ) : (
-          <p className="method-muted">
-            Second-witness products appear automatically when a schema 1.3 export is published. The current export is
-            schema {index.schema_version}; all witness fields are optional and hidden in this build.
-          </p>
+          <p className="method-muted">{s.witnessProductsLater(String(index.schema_version))}</p>
         )}
       </section>
 
       <section className="method-section" aria-labelledby="method-limits-title">
-        <h2 id="method-limits-title">Limitations to keep in view</h2>
+        <h2 id="method-limits-title">{s.limitsTitle}</h2>
         <ul className="method-limits">
-          {METHOD_LIMITATIONS.map((limitation) => (
+          {limitations.map((limitation) => (
             <li key={limitation}>{limitation}</li>
           ))}
         </ul>
       </section>
 
       <section className="method-section" aria-labelledby="method-docs-title">
-        <h2 id="method-docs-title">Repository documentation</h2>
-        <p className="method-section-note">
-          The app is the short version; the repository holds the full method, limits and file contract.
-        </p>
+        <h2 id="method-docs-title">{s.docsTitle}</h2>
+        <p className="method-section-note">{s.docsNote}</p>
         <ul className="method-docs">
-          {METHOD_DOC_LINKS.map((link) => (
+          {docLinks.map((link) => (
             <li key={link.href}>
               <a href={link.href}>{link.label}</a>
               <span>{link.description}</span>
@@ -257,10 +260,10 @@ export default function MethodPage() {
       </section>
 
       <section className="method-section" aria-labelledby="method-tools-title">
-        <h2 id="method-tools-title">Tools to check our numbers</h2>
-        <p className="method-section-note">{CHECK_TOOLS_SENTENCE}</p>
+        <h2 id="method-tools-title">{s.toolsTitle}</h2>
+        <p className="method-section-note">{checkToolsSentence}</p>
         <ul className="method-docs">
-          {CHECK_TOOLS.map((tool) => (
+          {checkTools.map((tool) => (
             <li key={tool.href}>
               <a href={tool.href} target="_blank" rel="noopener">
                 {tool.label}
@@ -271,13 +274,10 @@ export default function MethodPage() {
       </section>
 
       <section className="method-section method-class" aria-labelledby="method-class-title">
-        <h2 id="method-class-title">Use it in class (15 minutes)</h2>
-        <p className="method-section-note">
-          A one-page activity for a teacher or a student. Choose a language, print it, and work through the tasks in the
-          app.
-        </p>
+        <h2 id="method-class-title">{s.classTitle}</h2>
+        <p className="method-section-note">{s.classNote}</p>
         <div className="method-class-tools">
-          <div className="method-lang" role="group" aria-label="Sheet language">
+          <div className="method-lang" role="group" aria-label={s.sheetLanguage}>
             <button
               type="button"
               className="method-lang-button"

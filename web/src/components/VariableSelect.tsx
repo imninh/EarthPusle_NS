@@ -1,14 +1,23 @@
 import { useApp } from '../data/AppState'
 import { sourceLabel } from '../lib/format'
+import { defineStrings, useLang, useStrings } from '../i18n'
+import { variableLabel } from '../i18n/terms'
+
+export const STRINGS = defineStrings(
+  { variable: 'Variable', period: 'Period', to: 'to' },
+  { variable: 'Biến', period: 'Giai đoạn', to: 'đến' },
+)
 
 /** Shared variable picker, grouped by category, showing model vs satellite source. */
 export function VariableSelect() {
   const { index, variableId, setVariableId, variable } = useApp()
+  const s = useStrings(STRINGS)
+  const { lang } = useLang()
   const categories = [...new Set(index.variables.map((v) => v.category))]
   return (
     <div className="field control">
       <label className="control-label" htmlFor="variable-select">
-        Variable
+        {s.variable}
       </label>
       <select
         id="variable-select"
@@ -23,7 +32,7 @@ export function VariableSelect() {
               .filter((v) => v.category === cat)
               .map((v) => (
                 <option key={v.id} value={v.id} title={v.description}>
-                  {v.label} ({sourceLabel(v.source_type)})
+                  {variableLabel(v, lang)} ({sourceLabel(v.source_type)})
                 </option>
               ))}
           </optgroup>
@@ -41,15 +50,16 @@ export function VariableSelect() {
 /** Shared analysis-window picker. */
 export function WindowSelect() {
   const { index, windowId, setWindowId } = useApp()
+  const s = useStrings(STRINGS)
   return (
     <div className="field control">
       <label className="control-label" htmlFor="window-select">
-        Period
+        {s.period}
       </label>
       <select id="window-select" className="select" value={windowId} onChange={(e) => setWindowId(e.target.value)}>
         {index.windows.map((w) => (
           <option key={w.id} value={w.id}>
-            {w.start} to {w.end}
+            {w.start} {s.to} {w.end}
           </option>
         ))}
       </select>

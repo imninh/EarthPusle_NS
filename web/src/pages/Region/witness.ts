@@ -8,8 +8,10 @@ import {
   WITNESS_SAME_SIGN,
 } from '../../data/contract'
 import type { DataIndex } from '../../data/types'
+import { pick, type Lang } from '../../i18n'
 import { senSlope, type SenSlopeCI } from '../../lib/stats'
 import { browserTrendClass, countValid, monthsSince, normalizeValue, regionTest } from './model'
+import { WITNESS_STRINGS } from './strings.text'
 
 export interface WitnessTrend {
   slopeDecade: number | null
@@ -108,13 +110,14 @@ export function witnessAgreementCode(
   return witnessSignificant ? WITNESS_CONTRADICTED : WITNESS_OPPOSITE_SIGN
 }
 
-export function witnessAgreementText(code: number): string {
-  if (code === WITNESS_CORROBORATED) return 'agrees: both trends are significant and point the same way'
-  if (code === WITNESS_SAME_SIGN) return 'same direction, but the trend in the second dataset is not significant'
-  if (code === WITNESS_OPPOSITE_SIGN) return 'opposite direction, but the trend in the second dataset is not significant'
-  if (code === WITNESS_CONTRADICTED) return 'disagrees: both trends are significant and point opposite ways'
-  if (code === 0) return 'not applicable: the main trend is not significant'
-  return 'not evaluated'
+export function witnessAgreementText(code: number, lang: Lang = 'en'): string {
+  const s = pick(WITNESS_STRINGS, lang)
+  if (code === WITNESS_CORROBORATED) return s.corroborated
+  if (code === WITNESS_SAME_SIGN) return s.sameSign
+  if (code === WITNESS_OPPOSITE_SIGN) return s.oppositeSign
+  if (code === WITNESS_CONTRADICTED) return s.contradicted
+  if (code === 0) return s.notApplicable
+  return s.notEvaluated
 }
 
 /** Look up the witness product label/DOI for a variable from index.json. */
@@ -139,25 +142,21 @@ export function witnessSummaryClause(args: {
   warm: boolean
   qualityFlagged: boolean
   witness: SummaryWitness | null | undefined
+  lang?: Lang
 }): string | null {
   const { mainTrendClass, warm, qualityFlagged, witness } = args
+  const s = pick(WITNESS_STRINGS, args.lang ?? 'en')
   if (!witness || witness.agreement === 0 || witness.agreement === -9) return null
   if (mainTrendClass !== 'increasing' && mainTrendClass !== 'decreasing') return null
-  const label = witness.label.trim() || 'an independent dataset'
+  const label = witness.label.trim() || s.fallbackLabel
   if (qualityFlagged) {
     if (witness.agreement === WITNESS_CORROBORATED) {
-      return `; a sudden shift, but ${label} shows the same trend: more likely a real change`
+      return s.flaggedCorroborated(label)
     }
-    return `; a sudden shift not seen in ${label}: more likely a data artefact`
+    return s.flaggedOther(label)
   }
-  if (witness.agreement === WITNESS_CORROBORATED) {
-    return `; ${label} shows the same ${warm ? 'warming' : 'trend'}`
-  }
-  if (witness.agreement === WITNESS_CONTRADICTED) {
-    return `; ${label} shows the opposite trend: read with caution`
-  }
-  if (witness.agreement === WITNESS_SAME_SIGN) {
-    return `; ${label} shows the same direction, but its trend is not significant`
-  }
-  return `; ${label} shows the opposite direction, but its trend is not significant`
+  if (witness.agreement === WITNESS_CORROBORATED) return s.sameTrend(label, warm)
+  if (witness.agreement === WITNESS_CONTRADICTED) return s.oppositeTrend(label)
+  if (witness.agreement === WITNESS_SAME_SIGN) return s.sameDirection(label)
+  return s.oppositeDirection(label)
 }

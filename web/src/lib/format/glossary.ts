@@ -1,7 +1,10 @@
 // Plain-language glossary shared by every page. `plain` must be one sentence a
 // 16-year-old can read; `technical` keeps the exact method name for anyone who
 // wants it. Wording for sudden shifts and the second witness follows
-// docs/DATA_CONTRACT.md §12 and §13.
+// docs/DATA_CONTRACT.md §12 and §13. The Vietnamese table is in strings.vi.ts.
+
+import type { Lang } from '../../i18n'
+import { GLOSSARY_VI } from './strings.vi'
 
 export type TermId =
   | 'significant'
@@ -16,6 +19,11 @@ export type TermId =
   | 'not_yet_significant'
   | 'variable'
   | 'contrast'
+  | 'standardized_change'
+  | 'data_quality'
+  | 'kendall_tau'
+  | 'years_to_detect'
+  | 'screened_only'
 
 export interface GlossaryEntry {
   /** Short label shown next to the "?" trigger. */
@@ -89,6 +97,31 @@ export const GLOSSARY: Record<TermId, GlossaryEntry> = {
     plain: 'A score near zero means one direction dominates, while a score near 0.5 means increase and decrease cover similar area.',
     technical: 'Regional contrast: area-share balance between significant increase and significant decrease (contract §6).',
   },
+  standardized_change: {
+    term: 'Standardized change',
+    plain: 'The change over the period divided by the typical year-to-year variation, so a value near 1 means the change is about one natural standard deviation.',
+    technical: 'Sen slope per decade divided by the standard deviation of the residuals from the Sen line (contract §6).',
+  },
+  data_quality: {
+    term: 'Data quality',
+    plain: 'A check for a sudden step in the data that could be a real jump in the climate or a break in the measurement record.',
+    technical: 'Pettitt change-point test with a step-versus-linear ΔBIC comparison (contract §12).',
+  },
+  kendall_tau: {
+    term: 'Kendall τ',
+    plain: 'A number between -1 and 1 that shows how consistently a series rises or falls over time.',
+    technical: 'Kendall rank correlation τ of the monthly anomalies, S / (n(n-1)/2), from the Mann–Kendall test.',
+  },
+  years_to_detect: {
+    term: 'Years to detect',
+    plain: 'An estimate of how many years of data a trend of this size would need to stand out from natural variability, if the same rate continued; it is not a forecast.',
+    technical: 'Weatherhead et al. (1998) AR(1) formula (contract §16), 95% confidence and 90% power; always shown with a range.',
+  },
+  screened_only: {
+    term: 'Screened only',
+    plain: 'Screened only means the trend test ran, but there is no second dataset to cross-check it.',
+    technical: 'Catalog tier (contract §14): the same Sen, Hamed–Rao Mann–Kendall and BH-FDR test; no quality flag or second witness.',
+  },
 }
 
 /** Stable order for the Method page's "Words we use" section. */
@@ -103,8 +136,14 @@ export const GLOSSARY_ORDER: readonly TermId[] = [
   'second_witness',
   'confidence_interval',
   'not_yet_significant',
+  'standardized_change',
+  'data_quality',
+  'kendall_tau',
+  'years_to_detect',
+  'screened_only',
 ]
 
-export function glossaryEntry(id: TermId): GlossaryEntry {
-  return GLOSSARY[id]
+/** The glossary entry in the chosen language; English is the default. */
+export function glossaryEntry(id: TermId, lang: Lang = 'en'): GlossaryEntry {
+  return lang === 'vi' ? GLOSSARY_VI[id] : GLOSSARY[id]
 }

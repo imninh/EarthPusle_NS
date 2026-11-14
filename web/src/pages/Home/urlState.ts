@@ -15,6 +15,10 @@ export interface RouteState {
   caseId: string | null
   /** Discovery layer requested by a link, e.g. "witness". */
   layer: string | null
+  /** Investigate page: selected place id, topic id and optional view. */
+  place: string | null
+  topic: string | null
+  view: string | null
 }
 
 export const HOME_ROUTE: RouteState = {
@@ -25,6 +29,9 @@ export const HOME_ROUTE: RouteState = {
   domain: null,
   caseId: null,
   layer: null,
+  place: null,
+  topic: null,
+  view: null,
 }
 
 function clean(value: string | null): string | null {
@@ -82,6 +89,9 @@ export function parseHash(hash: string): RouteState {
     domain: clean(params.get('domain')),
     caseId: clean(params.get('case')),
     layer: clean(params.get('layer')),
+    place: clean(params.get('place')),
+    topic: clean(params.get('topic')),
+    view: clean(params.get('view')),
   }
 }
 
@@ -105,8 +115,10 @@ function appendSelection(params: URLSearchParams, selection: Selection) {
 export function serializeHash(route: RouteState): string {
   const params = new URLSearchParams()
   if (route.page === 'investigate') {
-    // The Investigate page owns place/topic; only the shared period is routed here.
+    if (route.place) params.set('place', route.place)
+    if (route.topic) params.set('topic', route.topic)
     if (route.windowId) params.set('w', route.windowId)
+    if (route.view) params.set('view', route.view)
   }
   if (PAGES_WITH_VARIABLE.includes(route.page)) {
     if (route.variableId) params.set('v', route.variableId)

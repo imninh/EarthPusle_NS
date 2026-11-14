@@ -1,6 +1,36 @@
 import { Component, lazy, Suspense, type ReactNode } from 'react'
 import { Layout } from './components/Layout'
 import { AppStateProvider, useApp } from './data/AppState'
+import { defineStrings, useStrings } from './i18n'
+
+export const STRINGS = defineStrings(
+  {
+    failedTitle: 'This view could not load',
+    failedHint: 'Use the navigation bar to open another view.',
+    loading: 'Loading view…',
+  },
+  {
+    failedTitle: 'Không tải được trang này',
+    failedHint: 'Hãy dùng thanh điều hướng để mở một trang khác.',
+    loading: 'Đang tải trang…',
+  },
+)
+
+function FailedView({ message }: { message: string }) {
+  const s = useStrings(STRINGS)
+  return (
+    <div className="state-message" role="alert">
+      <h2>{s.failedTitle}</h2>
+      <p>{message}</p>
+      <p>{s.failedHint}</p>
+    </div>
+  )
+}
+
+function LoadingView() {
+  const s = useStrings(STRINGS)
+  return <div className="state-message">{s.loading}</div>
+}
 
 // Pages are code-split: MapLibre (Discovery) and Plotly (Region) are large, so each
 // loads only when its page is opened instead of in one ~6 MB bundle.
@@ -40,13 +70,7 @@ class PageBoundary extends Component<{ children: ReactNode }, { error: Error | n
 
   render() {
     if (!this.state.error) return this.props.children
-    return (
-      <div className="state-message" role="alert">
-        <h2>This view could not load</h2>
-        <p>{this.state.error.message}</p>
-        <p>Use the navigation bar to open another view.</p>
-      </div>
-    )
+    return <FailedView message={this.state.error.message} />
   }
 }
 
@@ -55,7 +79,7 @@ function Shell() {
   return (
     <Layout>
       <PageBoundary key={page}>
-        <Suspense fallback={<div className="state-message">Loading view…</div>}>
+        <Suspense fallback={<LoadingView />}>
           <CurrentPage />
         </Suspense>
       </PageBoundary>

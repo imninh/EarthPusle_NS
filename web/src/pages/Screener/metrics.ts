@@ -1,9 +1,16 @@
 // Pure screener display rules. Fractions and contrast follow docs/DATA_CONTRACT.md §6.
 import type { ScreenerRow, VariableMeta } from '../../data/types'
 import { sourceLabel } from '../../lib/format'
+import { pick, type Lang } from '../../i18n'
+import { SCREENER_STRINGS } from './strings'
 
 /** Spec tooltip for median_abs_std_change_decade. */
-export const MAGNITUDE_TOOLTIP = 'standard deviations per decade, median over significant cells'
+export const MAGNITUDE_TOOLTIP = SCREENER_STRINGS.en.magnitudeTooltip
+
+/** The same tooltip in the chosen language. */
+export function magnitudeTooltip(lang: Lang = 'en'): string {
+  return pick(SCREENER_STRINGS, lang).magnitudeTooltip
+}
 
 /** Coverage below this fraction shows a warning. The spec threshold is 70%. */
 export const COVERAGE_WARN_BELOW = 0.7
@@ -17,19 +24,22 @@ export interface ScreenerSortColumn {
 }
 
 export const SORT_COLUMNS: readonly ScreenerSortColumn[] = [
-  { id: 'significantArea', label: 'Area with significant change (increase + decrease)' },
-  { id: 'magnitude', label: 'Typical change' },
-  { id: 'contrast', label: 'Opposite trends' },
-  { id: 'coverage', label: 'Coverage' },
+  { id: 'significantArea', label: SCREENER_STRINGS.en.sort.significantArea },
+  { id: 'magnitude', label: SCREENER_STRINGS.en.sort.magnitude },
+  { id: 'contrast', label: SCREENER_STRINGS.en.sort.contrast },
+  { id: 'coverage', label: SCREENER_STRINGS.en.sort.coverage },
 ]
 
 /** Schema 1.3 (A15): appended only when the export carries witness fields. */
 export const WITNESS_SORT_COLUMN: ScreenerSortColumn = {
   id: 'witness',
-  label: 'Second witness',
+  label: SCREENER_STRINGS.en.sort.witness,
 }
 
-const ALL_SORT_COLUMNS: readonly ScreenerSortColumn[] = [...SORT_COLUMNS, WITNESS_SORT_COLUMN]
+/** Label of a sort column in the chosen language. */
+export function sortColumnLabel(id: SortKey, lang: Lang = 'en'): string {
+  return pick(SCREENER_STRINGS, lang).sort[id]
+}
 
 export interface ScreenerViewRow {
   variableId: string
@@ -110,11 +120,12 @@ export function formatCellCount(value: number | null): string {
  * Words for regional_contrast. Null (including up + down = 0) is an em dash.
  * Thresholds: < 0.1, < 0.3, and ≥ 0.3.
  */
-export function contrastLabel(value: number | null): string {
+export function contrastLabel(value: number | null, lang: Lang = 'en'): string {
   if (value == null || !Number.isFinite(value)) return '—'
-  if (value < 0.1) return 'one direction'
-  if (value < 0.3) return 'mostly one direction'
-  return 'mixed directions'
+  const s = pick(SCREENER_STRINGS, lang)
+  if (value < 0.1) return s.contrastNone
+  if (value < 0.3) return s.contrastMostly
+  return s.contrastMixed
 }
 
 /** Width of one half of the diverging bar, as a percent of the full track (0–50). */
@@ -150,11 +161,12 @@ export function metricValue(row: ScreenerViewRow, key: SortKey): number | null {
   return row.coverage
 }
 
-export function sortDescription(key: SortKey, direction: SortDirection): string {
-  const label = ALL_SORT_COLUMNS.find((column) => column.id === key)?.label ?? key
+export function sortDescription(key: SortKey, direction: SortDirection, lang: Lang = 'en'): string {
+  const s = pick(SCREENER_STRINGS, lang)
+  const label = s.sort[key] ?? key
   const phrase = label.charAt(0).toLowerCase() + label.slice(1)
-  const order = direction === 'desc' ? 'largest first' : 'smallest first'
-  return `Sorted by ${phrase}, ${order}.`
+  const order = direction === 'desc' ? s.orderLargest : s.orderSmallest
+  return s.sortedBy(phrase, order)
 }
 
 function compareNullsLast(a: number | null, b: number | null, direction: SortDirection): number {
@@ -224,9 +236,9 @@ export function hasWitnessFields(rows: readonly ScreenerViewRow[]): boolean {
 /** A contradicted share above this fraction gets a warning chip. */
 export const WITNESS_CONTRADICTION_THRESHOLD = 0.2
 
-export function witnessConfirmedText(row: ScreenerViewRow): string | null {
+export function witnessConfirmedText(row: ScreenerViewRow, lang: Lang = 'en'): string | null {
   if (row.witnessCorroborated == null || !Number.isFinite(row.witnessCorroborated)) return null
-  return `${formatPercent(row.witnessCorroborated)} of significant area confirmed`
+  return pick(SCREENER_STRINGS, lang).witnessConfirmed(formatPercent(row.witnessCorroborated))
 }
 
 export function witnessContradictionWarning(row: ScreenerViewRow): boolean {
@@ -248,15 +260,17 @@ export function screenerHeadline(
   rows: readonly ScreenerViewRow[],
   domainLabel: string,
   threshold = HEADLINE_THRESHOLD,
+  lang: Lang = 'en',
 ): string {
+  const s = pick(SCREENER_STRINGS, lang)
   const evaluated = rows.filter((row) => row.nCells != null && row.nCells > 0)
   const percent = Math.round(threshold * 100)
-  if (evaluated.length === 0) return `No cells were evaluated in ${domainLabel} for this period.`
+  if (evaluated.length === 0) return s.headlineNoCells(domainLabel)
   const broad = evaluated.filter(
     (row) => row.significantArea != null && row.significantArea > threshold,
   ).length
   if (broad === 0) {
-    return `No variable shows significant change over more than ${percent}% of ${domainLabel} in this period.`
+    return s.headlineNone(percent, domainLabel)
   }
-  return `${broad} of ${evaluated.length} variables show significant change over more than ${percent}% of ${domainLabel}.`
+  return s.headlineSome(broad, evaluated.length, percent, domainLabel)
 }

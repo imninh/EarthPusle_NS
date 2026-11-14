@@ -39,7 +39,21 @@ import {
   starPositions,
 } from './globeMath'
 import { buildGlobeCanvas, readGlobeColours, rgbToHex, type GlobeColours } from './globeTexture'
+import { defineStrings, useStrings } from '../../i18n'
 import './globe.css'
+
+export const STRINGS = defineStrings(
+  {
+    warm: 'warm = rising',
+    cool: 'cool = falling',
+    flagged: 'yellow = flagged for a sudden shift',
+  },
+  {
+    warm: 'màu ấm = đang tăng',
+    cool: 'màu lạnh = đang giảm',
+    flagged: 'màu vàng = bị đánh dấu có bước nhảy đột ngột',
+  },
+)
 
 export interface GlobePulse {
   id: string
@@ -551,6 +565,7 @@ export default function EarthGlobe({
   ariaLabel,
   pulseHref,
 }: EarthGlobeProps) {
+  const s = useStrings(STRINGS)
   const stageRef = useRef<HTMLDivElement>(null)
   const tipRef = useRef<HTMLDivElement>(null)
   const flatRef = useRef<HTMLDivElement>(null)
@@ -641,15 +656,15 @@ export default function EarthGlobe({
       <p className="globe__legend">
         <span className="globe__legend-item">
           <span className="globe__swatch globe__swatch--increase" aria-hidden="true" />
-          warm = rising
+          {s.warm}
         </span>
         <span className="globe__legend-item">
           <span className="globe__swatch globe__swatch--decrease" aria-hidden="true" />
-          cool = falling
+          {s.cool}
         </span>
         <span className="globe__legend-item">
           <span className="globe__swatch globe__swatch--flagged" aria-hidden="true" />
-          yellow = flagged for a sudden shift
+          {s.flagged}
         </span>
       </p>
       {pulseList.length > 0 && (

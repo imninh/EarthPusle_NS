@@ -13,6 +13,7 @@ import {
   WITNESS_CONTRADICTED,
   cellAreaWeight,
 } from '../data/contract'
+import { defineStrings, pick, type Lang } from '../i18n'
 import type { ClassPalette, Rgba } from './gridImage'
 
 /** Significant, no sudden-shift flag, and no second dataset contradicts it. */
@@ -167,19 +168,52 @@ export function verdictShares(classes: ArrayLike<number>): VerdictShares {
   }
 }
 
-export const VERDICT_WORDS: Record<'clean' | 'flagged' | 'contradicted' | 'notYet', string> = {
-  clean: 'A real trend: significant, no sudden shift, and no second dataset contradicts it',
-  flagged: 'Significant, but a sudden shift is flagged: read with caution',
-  contradicted: 'Significant here, but an independent dataset disagrees (striped)',
-  notYet: 'A direction, not yet significant',
+type VerdictWordKey = 'clean' | 'flagged' | 'contradicted' | 'notYet'
+interface VerdictTexts extends Record<VerdictWordKey, string> {
+  notEnoughData: string
+  outsideDomain: string
+}
+
+export const VERDICT_TEXTS = defineStrings<VerdictTexts>(
+  {
+    clean: 'A real trend: significant, no sudden shift, and no second dataset contradicts it',
+    flagged: 'Significant, but a sudden shift is flagged: read with caution',
+    contradicted: 'Significant here, but an independent dataset disagrees (striped)',
+    notYet: 'A direction, not yet significant',
+    notEnoughData: 'Not enough data',
+    outsideDomain: 'Outside domain',
+  },
+  {
+    clean: 'Xu hướng đáng tin: có ý nghĩa thống kê, không có bước nhảy đột ngột và không bộ dữ liệu nào phản bác',
+    flagged: 'Có ý nghĩa thống kê, nhưng bị gắn cờ bước nhảy đột ngột: đọc thận trọng',
+    contradicted: 'Có ý nghĩa thống kê ở đây, nhưng bị phản bác bởi một bộ dữ liệu độc lập (kẻ sọc)',
+    notYet: 'Đã thấy một chiều thay đổi, nhưng chưa có ý nghĩa thống kê',
+    notEnoughData: 'Chưa đủ dữ liệu',
+    outsideDomain: 'Ngoài phạm vi dữ liệu',
+  },
+)
+
+/** English words of the four verdict classes. Use `verdictWords(lang)` for a chosen language. */
+export const VERDICT_WORDS: Record<VerdictWordKey, string> = {
+  clean: VERDICT_TEXTS.en.clean,
+  flagged: VERDICT_TEXTS.en.flagged,
+  contradicted: VERDICT_TEXTS.en.contradicted,
+  notYet: VERDICT_TEXTS.en.notYet,
+}
+
+/** The four class words in the chosen language. */
+export function verdictWords(lang: Lang = 'en'): Record<VerdictWordKey, string> {
+  const texts = pick(VERDICT_TEXTS, lang)
+  return { clean: texts.clean, flagged: texts.flagged, contradicted: texts.contradicted, notYet: texts.notYet }
 }
 
 /** Plain words for the hover tooltip and the cell panel. */
-export function verdictClassWords(code: number): string {
-  if (code === VERDICT_CLEAN) return VERDICT_WORDS.clean
-  if (code === VERDICT_FLAGGED) return VERDICT_WORDS.flagged
-  if (code === VERDICT_CONTRADICTED) return VERDICT_WORDS.contradicted
-  if (code === VERDICT_NOT_YET) return VERDICT_WORDS.notYet
-  if (code === INSUFFICIENT_DATA) return 'Not enough data'
-  return 'Outside domain'
+export function verdictClassWords(code: number, lang: Lang = 'en'): string {
+  const texts = pick(VERDICT_TEXTS, lang)
+  if (code === VERDICT_CLEAN) return texts.clean
+  if (code === VERDICT_FLAGGED) return texts.flagged
+  if (code === VERDICT_CONTRADICTED) return texts.contradicted
+  if (code === VERDICT_NOT_YET) return texts.notYet
+  if (code === INSUFFICIENT_DATA) return texts.notEnoughData
+  return texts.outsideDomain
 }

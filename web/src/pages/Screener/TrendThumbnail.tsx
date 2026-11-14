@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { N_COLS, N_ROWS } from '../../data/contract'
 import { loadTrendClass } from '../../data/loaders'
+import { useStrings } from '../../i18n'
+import { SCREENER_STRINGS } from './strings'
 import { paintTrendClass, trendColoursFrom } from './thumbnail'
 
 export function TrendThumbnail({
@@ -14,6 +16,7 @@ export function TrendThumbnail({
   label: string
   increaseMeans: string
 }) {
+  const s = useStrings(SCREENER_STRINGS)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = useState<string | null>(null)
@@ -50,15 +53,15 @@ export function TrendThumbnail({
         width={N_COLS}
         height={N_ROWS}
         role="img"
-        aria-label={`Global trend map for ${label}. Not cropped to the selected domain. Significant increase means ${increaseMeans}. Other cells are a significant decrease, not significant, insufficient data, or outside the domain.`}
+        aria-label={s.thumbAria(label, increaseMeans)}
       />
-      {status === 'loading' ? <span className="screener-thumb-status">Loading map…</span> : null}
+      {status === 'loading' ? <span className="screener-thumb-status">{s.thumbLoading}</span> : null}
       {status === 'error' ? (
         <span className="screener-thumb-status" role="alert">
-          {error ?? 'Could not draw this map.'}
+          {error ?? s.thumbError}
         </span>
       ) : null}
-      <span className="screener-open">Open map</span>
+      <span className="screener-open">{s.thumbOpen}</span>
     </div>
   )
 }

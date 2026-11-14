@@ -1,3 +1,4 @@
+import { defineStrings, pick, type Lang } from '../i18n'
 import { monthIso, withAlpha, type ChartColors } from './theme'
 
 export interface ChartTrace {
@@ -45,6 +46,11 @@ export interface PlotSegment {
   fillcolor?: string
   yaxis?: 'y' | 'y2'
 }
+
+export const STRINGS = defineStrings(
+  { bandName: '95% interval of the trend' },
+  { bandName: 'Khoảng tin cậy 95% của xu hướng' },
+)
 
 const BAR_WIDTH_MS = 26 * 24 * 3600 * 1000
 export const BAR_OPACITY = 0.85
@@ -137,7 +143,8 @@ export function segmentTrace(
 }
 
 /** Soft fill between the lower and upper trend interval, in the ink colour at 10%. */
-export function bandSegments(band: ChartTrendBand, colors: ChartColors): PlotSegment[] {
+export function bandSegments(band: ChartTrendBand, colors: ChartColors, lang: Lang = 'en'): PlotSegment[] {
+  const bandName = pick(STRINGS, lang).bandName
   const transparent = withAlpha(colors.ink, 0)
   const x = band.months.map(monthIso)
   return [
@@ -146,7 +153,7 @@ export function bandSegments(band: ChartTrendBand, colors: ChartColors): PlotSeg
       mode: 'lines',
       x,
       y: [...band.upper],
-      name: '95% interval of the trend',
+      name: bandName,
       connectgaps: false,
       hoverinfo: 'skip',
       line: { color: transparent, width: 0, dash: 'solid' },
@@ -156,7 +163,7 @@ export function bandSegments(band: ChartTrendBand, colors: ChartColors): PlotSeg
       mode: 'lines',
       x,
       y: [...band.lower],
-      name: '95% interval of the trend',
+      name: bandName,
       connectgaps: false,
       hoverinfo: 'skip',
       line: { color: transparent, width: 0, dash: 'solid' },
@@ -171,10 +178,11 @@ export function buildPlotData(
   traces: readonly ChartTrace[],
   colors: ChartColors,
   trendBand?: ChartTrendBand | null,
+  lang: Lang = 'en',
 ): PlotSegment[] {
   const palette = paletteFor(colors)
   const data: PlotSegment[] = []
-  if (trendBand && trendBand.months.length > 0) data.push(...bandSegments(trendBand, colors))
+  if (trendBand && trendBand.months.length > 0) data.push(...bandSegments(trendBand, colors, lang))
   for (const trace of traces) data.push(...segmentTrace(trace, palette[trace.color], trace.axis ?? 'y', colors))
   return data
 }

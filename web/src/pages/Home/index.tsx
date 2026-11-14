@@ -6,6 +6,9 @@ import type { CasesFile, DataIndex, DetectiveCase, ScreenerFile, WindowMeta } fr
 import { Exhibit } from '../../components/ui'
 import type { GlobePulse } from '../../components/globe/EarthGlobe'
 import { loadNaturalEarth } from '../../maps/basemap'
+import { useLang, useStrings, type Lang } from '../../i18n'
+import { caseTitle, variableLabel } from '../../i18n/terms'
+import { HOME_STRINGS } from './strings'
 import {
   buildHomeInsights,
   heroVariableId,
@@ -46,10 +49,10 @@ function pickWorkedCase(file: CasesFile | null): DetectiveCase | null {
 }
 
 /** One pulse per published case, at the centre of its region bounding box. */
-function casePulses(file: CasesFile | null): GlobePulse[] {
+function casePulses(file: CasesFile | null, lang: Lang): GlobePulse[] {
   return (file?.cases ?? []).map((entry) => {
     const [west, south, east, north] = entry.region.bbox
-    return { id: entry.id, lat: (south + north) / 2, lon: (west + east) / 2, label: entry.title }
+    return { id: entry.id, lat: (south + north) / 2, lon: (west + east) / 2, label: caseTitle(entry, lang) }
   })
 }
 
@@ -58,6 +61,8 @@ const NO_ROWS: ScreenerFile['rows'] = []
 
 export default function HomePage() {
   const { index, navigate } = useApp()
+  const s = useStrings(HOME_STRINGS)
+  const { lang } = useLang()
   const windowMeta = homeWindow(index)
   const [screener, setScreener] = useState<ScreenerFile | null>(null)
   const [cases, setCases] = useState<CasesFile | null>(null)
@@ -96,13 +101,13 @@ export default function HomePage() {
 
   const rows = screener?.rows ?? NO_ROWS
   const insights = useMemo(
-    () => buildHomeInsights(index.variables, rows, windowMeta.start, windowMeta.end, cases?.cases),
-    [index.variables, rows, windowMeta.start, windowMeta.end, cases],
+    () => buildHomeInsights(index.variables, rows, windowMeta.start, windowMeta.end, cases?.cases, lang),
+    [index.variables, rows, windowMeta.start, windowMeta.end, cases, lang],
   )
   const heroId = useMemo(() => heroVariableId(index.variables, rows), [index.variables, rows])
   const hero = index.variables.find((variable) => variable.id === heroId) ?? index.variables[0]
   const globeVariable = index.variables.find((variable) => variable.id === GLOBE_VARIABLE_ID) ?? hero
-  const pulses = useMemo(() => casePulses(cases), [cases])
+  const pulses = useMemo(() => casePulses(cases, lang), [cases, lang])
   const workedCase = useMemo(() => pickWorkedCase(cases), [cases])
 
   const openVariable = (variableId: string | null) => {
@@ -120,17 +125,16 @@ export default function HomePage() {
       <section className="home-hero surface-night" aria-labelledby="home-promise">
         <div className="home-hero-inner">
           <div className="home-hero-copy">
-            <p className="home-eyebrow label-caps">NASA Space Apps 2026 · Earth system trend detective</p>
+            <p className="home-eyebrow label-caps">{s.eyebrow}</p>
             <h1 id="home-promise" className="display">
-              Is that trend real, or <span className="home-mark">a glitch in the data?</span>
+              {s.headlinePre}
+              <span className="home-mark">{s.headlineMark}</span>
             </h1>
             <p className="home-sub">
-              EarthPulse cross-examines 24 years of NASA data: what is changing, where, how much, whether it is
-              significant, and whether a second NASA dataset agrees.
+              {s.sub}
             </p>
             <p className="home-audience">
-              For high-school and college students, and anyone curious about our planet: answer a few questions and
-              read the evidence in about a minute.
+              {s.audience}
             </p>
             <div className="home-actions">
               <button
@@ -138,14 +142,14 @@ export default function HomePage() {
                 className="button primary large"
                 onClick={() => navigate('investigate', { windowId: windowMeta.id })}
               >
-                Start an investigation
+                {s.start}
               </button>
               <button
                 type="button"
                 className="button large home-secondary"
                 onClick={() => navigate('story', { caseId: workedCase?.id ?? null })}
               >
-                Watch a worked case
+                {s.watch}
               </button>
             </div>
             <p className="home-links">
@@ -156,7 +160,7 @@ export default function HomePage() {
                   navigate('screener', { windowId: windowMeta.id, domain: 'global' })
                 }}
               >
-                Explore variables
+                {s.exploreVariables}
               </a>
               <a
                 href="#/discovery"
@@ -165,19 +169,18 @@ export default function HomePage() {
                   navigate('discovery', { variableId: hero?.id, windowId: windowMeta.id })
                 }}
               >
-                Explore the map
+                {s.exploreMap}
               </a>
             </p>
             <p className="home-fineprint">
-              {index.variables.length} verified variables · {index.windows.length} analysis periods · FDR q &lt;{' '}
-              {index.q_threshold} for &ldquo;significant&rdquo;.
+              {s.fineprint(index.variables.length, index.windows.length, index.q_threshold)}
             </p>
           </div>
           <div className="home-hero-visual">
             {globeVariable ? (
               <HomeGlobe
                 variableId={globeVariable.id}
-                label={globeVariable.label}
+                label={variableLabel(globeVariable, lang)}
                 windowMeta={windowMeta}
                 pulses={pulses}
                 onSelect={(id) => navigate('story', { caseId: id })}
@@ -188,14 +191,14 @@ export default function HomePage() {
       </section>
 
       <div className="home-body">
-        <ol className="home-steps" aria-label="How EarthPulse works">
+        <ol className="home-steps" aria-label={s.stepsLabel}>
           <li className="home-step">
             <span className="home-step-num num-mono" aria-hidden="true">
               1
             </span>
             <div>
-              <h2 className="home-step-title">Ask</h2>
-              <p>Pick a place and a question.</p>
+              <h2 className="home-step-title">{s.step1Title}</h2>
+              <p>{s.step1Body}</p>
             </div>
           </li>
           <li className="home-step">
@@ -203,8 +206,8 @@ export default function HomePage() {
               2
             </span>
             <div>
-              <h2 className="home-step-title">Read the evidence</h2>
-              <p>Rate, 95% interval, significance.</p>
+              <h2 className="home-step-title">{s.step2Title}</h2>
+              <p>{s.step2Body}</p>
             </div>
           </li>
           <li className="home-step">
@@ -212,8 +215,8 @@ export default function HomePage() {
               3
             </span>
             <div>
-              <h2 className="home-step-title">Cross-examine</h2>
-              <p>Data-quality flag, second dataset.</p>
+              <h2 className="home-step-title">{s.step3Title}</h2>
+              <p>{s.step3Body}</p>
             </div>
           </li>
         </ol>
@@ -221,31 +224,31 @@ export default function HomePage() {
         <section className="home-section" aria-labelledby="home-insights-title">
           <div className="home-section-head">
             <div>
-              <p className="home-kicker label-caps">From the real screener file</p>
-              <h2 id="home-insights-title">What the data says now</h2>
+              <p className="home-kicker label-caps">{s.insightsKicker}</p>
+              <h2 id="home-insights-title">{s.insightsTitle}</h2>
             </div>
             <p className="home-source">
-              {windowMeta.start} to {windowMeta.end} · global land ·{' '}
+              {s.sourceLead(windowMeta.start, windowMeta.end)}{' '}
               <span className="mono">screener/{windowMeta.id}/global.json</span>
             </p>
           </div>
 
           {error ? (
             <div className="home-status" role="alert">
-              <p>Could not load the screener file for Home. {error}</p>
+              <p>{s.loadError(error)}</p>
               <button type="button" className="button secondary" onClick={() => setAttempt((value) => value + 1)}>
-                Try again
+                {s.retry}
               </button>
             </div>
           ) : null}
           {!error && !screener ? (
             <div className="home-status" role="status">
-              Computing headlines from the screener…
+              {s.computing}
             </div>
           ) : null}
           {screener && insights.length === 0 ? (
             <div className="home-status" role="status">
-              This screener file has no evaluated cells yet, so there is no headline to show.
+              {s.noCells}
             </div>
           ) : null}
           {shown.length > 0 ? (
@@ -262,8 +265,7 @@ export default function HomePage() {
           ) : null}
           {screener ? (
             <p className="home-fineprint">
-              Every number above is computed from the published screener rows, area-weighted over evaluated land
-              cells. A significant trend is evidence to read, not proof of cause.
+              {s.insightsFootnote}
             </p>
           ) : null}
         </section>
@@ -281,17 +283,19 @@ const INSIGHT_TONE: Record<string, 'increase' | 'decrease' | 'caution' | 'defaul
 }
 
 function InsightCard({ insight, letter, onOpen }: { insight: HomeInsight; letter: string; onOpen: () => void }) {
-  const qualityText = qualityEvidenceText(insight)
-  const witnessText = insight.id === 'witness' ? null : witnessEvidenceText(insight)
+  const s = useStrings(HOME_STRINGS)
+  const { lang } = useLang()
+  const qualityText = qualityEvidenceText(insight, lang)
+  const witnessText = insight.id === 'witness' ? null : witnessEvidenceText(insight, lang)
   return (
     <Exhibit
-      label={`Exhibit ${letter} · ${insight.kicker}`}
+      label={s.exhibitLabel(letter, insight.kicker)}
       value={insight.value}
       unit={insight.unit}
       tone={INSIGHT_TONE[insight.id] ?? 'default'}
       footer={
         <button type="button" className="home-insight-open" onClick={onOpen}>
-          Inspect evidence <span aria-hidden="true">→</span>
+          {s.inspect} <span aria-hidden="true">→</span>
         </button>
       }
     >
@@ -310,11 +314,12 @@ interface GlobeData {
 }
 
 function GlobePlaceholder({ note }: { note?: string }) {
+  const s = useStrings(HOME_STRINGS)
   return (
     <div className="home-globe-stage">
       <div className="home-globe-placeholder" role="status">
         <span className="home-globe-shimmer" aria-hidden="true" />
-        <span className="sr-only">{note ?? 'Loading the globe…'}</span>
+        <span className="sr-only">{note ?? s.globeLoading}</span>
       </div>
     </div>
   )
@@ -333,6 +338,7 @@ function HomeGlobe({
   pulses: GlobePulse[]
   onSelect: (id: string) => void
 }) {
+  const s = useStrings(HOME_STRINGS)
   const [data, setData] = useState<GlobeData | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -359,7 +365,7 @@ function HomeGlobe({
   return (
     <div className="home-globe">
       {failed ? (
-        <GlobePlaceholder note="The globe could not be loaded. The rest of the page still works." />
+        <GlobePlaceholder note={s.globeFailed} />
       ) : data ? (
         <Suspense fallback={<GlobePlaceholder />}>
           <EarthGlobe
@@ -369,14 +375,14 @@ function HomeGlobe({
             pulses={pulses}
             onPulseSelect={onSelect}
             pulseHref={(id) => `#/story?case=${encodeURIComponent(id)}`}
-            ariaLabel={`Globe of the ${label.toLowerCase()} trend, ${windowMeta.start} to ${windowMeta.end}. Warm colours mean significant increase, cool colours significant decrease, yellow marks cells flagged for a sudden shift. One pulse marks each published case.`}
+            ariaLabel={s.globeAria(label, windowMeta.start, windowMeta.end)}
           />
         </Suspense>
       ) : (
         <GlobePlaceholder />
       )}
       <p className="home-caption">
-        {label} trend · {windowMeta.start} to {windowMeta.end}
+        {s.globeCaption(label, windowMeta.start, windowMeta.end)}
       </p>
     </div>
   )

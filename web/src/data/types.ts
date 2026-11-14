@@ -49,6 +49,36 @@ export interface DataIndex {
     layers: string[]
     products: Record<string, WitnessProduct>
   }
+  /** Schema 1.4 (§14): screened-only catalog tier. */
+  catalog?: {
+    window: string
+    method: string
+    layers: string[]
+    variables: CatalogVariable[]
+  }
+  /** Schema 1.4 (§16): time needed to detect a trend. */
+  detection?: {
+    method: string
+    layers: string[]
+    record_years: number
+  }
+}
+
+/** One catalog-tier variable in `index.json` (contract §14). */
+export interface CatalogVariable {
+  id: string
+  label: string
+  category: string
+  product: string
+  product_version: string
+  doi: string | null
+  source_type: string
+  source_variable: string
+  unit: string
+  long_name: string
+  description: string
+  increase_means: string
+  tier: 'catalog'
 }
 
 export interface Region {
@@ -102,6 +132,8 @@ export interface ScreenerFile {
   domain: string
   synthetic: boolean
   rows: ScreenerRow[]
+  /** Schema 1.4 (§14): catalog-tier rows for the full window only. */
+  catalog_rows?: ScreenerRow[]
 }
 
 export interface RegionSeries {
@@ -154,7 +186,7 @@ export interface WitnessProduct {
 export interface DetectiveCase {
   id: string
   title: string
-  region: { bbox: [number, number, number, number]; label: string }
+  region: { bbox: [number, number, number, number]; label: string; id?: string }
   window: string
   why_selected: string
   evidence: EvidenceItem[]

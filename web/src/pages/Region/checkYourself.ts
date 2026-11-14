@@ -2,6 +2,7 @@
 // and the tests use the same construction and no number is typed into the UI.
 
 import { colToLon, rowToLat } from '../../data/contract'
+import { pick, type Lang } from '../../i18n'
 import type { Country, Region, Selection, VariableMeta, WindowMeta } from '../../data/types'
 
 export type CheckToolId = 'giovanni' | 'hydrology' | 'climexp'
@@ -50,6 +51,8 @@ const CLIMEXP: CheckTool = {
   url: 'https://climexp.knmi.nl/',
 }
 
+import { CHECK_STRINGS } from './strings'
+
 type CheckVariable = Pick<
   VariableMeta,
   'product' | 'product_version' | 'source_variable' | 'category'
@@ -95,6 +98,7 @@ export function buildCheckYourself(input: {
   window: Pick<WindowMeta, 'start' | 'end'>
   regions?: readonly Region[]
   countries?: readonly Country[]
+  lang?: Lang
 }): CheckYourselfModel {
   const bbox = bboxForSelection(
     input.selection,
@@ -114,7 +118,7 @@ export function buildCheckYourself(input: {
             north: numberText(bbox[3]),
           }
         : null,
-      period: `${input.window.start} to ${input.window.end}`,
+      period: pick(CHECK_STRINGS, input.lang ?? 'en').periodValue(input.window.start, input.window.end),
     },
     tools: checkTools(input.variable),
   }

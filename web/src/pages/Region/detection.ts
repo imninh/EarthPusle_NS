@@ -3,9 +3,11 @@
 // Hamed-Rao Mann-Kendall result (model.ts). This file only builds the residual
 // from that published fit and formats the required sentence.
 
+import { pick, type Lang } from '../../i18n'
 import { yearsToDetect, type YearsToDetectResult } from '../../lib/stats'
 import type { PlaceData } from './loadPlace'
 import { monthsSince } from './model'
+import { DETECTION_STRINGS } from './strings.text'
 
 export interface RegionDetection {
   result: YearsToDetectResult
@@ -26,6 +28,7 @@ export function regionDetection(
   place: PlaceData,
   windowStart: string,
   windowEnd: string,
+  lang: Lang = 'en',
 ): RegionDetection | null {
   if (place.evidence.trendClass !== 'not significant' || place.trend == null) return null
   const months = place.months.filter((month) => month >= windowStart && month <= windowEnd)
@@ -46,9 +49,11 @@ export function regionDetection(
   if (!Number.isFinite(result.nStar)) return null
 
   const years = Math.round(months.length / 12)
-  const sentence =
-    `A trend of this size would need about ${formatYears(result.nStar)} years of data ` +
-    `to stand out from the natural ups and downs here (range ${formatYears(result.lower)}–` +
-    `${formatYears(result.upper)}). The record has ${years}.`
+  const sentence = pick(DETECTION_STRINGS, lang).sentence(
+    formatYears(result.nStar),
+    formatYears(result.lower),
+    formatYears(result.upper),
+    years,
+  )
   return { result, years, sentence }
 }

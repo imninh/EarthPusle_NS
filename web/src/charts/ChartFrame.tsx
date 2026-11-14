@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Plotly from 'plotly.js-basic-dist-min'
+import { defineStrings, useLang, useStrings } from '../i18n'
 import { Plot } from './plotly'
 import { monthAfterIso, monthIso, useChartColors, withAlpha } from './theme'
 import {
@@ -12,6 +13,8 @@ import {
   type ChartTrendBand,
 } from './traces'
 import './charts.css'
+
+export const STRINGS = defineStrings({ zScore: 'z-score' }, { zScore: 'điểm z' })
 
 export type { ChartMarker, ChartTrace, ChartTrendBand }
 
@@ -37,6 +40,8 @@ export function ChartFrame({
   footer,
 }: ChartFrameProps) {
   const colors = useChartColors()
+  const s = useStrings(STRINGS)
+  const { lang } = useLang()
   const frameRef = useRef<HTMLDivElement>(null)
   // Under 760 px there is no room for a label margin; the swatch legend below the chart is used.
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 760)
@@ -66,7 +71,7 @@ export function ChartFrame({
   }, [])
 
   const hasY2 = traces.some((trace) => trace.axis === 'y2')
-  const data = buildPlotData(traces, colors, trendBand)
+  const data = buildPlotData(traces, colors, trendBand, lang)
   const gridColor = withAlpha(colors.border, 0.6)
   const shapes: Record<string, unknown>[] = []
   if (band) {
@@ -119,7 +124,7 @@ export function ChartFrame({
     ...(hasY2
       ? {
           yaxis2: {
-            title: { text: yTitle2 ?? 'z-score', font: tick, standoff: 8 },
+            title: { text: yTitle2 ?? s.zScore, font: tick, standoff: 8 },
             overlaying: 'y',
             side: 'right',
             gridcolor: 'rgba(0,0,0,0)',

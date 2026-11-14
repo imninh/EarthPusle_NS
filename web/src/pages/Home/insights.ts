@@ -2,7 +2,10 @@
 // directions come from index.json. No result numbers are hard-coded.
 import type { Country, DetectiveCase, ScreenerRow, VariableMeta } from '../../data/types'
 import { buildViewRows, formatPercent, type ScreenerViewRow } from '../Screener/metrics'
-import { cautionCaseForVariable } from '../Story/model'
+import { variableLabel } from '../../i18n/terms'
+import { pick, type Lang } from '../../i18n'
+import { cautionCaseForVariable, increaseMeansWords } from '../Story/model'
+import { INSIGHT_STRINGS } from './strings'
 
 export interface HomeInsight {
   id: string
@@ -38,9 +41,9 @@ export function shouldShowQualityNote(insight: HomeInsight): boolean {
 }
 
 /** Muted evidence line for a card whose significant area is substantially flagged. */
-export function qualityEvidenceText(insight: HomeInsight): string | null {
+export function qualityEvidenceText(insight: HomeInsight, lang: Lang = 'en'): string | null {
   if (!shouldShowQualityNote(insight) || insight.qualityFlagged == null) return null
-  return `${formatPercent(insight.qualityFlagged)} of this area shows a sudden shift; read the evidence`
+  return pick(INSIGHT_STRINGS, lang).qualityLine(formatPercent(insight.qualityFlagged))
 }
 
 function evaluated(rows: readonly ScreenerViewRow[]): ScreenerViewRow[] {
@@ -73,9 +76,9 @@ function witnessContradicted(row: ScreenerViewRow): number | null {
 }
 
 /** One muted evidence line when a second NASA dataset confirms the significant area. */
-export function witnessEvidenceText(insight: HomeInsight): string | null {
+export function witnessEvidenceText(insight: HomeInsight, lang: Lang = 'en'): string | null {
   if (insight.witnessConfirmed == null) return null
-  return `${formatPercent(insight.witnessConfirmed)} confirmed by a second NASA dataset`
+  return pick(INSIGHT_STRINGS, lang).witnessLine(formatPercent(insight.witnessConfirmed))
 }
 
 function maxBy(rows: readonly ScreenerViewRow[], value: (row: ScreenerViewRow) => number | null): ScreenerViewRow | null {
@@ -102,9 +105,12 @@ export function buildHomeInsights(
   windowStart: string,
   windowEnd: string,
   cases?: readonly DetectiveCase[] | null,
+  lang: Lang = 'en',
 ): HomeInsight[] {
   const viewRows = evaluated(buildViewRows(variables, rows))
   if (viewRows.length === 0) return []
+  const t = pick(INSIGHT_STRINGS, lang)
+  const nameOf = (row: ScreenerViewRow) => variableLabel({ id: row.variableId, label: row.label }, lang)
   const period = `${windowStart}–${windowEnd}`
   const insights: HomeInsight[] = []
 
@@ -115,11 +121,15 @@ export function buildHomeInsights(
   if (temperature && temperature.sigIncrease != null) {
     insights.push({
       id: 'warming',
-      kicker: 'Warming signal',
+      kicker: t.warmingKicker,
       value: formatPercent(temperature.sigIncrease),
-      unit: 'of land is warming significantly',
-      title: `${temperature.label} is warming`,
-      detail: `A significant ${temperature.increaseMeans} trend over ${formatPercent(temperature.sigIncrease)} of land, ${period}.`,
+      unit: t.warmingUnit,
+      title: t.warmingTitle(nameOf(temperature)),
+      detail: t.warmingDetail(
+        increaseMeansWords(temperature.increaseMeans, lang),
+        formatPercent(temperature.sigIncrease),
+        period,
+      ),
       variableId: temperature.variableId,
       qualityFlagged: qualityFlagged(temperature),
       witnessConfirmed: witnessConfirmed(temperature),
@@ -133,11 +143,11 @@ export function buildHomeInsights(
     const caseId = cautionCaseForVariable(cases ?? [], witnessCard.variableId)?.id ?? null
     insights.push({
       id: 'witness',
-      kicker: 'Second witness',
+      kicker: t.witnessKicker,
       value: formatPercent(witnessCard.witnessContradicted),
-      unit: 'of this area is contradicted by a second NASA dataset',
-      title: 'The second witness disagrees',
-      detail: `${witnessCard.label}: ${formatPercent(witnessCard.witnessContradicted)} of its significant area is contradicted by an independent NASA dataset, so read the evidence.`,
+      unit: t.witnessUnit,
+      title: t.witnessTitle,
+      detail: t.witnessDetail(nameOf(witnessCard), formatPercent(witnessCard.witnessContradicted)),
       variableId: witnessCard.variableId,
       qualityFlagged: qualityFlagged(witnessCard),
       witnessConfirmed: witnessConfirmed(witnessCard),
@@ -151,11 +161,11 @@ export function buildHomeInsights(
     if (broad > 0) {
       insights.push({
         id: 'breadth',
-        kicker: 'Across variables',
+        kicker: t.breadthKicker,
         value: `${broad} / ${viewRows.length}`,
-        unit: 'variables show broad significant change',
-        title: `${broad} of ${viewRows.length} variables show significant change`,
-        detail: `Each has a significant increase or decrease over more than ${Math.round(BREADTH_THRESHOLD * 100)}% of land, ${period}.`,
+        unit: t.breadthUnit,
+        title: t.breadthTitle(broad, viewRows.length),
+        detail: t.breadthDetail(Math.round(BREADTH_THRESHOLD * 100), period),
         variableId: null,
         qualityFlagged: null,
         witnessConfirmed: null,
@@ -169,11 +179,11 @@ export function buildHomeInsights(
   if (decreasing && decreasing.sigDecrease != null && decreasing.sigDecrease > 0) {
     insights.push({
       id: 'decrease',
-      kicker: 'Loss signal',
+      kicker: t.decreaseKicker,
       value: formatPercent(decreasing.sigDecrease),
-      unit: `of land shows a significant decrease in ${decreasing.label.toLowerCase()}`,
-      title: `${decreasing.label}: significant decrease`,
-      detail: `${decreasing.label} falls significantly over ${formatPercent(decreasing.sigDecrease)} of land, ${period}.`,
+      unit: t.decreaseUnit(nameOf(decreasing)),
+      title: t.decreaseTitle(nameOf(decreasing)),
+      detail: t.decreaseDetail(nameOf(decreasing), formatPercent(decreasing.sigDecrease), period),
       variableId: decreasing.variableId,
       qualityFlagged: qualityFlagged(decreasing),
       witnessConfirmed: witnessConfirmed(decreasing),
@@ -186,11 +196,11 @@ export function buildHomeInsights(
   if (contrasting && contrasting.contrast != null && contrasting.contrast > 0) {
     insights.push({
       id: 'contrast',
-      kicker: 'Regional contrast',
+      kicker: t.contrastKicker,
       value: contrasting.contrast.toFixed(2),
-      unit: 'contrast score, 0 to 0.5',
-      title: `${contrasting.label} changes in both directions`,
-      detail: `${formatPercent(contrasting.sigIncrease)} of land increases and ${formatPercent(contrasting.sigDecrease)} decreases. The score is near 0.5 when both directions cover similar area.`,
+      unit: t.contrastUnit,
+      title: t.contrastTitle(nameOf(contrasting)),
+      detail: t.contrastDetail(formatPercent(contrasting.sigIncrease), formatPercent(contrasting.sigDecrease)),
       variableId: contrasting.variableId,
       qualityFlagged: qualityFlagged(contrasting),
       witnessConfirmed: witnessConfirmed(contrasting),
@@ -217,7 +227,9 @@ function perspectiveFallback(variables: readonly VariableMeta[]): string | null 
 export function buildCautionEntry(
   cases: readonly DetectiveCase[] | null | undefined,
   countries?: readonly Pick<Country, 'label'>[] | null,
+  lang: Lang = 'en',
 ): CautionEntry | null {
+  const t = pick(INSIGHT_STRINGS, lang)
   const cautions = (cases ?? []).filter((entry) => entry.kind === 'caution')
   if (cautions.length === 0) return null
   const countryLabels = new Set(
@@ -227,11 +239,11 @@ export function buildCautionEntry(
     (countryLabels.size > 0
       ? cautions.find((entry) => countryLabels.has(entry.region.label.trim().toLowerCase()))
       : null) ?? cautions[0]!
-  const place = item.region.label.trim() || 'this place'
+  const place = item.region.label.trim() || t.cautionPlaceFallback
   const summary = item.summary?.trim() || item.why_selected.trim()
   return {
     caseId: item.id,
-    title: `Look closer: ${place}`,
+    title: t.cautionTitle(place),
     summary,
   }
 }

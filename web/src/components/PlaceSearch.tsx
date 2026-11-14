@@ -10,6 +10,26 @@ import {
 } from 'react'
 import { loadCountries, loadRegions } from '../data/loaders'
 import type { Country, Region } from '../data/types'
+import { defineStrings, useStrings } from '../i18n'
+
+export const STRINGS = defineStrings(
+  {
+    placeholder: 'Search countries or regions',
+    place: 'Place',
+    loading: 'Loading places…',
+    unavailable: 'Places are unavailable.',
+    none: 'No matching place.',
+    cells: (n: number) => `${n} grid cells inside the land mask`,
+  },
+  {
+    placeholder: 'Tìm quốc gia hoặc vùng',
+    place: 'Địa điểm',
+    loading: 'Đang tải danh sách địa điểm…',
+    unavailable: 'Không có danh sách địa điểm.',
+    none: 'Không có địa điểm phù hợp.',
+    cells: (n: number) => `${n} ô lưới nằm trong mặt nạ đất liền`,
+  },
+)
 
 export interface PlaceSelection {
   kind: 'region'
@@ -148,9 +168,10 @@ function boxOption(region: Region): PlaceOption {
  */
 export function PlaceSearch({
   onPick,
-  placeholder = 'Search countries or regions',
+  placeholder,
   compact = false,
 }: PlaceSearchProps) {
+  const s = useStrings(STRINGS)
   const [options, setOptions] = useState<PlaceOption[]>([])
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [query, setQuery] = useState('')
@@ -258,7 +279,7 @@ export function PlaceSearch({
         htmlFor={inputId}
         style={{ fontSize: '0.75rem', color: 'var(--muted)' }}
       >
-        Place
+        {s.place}
       </label>
       <input
         id={inputId}
@@ -272,7 +293,7 @@ export function PlaceSearch({
         autoComplete="off"
         spellCheck={false}
         value={query}
-        placeholder={placeholder}
+        placeholder={placeholder ?? s.placeholder}
         disabled={status === 'error'}
         onChange={(event) => {
           setQuery(event.target.value)
@@ -290,12 +311,12 @@ export function PlaceSearch({
 
       {status === 'loading' && (
         <span role="status" style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
-          Loading places…
+          {s.loading}
         </span>
       )}
       {status === 'error' && (
         <span role="status" style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
-          Places are unavailable.
+          {s.unavailable}
         </span>
       )}
 
@@ -303,7 +324,7 @@ export function PlaceSearch({
         <ul id={listId} role="listbox" aria-labelledby={labelId} style={listStyle}>
           {visible.length === 0 && (
             <li role="status" style={{ padding: '6px 8px', color: 'var(--muted)' }}>
-              No matching place.
+              {s.none}
             </li>
           )}
           {visible.map((option, index) => (
@@ -314,7 +335,7 @@ export function PlaceSearch({
               aria-selected={index === activeIndex}
               title={
                 option.kind === 'country' && option.nCells !== undefined
-                  ? `${option.nCells} grid cells inside the land mask`
+                  ? s.cells(option.nCells)
                   : undefined
               }
               onMouseDown={(event) => event.preventDefault()}

@@ -51,7 +51,7 @@ import {
 import type { Country, DataIndex, Region, Selection } from '../../data/types'
 import { PlaceSearch } from '../../components/PlaceSearch'
 import { Disclosure, Exhibit, HelpTip, VerdictStamp } from '../../components/ui'
-import { GLOSSARY, VERDICT_LABELS, formatUnit, plainVerdict } from '../../lib/format'
+import { formatUnitIn, glossaryEntry, plainVerdict, verdictKindOfLabel } from '../../lib/format'
 import {
   type ClassPalette,
   type Rgba,
@@ -87,59 +87,54 @@ import {
   VERDICT_MARKER,
   VERDICT_NOT_YET,
   VERDICT_STRIPE,
-  VERDICT_WORDS,
   applyContradictedStripes,
   verdictClass,
   verdictClassWords,
   verdictColour,
   verdictGrid,
+  verdictWords,
 } from '../../maps/verdict'
+import { type Lang, pick, useLang, useStrings, variableLabel as translateVariableLabel } from '../../i18n'
 import { type LayerId, isLayerId, resolveLayer } from './layers'
+import { DISCOVERY_STRINGS, increaseMeansLabel } from './strings'
 import './discovery.css'
 
 // Vite's prebundled maplibre looks for the worker beside that bundle, where the file is not
 // copied. Point at the package worker before any map is created. This stays inside Discovery.
 setWorkerUrl(maplibreWorkerUrl)
 
-/** Not a contract field. Fixed copy so the info panel can state the method. */
-const METHOD_ONE_LINER =
-  "Sen's slope and the Hamed–Rao modified Mann–Kendall test, then Benjamini–Hochberg FDR across evaluated cells."
-
-/** Not a contract field. The 80% and 10-year rules are the published eligibility rule. */
-const COVERAGE_NOTE =
-  'Coverage is valid months divided by months in the window. A cell is evaluated only when valid months are at least 80% of the window and the window is at least 10 years; otherwise the class is insufficient data. Cells outside the common land mask are left transparent.'
-
-const VERDICT_LAYER = { id: 'verdict', label: 'Verdict' } as const
-const BASE_LAYERS = [
-  { id: 'trend', label: 'Trend' },
-  { id: 'rate', label: 'Rate of change' },
-  { id: 'std', label: 'Standardized change' },
-  { id: 'significance', label: 'Significance' },
-  { id: 'pattern', label: 'Pattern (core)' },
-  { id: 'coverage', label: 'Coverage' },
-] as const
-const QUALITY_LAYER = { id: 'quality', label: 'Data quality' } as const
-const WITNESS_LAYER = { id: 'witness', label: 'Second witness' } as const
+const VERDICT_LAYER_ID: LayerId = 'verdict'
+const BASE_LAYER_IDS: readonly LayerId[] = ['trend', 'rate', 'std', 'significance', 'pattern', 'coverage']
+const QUALITY_LAYER_ID: LayerId = 'quality'
+const WITNESS_LAYER_ID: LayerId = 'witness'
 /** Layers that stay under "More layers" until the user opens it. */
 const MORE_LAYER_IDS: readonly LayerId[] = ['std', 'significance', 'pattern', 'coverage']
 
 /**
- * One-line explanations for the layers that need a definition. Significance, data
- * quality and second witness come from the shared P19 glossary; the standardized
- * change sentence is local because the glossary has no TermId for it yet.
+ * One-line explanations for the layers that need a definition. Significance,
+ * standardized change, data quality and second witness come from the shared
+ * glossary, so the same words appear wherever the term is explained.
  */
-const LAYER_HELP: Partial<Record<LayerId, { label: string; text: string }>> = {
-  verdict: {
-    label: 'Verdict',
-    text: 'One map of the whole idea: where a trend is significant and clean, where a sudden shift is flagged, where a second dataset disagrees, and where there is only a direction so far.',
-  },
-  std: {
-    label: 'Standardized change',
-    text: 'Change measured in units of this variable’s own year-to-year variability, so different variables can be compared.',
-  },
-  significance: { label: 'Significance', text: GLOSSARY.q_value.plain },
-  quality: { label: 'Data quality', text: GLOSSARY.sudden_shift.plain },
-  witness: { label: 'Second witness', text: GLOSSARY.second_witness.plain },
+function layerHelp(
+  id: LayerId,
+  s: DiscoveryText,
+  lang: Lang,
+): { label: string; text: string } | undefined {
+  switch (id) {
+    case 'verdict':
+      return { label: s.layers.verdict, text: s.verdictHelp }
+    // GLOSSARY entries below need a `lang` argument once lib/format is bilingual.
+    case 'std':
+      return { label: s.layers.std, text: glossaryEntry('standardized_change', lang).plain }
+    case 'significance':
+      return { label: s.layers.significance, text: glossaryEntry('q_value', lang).plain }
+    case 'quality':
+      return { label: s.layers.quality, text: glossaryEntry('data_quality', lang).plain }
+    case 'witness':
+      return { label: s.layers.witness, text: glossaryEntry('second_witness', lang).plain }
+    default:
+      return undefined
+  }
 }
 
 type Projection = 'globe' | 'mercator'
@@ -184,9 +179,11 @@ interface ClickState {
 interface HoverState {
   x: number
   y: number
-  title: string
-  detail: string
+  row: number
+  col: number
 }
+
+type DiscoveryText = (typeof DISCOVERY_STRINGS)['en']
 
 interface RingCollection {
   type: 'FeatureCollection'
@@ -217,6 +214,8 @@ const CANVAS_CACHE_LIMIT = 8
 
 export default function DiscoveryPage() {
   const { index, variable, variableId, windowId, navigate, selection, mapLayer } = useApp()
+  const { lang } = useLang()
+  const s = useStrings(DISCOVERY_STRINGS)
   const [layerChoice, setLayerChoice] = useState<LayerId | null>(() =>
     isLayerId(mapLayer) && (mapLayer !== 'witness' || index.witness) ? mapLayer : null,
   )
@@ -272,8 +271,8 @@ export default function DiscoveryPage() {
   interaction.current = { grids, layer: activeLayer, variable, qThreshold: index.q_threshold }
 
   const windowMeta = index.windows.find((item) => item.id === windowId)
-  const temperatureLabel = variableLabel(index, index.pattern_pair.temperature)
-  const moistureLabel = variableLabel(index, index.pattern_pair.moisture)
+  const temperatureLabel = variableName(index, index.pattern_pair.temperature, lang)
+  const moistureLabel = variableName(index, index.pattern_pair.moisture, lang)
   const rateLimit = useMemo(() => (grids ? finiteAbsPercentile(grids.slope, 0.98) : null), [grids])
   const qualityAvailable = Boolean(index.quality) && grids?.quality != null
   const witnessAvailable = Boolean(index.witness) && grids?.witness != null
@@ -282,15 +281,20 @@ export default function DiscoveryPage() {
   // no witness section at all.
   const witnessListed = Boolean(index.witness?.products[variableId])
   const witnessMissing = Boolean(index.witness) && !witnessListed
-  const displayUnit = formatUnit(variable.display_unit)
+  const displayUnit = formatUnitIn(variable.display_unit, lang)
   const verdictAvailable = qualityAvailable || witnessAvailable
-  const layers: ReadonlyArray<{ id: LayerId; label: string }> = [
-    ...(verdictAvailable || grids == null ? [VERDICT_LAYER] : []),
-    ...BASE_LAYERS,
-    ...(qualityAvailable ? [QUALITY_LAYER] : []),
-    ...(index.witness ? [WITNESS_LAYER] : []),
+  const layerIds: readonly LayerId[] = [
+    ...(verdictAvailable || grids == null ? [VERDICT_LAYER_ID] : []),
+    ...BASE_LAYER_IDS,
+    ...(qualityAvailable ? [QUALITY_LAYER_ID] : []),
+    ...(index.witness ? [WITNESS_LAYER_ID] : []),
   ]
+  const layers: ReadonlyArray<{ id: LayerId; label: string }> = layerIds.map((id) => ({
+    id,
+    label: s.layers[id],
+  }))
   const layerLabel = layers.find((item) => item.id === activeLayer)?.label ?? activeLayer
+  const displayVariableLabel = translateVariableLabel(variable, lang)
 
   function pickPlace(place: { kind: 'region'; regionId: string }): void {
     const country = countries.find((item) => item.id === place.regionId)
@@ -504,11 +508,8 @@ export default function DiscoveryPage() {
         setHover(null)
         return
       }
-      const index = cellIndex(row, col)
-      const grids = state.grids
-      const title = `${formatLatitude(rowToLat(row))}, ${formatLongitude(colToLon(col))}`
-      const detail = hoverDetail(state.layer, grids, index, state.variable)
-      setHover({ x: event.point.x, y: event.point.y, title, detail })
+      // The text of the tooltip is built at render time, so a language change only re-renders text.
+      setHover({ x: event.point.x, y: event.point.y, row, col })
     }
     const onLeave = () => setHover(null)
 
@@ -580,7 +581,7 @@ export default function DiscoveryPage() {
   }, [cell, mapEpoch])
 
   const layerButton = (item: { id: LayerId; label: string }) => {
-    const help = LAYER_HELP[item.id]
+    const help = layerHelp(item.id, s, lang)
     const disabled = item.id === 'witness' && witnessMissing
     return (
       <div key={item.id} className="discovery-layer" role="none">
@@ -589,14 +590,14 @@ export default function DiscoveryPage() {
           role="radio"
           aria-checked={activeLayer === item.id}
           disabled={disabled}
-          title={disabled ? 'No second dataset for this variable' : undefined}
+          title={disabled ? s.noSecondDataset : undefined}
           onClick={() => setLayerChoice(item.id)}
         >
           {item.label}
         </button>
         {help ? (
-          <HelpTip label={help.label} description={disabled ? 'No second dataset for this variable' : help.text}>
-            {disabled ? 'No second dataset for this variable' : help.text}
+          <HelpTip label={help.label} description={disabled ? s.noSecondDataset : help.text}>
+            {disabled ? s.noSecondDataset : help.text}
           </HelpTip>
         ) : null}
       </div>
@@ -608,16 +609,16 @@ export default function DiscoveryPage() {
 
   return (
     <section className="discovery" ref={rootRef}>
-      <h1 className="sr-only">Global Discovery</h1>
+      <h1 className="sr-only">{s.h1}</h1>
       <div
         className={`discovery-stage${cell ? ' has-cell' : ''}`}
         ref={stageRef}
         style={stageHeight == null ? undefined : { height: `${stageHeight}px` }}
       >
         <div className="discovery-night" ref={nightRef}>
-          <div ref={mapNodeRef} className="discovery-map-canvas" aria-label="World map of the selected variable" />
+          <div ref={mapNodeRef} className="discovery-map-canvas" aria-label={s.mapAria} />
 
-          <aside className={`discovery-panel${sheetOpen ? ' is-open' : ''}`} aria-label="Map layers and legend">
+          <aside className={`discovery-panel${sheetOpen ? ' is-open' : ''}`} aria-label={s.panelAria}>
             <button
               type="button"
               className="discovery-sheet-handle"
@@ -625,13 +626,11 @@ export default function DiscoveryPage() {
               onClick={() => setSheetOpen((open) => !open)}
             >
               <span className="discovery-sheet-grip" aria-hidden="true" />
-              <span>
-                {layerLabel} · {sheetOpen ? 'hide legend' : 'show legend'}
-              </span>
+              <span>{sheetOpen ? s.handleHide(layerLabel) : s.handleShow(layerLabel)}</span>
             </button>
             <div className="discovery-panel-body">
               <div className="discovery-place-search">
-                <PlaceSearch onPick={pickPlace} compact placeholder="Search a country or region" />
+                <PlaceSearch onPick={pickPlace} compact placeholder={s.searchPlaceholder} />
               </div>
               {pickedPlace ? (
                 <div className="discovery-place-callout">
@@ -642,19 +641,22 @@ export default function DiscoveryPage() {
                       className="discovery-primary"
                       onClick={() => navigate('region', { selection: { kind: 'region', regionId: pickedPlace.id } })}
                     >
-                      Open evidence
+                      {s.openEvidence}
                     </button>
-                    <button type="button" onClick={() => setPickedPlace(null)} aria-label="Close place callout">
-                      Close
+                    <button type="button" onClick={() => setPickedPlace(null)} aria-label={s.closeCalloutAria}>
+                      {s.close}
                     </button>
                   </div>
                 </div>
               ) : null}
-              <h2 className="discovery-panel-title label-caps">Layer</h2>
+              <h2 className="discovery-panel-title label-caps">{s.layerTitle}</h2>
               <p className="discovery-muted">
-                {variable.label}, {windowMeta ? `${windowMeta.start} to ${windowMeta.end}` : windowId}
+                {s.layerSubtitle(
+                  displayVariableLabel,
+                  windowMeta ? s.windowRange(windowMeta.start, windowMeta.end) : windowId,
+                )}
               </p>
-              <div className="discovery-layers" role="radiogroup" aria-label="Map layer">
+              <div className="discovery-layers" role="radiogroup" aria-label={s.layerGroupAria}>
                 {mainLayers.map(layerButton)}
                 {moreLayers.length > 0 ? (
                   <>
@@ -664,7 +666,7 @@ export default function DiscoveryPage() {
                       aria-expanded={moreShown}
                       onClick={() => setMoreOpen((open) => !open)}
                     >
-                      {moreShown ? 'Fewer layers' : 'More layers'}
+                      {moreShown ? s.fewerLayers : s.moreLayers}
                     </button>
                     {moreShown ? moreLayers.map(layerButton) : null}
                   </>
@@ -682,54 +684,54 @@ export default function DiscoveryPage() {
                 verdictHasQuality={grids?.quality != null}
                 verdictHasWitness={grids?.witness != null}
               />
-              <p className="discovery-muted discovery-hint">Click a cell to open its case file.</p>
+              <p className="discovery-muted discovery-hint">{s.clickHint}</p>
             </div>
           </aside>
 
           <div className="discovery-map-toolbar">
-            <div className="discovery-segmented" role="group" aria-label="Map projection">
+            <div className="discovery-segmented" role="group" aria-label={s.projectionAria}>
               <button type="button" aria-pressed={projection === 'globe'} onClick={() => setProjection('globe')}>
-                Globe
+                {s.globe}
               </button>
               <button type="button" aria-pressed={projection === 'mercator'} onClick={() => setProjection('mercator')}>
-                Flat map
+                {s.flatMap}
               </button>
             </div>
           </div>
 
-          {hover ? (
+          {hover && grids ? (
             <div className="discovery-tooltip" style={{ left: hover.x + 14, top: hover.y + 14 }} role="status">
-              <strong>{hover.title}</strong>
-              <span>{hover.detail}</span>
+              <strong>{`${formatLatitude(rowToLat(hover.row), s)}, ${formatLongitude(colToLon(hover.col), s)}`}</strong>
+              <span>{hoverDetail(activeLayer, grids, cellIndex(hover.row, hover.col), variable, lang)}</span>
             </div>
           ) : null}
 
           {loadState === 'loading' && !grids ? (
             <div className="discovery-status" role="status">
               <div className="discovery-spinner" />
-              <span>Loading layer…</span>
+              <span>{s.loadingLayer}</span>
             </div>
           ) : null}
           {loadState === 'loading' && grids ? (
             <div className="discovery-status-badge" role="status">
-              Updating layer…
+              {s.updatingLayer}
             </div>
           ) : null}
           {basemapState === 'loading' ? (
             <div className="discovery-status" role="status">
               <div className="discovery-spinner" />
-              <span>Loading Natural Earth basemap…</span>
+              <span>{s.loadingBasemap}</span>
             </div>
           ) : null}
           {basemapState === 'error' ? (
             <div className="discovery-status discovery-status-error" role="alert">
-              <strong>The offline basemap failed to load.</strong>
+              <strong>{s.basemapFailed}</strong>
               <span>{basemapError}</span>
             </div>
           ) : null}
           {loadState === 'error' ? (
             <div className="discovery-status discovery-status-error" role="alert">
-              <strong>This layer failed to load.</strong>
+              <strong>{s.layerFailed}</strong>
               <span>{error}</span>
             </div>
           ) : null}
@@ -755,15 +757,12 @@ export default function DiscoveryPage() {
 
       <div className="discovery-below">
         <section className="discovery-card">
-          <h2>Regions</h2>
+          <h2>{s.regionsTitle}</h2>
           <label className="discovery-check">
             <input type="checkbox" checked={showRegions} onChange={(event) => setShowRegions(event.target.checked)} />
-            Show region outlines
+            {s.showOutlines}
           </label>
-          <p className="discovery-muted">
-            Boxes are approximate. With outlines on, a click inside a box opens that region. Turn outlines off to
-            inspect a cell inside a box. Overlapping boxes open the smaller one.
-          </p>
+          <p className="discovery-muted">{s.regionsNote}</p>
           {regionNote ? <p role="alert">{regionNote}</p> : null}
           <ul className="discovery-regions">
             {regions.map((region) => (
@@ -814,20 +813,23 @@ function Legend({
   temperatureLabel: string
   moistureLabel: string
 }) {
+  const { lang } = useLang()
+  const s = useStrings(DISCOVERY_STRINGS)
+  const words = verdictWords(lang)
   return (
-    <section className="discovery-legend" aria-label="Legend">
-      <h3>Legend</h3>
+    <section className="discovery-legend" aria-label={s.legend}>
+      <h3>{s.legend}</h3>
       <p>
-        Display unit: {variableUnit}.
-        {layer === 'verdict' ? ' Each land cell gets one of four verdicts, from layers already on the map.' : null}
-        {layer === 'rate' ? ` Sen slope: ${variableUnit} per decade.` : null}
-        {layer === 'std' ? ' Standardized change: standard deviations per decade.' : null}
-        {layer === 'significance' ? ' Significance is an FDR-adjusted q value from 0 to 1.' : null}
-        {layer === 'coverage' ? ' Coverage is a fraction of valid months from 0 to 1.' : null}
-        {layer === 'trend' ? ' Trend classes describe direction, not a rate.' : null}
-        {layer === 'pattern' ? ` Pattern classes compare ${temperatureLabel} and ${moistureLabel}.` : null}
-        {layer === 'quality' ? ' Hatching marks a sudden shift. A code-1 shift could be a real climate jump or a data artefact; a code-2 shift falls during a documented GLDAS input change (2008–2012).' : null}
-        {layer === 'witness' ? ' A second, independent NASA dataset checks the sign and significance of each trend.' : null}
+        {s.displayUnit(variableUnit)}
+        {layer === 'verdict' ? s.introVerdict : null}
+        {layer === 'rate' ? s.introRate(variableUnit) : null}
+        {layer === 'std' ? s.introStd : null}
+        {layer === 'significance' ? s.introSignificance : null}
+        {layer === 'coverage' ? s.introCoverage : null}
+        {layer === 'trend' ? s.introTrend : null}
+        {layer === 'pattern' ? s.introPattern(temperatureLabel, moistureLabel) : null}
+        {layer === 'quality' ? s.introQuality : null}
+        {layer === 'witness' ? s.introWitness : null}
       </p>
       {layer === 'verdict' ? (
         <>
@@ -840,12 +842,13 @@ function Legend({
                 }}
               />
               <span>
-                {VERDICT_WORDS.clean} (warm = increase, cool = decrease)
+                {words.clean}
+                {s.warmCoolNote}
               </span>
             </li>
             <li>
               <span className="discovery-swatch" style={{ background: cssRgba(VERDICT_MARKER) }} />
-              <span>{VERDICT_WORDS.flagged}</span>
+              <span>{words.flagged}</span>
             </li>
             <li>
               <span
@@ -854,7 +857,7 @@ function Legend({
                   background: `repeating-linear-gradient(45deg, ${cssRgba(palette.increase)} 0 3px, ${cssRgba(VERDICT_STRIPE)} 3px 6px)`,
                 }}
               />
-              <span>{VERDICT_WORDS.contradicted}</span>
+              <span>{words.contradicted}</span>
             </li>
             <li>
               <span
@@ -863,98 +866,94 @@ function Legend({
                   background: `repeating-linear-gradient(45deg, ${cssRgba([palette.neutral[0], palette.neutral[1], palette.neutral[2], 160])} 0 1px, transparent 1px 4px)`,
                 }}
               />
-              <span>{VERDICT_WORDS.notYet}</span>
+              <span>{words.notYet}</span>
             </li>
-            <Swatch hatch={palette} text="Not enough data" />
-            <Swatch text="Outside domain (transparent)" />
+            <Swatch hatch={palette} text={s.notEnoughData} />
+            <Swatch text={s.outsideTransparent} />
           </ul>
           {!verdictHasQuality || !verdictHasWitness ? (
             <p className="discovery-muted">
               {!verdictHasQuality && !verdictHasWitness
-                ? 'This variable has no sudden-shift check and no second dataset, so no cell is flagged or contradicted.'
+                ? s.verdictMissingBoth
                 : !verdictHasQuality
-                  ? 'This variable has no sudden-shift check, so no cell is flagged.'
-                  : 'This variable has no second dataset, so no cell can be contradicted.'}
+                  ? s.verdictMissingQuality
+                  : s.verdictMissingWitness}
             </p>
           ) : null}
         </>
       ) : null}
       {layer === 'trend' ? (
         <ul>
-          <Swatch colour={palette.increase} text={`Significant increase (${increaseMeans})`} />
-          <Swatch colour={palette.decrease} text="Significant decrease" />
-          <Swatch colour={[palette.neutral[0], palette.neutral[1], palette.neutral[2], 120]} text="Not significant" />
-          <Swatch hatch={palette} text="Insufficient data" />
-          <Swatch text="Outside domain (transparent)" />
+          <Swatch colour={palette.increase} text={s.significantIncrease(increaseMeansLabel(increaseMeans, lang))} />
+          <Swatch colour={palette.decrease} text={s.significantDecrease} />
+          <Swatch colour={[palette.neutral[0], palette.neutral[1], palette.neutral[2], 120]} text={s.notSignificant} />
+          <Swatch hatch={palette} text={s.insufficientData} />
+          <Swatch text={s.outsideTransparent} />
         </ul>
       ) : null}
       {layer === 'rate' && rateLimit != null ? (
         <>
           <Ramp left={palette.decrease} mid={palette.divergingMid} right={palette.increase} />
           <p className="discovery-muted">
-            Symmetric limits ±{formatStat(rateLimit)} {variableUnit} per decade. The limit is the 98th percentile of
-            absolute values over finite cells, including cells that are not significant. Not-significant finite cells
-            are drawn at {Math.round(NOT_SIGNIFICANT_OPACITY * 100)}% opacity.
+            {s.rateNote(formatStat(rateLimit), variableUnit, String(Math.round(NOT_SIGNIFICANT_OPACITY * 100)))}
           </p>
         </>
       ) : null}
       {layer === 'std' ? (
         <>
           <Ramp left={palette.decrease} mid={palette.divergingMid} right={palette.increase} />
-          <p className="discovery-muted">Colour scale fixed at ±2 standard deviations per decade.</p>
+          <p className="discovery-muted">{s.stdNote}</p>
         </>
       ) : null}
       {layer === 'significance' ? (
         <>
           <ThresholdRamp low={palette.sequentialHigh} high={palette.sequentialLow} threshold={qThreshold} />
-          <p className="discovery-muted">
-            Left is q = 0 (stronger evidence). Right is q = 1. The marker is the index threshold q = {qThreshold}.
-          </p>
+          <p className="discovery-muted">{s.significanceNote(String(qThreshold))}</p>
         </>
       ) : null}
       {layer === 'coverage' ? (
         <>
           <ThresholdRamp low={palette.sequentialLow} high={palette.sequentialHigh} threshold={null} />
-          <p className="discovery-muted">Left is 0. Right is 1.</p>
+          <p className="discovery-muted">{s.coverageNote}</p>
         </>
       ) : null}
       {layer === 'pattern' ? (
         <ul>
-          <Swatch colour={palette.warmingDrying} text={patternWords(PATTERN_WARMING_DRYING, temperatureLabel, moistureLabel)} />
-          <Swatch colour={palette.warmingWetting} text={patternWords(PATTERN_WARMING_WETTING, temperatureLabel, moistureLabel)} />
-          <Swatch colour={palette.coolingDrying} text={patternWords(PATTERN_COOLING_DRYING, temperatureLabel, moistureLabel)} />
-          <Swatch colour={palette.coolingWetting} text={patternWords(PATTERN_COOLING_WETTING, temperatureLabel, moistureLabel)} />
-          <Swatch colour={[palette.mixed[0], palette.mixed[1], palette.mixed[2], 130]} text={patternWords(PATTERN_MIXED, temperatureLabel, moistureLabel)} />
-          <Swatch hatch={palette} text={patternWords(INSUFFICIENT_DATA, temperatureLabel, moistureLabel)} />
-          <Swatch text="Outside domain (transparent)" />
+          <Swatch colour={palette.warmingDrying} text={patternWords(PATTERN_WARMING_DRYING, temperatureLabel, moistureLabel, s)} />
+          <Swatch colour={palette.warmingWetting} text={patternWords(PATTERN_WARMING_WETTING, temperatureLabel, moistureLabel, s)} />
+          <Swatch colour={palette.coolingDrying} text={patternWords(PATTERN_COOLING_DRYING, temperatureLabel, moistureLabel, s)} />
+          <Swatch colour={palette.coolingWetting} text={patternWords(PATTERN_COOLING_WETTING, temperatureLabel, moistureLabel, s)} />
+          <Swatch colour={[palette.mixed[0], palette.mixed[1], palette.mixed[2], 130]} text={patternWords(PATTERN_MIXED, temperatureLabel, moistureLabel, s)} />
+          <Swatch hatch={palette} text={patternWords(INSUFFICIENT_DATA, temperatureLabel, moistureLabel, s)} />
+          <Swatch text={s.outsideTransparent} />
         </ul>
       ) : null}
       {layer === 'quality' ? (
         <ul>
-          <QualitySwatch text="Sudden shift: could be a real climate jump or a data artefact" />
+          <QualitySwatch text={s.qualityShift} />
           <li>
             <span className="discovery-swatch discovery-quality-swatch discovery-quality-swatch-known" />
-            <span>Sudden shift during a documented GLDAS input change (2008–2012): possible data discontinuity</span>
+            <span>{s.qualityKnown}</span>
           </li>
           <li>
             <span className="discovery-swatch" />
-            <span>No sudden shift detected</span>
+            <span>{s.qualityNone}</span>
           </li>
         </ul>
       ) : null}
       {layer === 'witness' ? (
         <ul>
-          <Swatch colour={witnessColour(WITNESS_CORROBORATED)} text={witnessWords(WITNESS_CORROBORATED)} />
-          <Swatch colour={witnessColour(WITNESS_SAME_SIGN)} text={witnessWords(WITNESS_SAME_SIGN)} />
-          <Swatch colour={witnessColour(WITNESS_OPPOSITE_SIGN)} text={witnessWords(WITNESS_OPPOSITE_SIGN)} />
-          <Swatch colour={witnessColour(WITNESS_CONTRADICTED)} text={witnessWords(WITNESS_CONTRADICTED)} />
-          <Swatch colour={witnessColour(WITNESS_MAIN_NOT_SIGNIFICANT)} text={witnessWords(WITNESS_MAIN_NOT_SIGNIFICANT)} />
-          <Swatch hatch={palette} text={witnessWords(INSUFFICIENT_DATA)} />
-          <Swatch text="Outside domain (transparent)" />
+          <Swatch colour={witnessColour(WITNESS_CORROBORATED)} text={witnessWords(WITNESS_CORROBORATED, lang)} />
+          <Swatch colour={witnessColour(WITNESS_SAME_SIGN)} text={witnessWords(WITNESS_SAME_SIGN, lang)} />
+          <Swatch colour={witnessColour(WITNESS_OPPOSITE_SIGN)} text={witnessWords(WITNESS_OPPOSITE_SIGN, lang)} />
+          <Swatch colour={witnessColour(WITNESS_CONTRADICTED)} text={witnessWords(WITNESS_CONTRADICTED, lang)} />
+          <Swatch colour={witnessColour(WITNESS_MAIN_NOT_SIGNIFICANT)} text={witnessWords(WITNESS_MAIN_NOT_SIGNIFICANT, lang)} />
+          <Swatch hatch={palette} text={witnessWords(INSUFFICIENT_DATA, lang)} />
+          <Swatch text={s.outsideTransparent} />
         </ul>
       ) : null}
-      <p>FDR-adjusted q {'<'} 0.05</p>
-      <p>not significant ≠ no change</p>
+      <p>{s.footerThreshold}</p>
+      <p>{s.footerNotSignificant}</p>
     </section>
   )
 }
@@ -1032,9 +1031,13 @@ function CellPanel({
   onClose: () => void
   onInspect: () => void
 }) {
+  const { lang } = useLang()
+  const s = useStrings(DISCOVERY_STRINGS)
   const values = grids ? readCell(grids, cell) : null
   const monthCount = windowMeta ? monthsInWindow(months, windowMeta.start, windowMeta.end) : null
-  const unit = formatUnit(variable.display_unit)
+  // lib/format needs a `lang` argument here once it is bilingual: formatUnit, plainVerdict, VERDICT_LABELS.
+  const unit = formatUnitIn(variable.display_unit, lang)
+  const increaseMeans = increaseMeansLabel(variable.increase_means, lang)
   const verdict = values
     ? plainVerdict({
         trendClass: values.trend,
@@ -1042,7 +1045,7 @@ function CellPanel({
         witnessCode: values.witness,
         increaseMeans: variable.increase_means,
         slope: values.slope,
-      })
+      }, lang)
     : null
   const stampTone: 'strong' | 'caution' | 'not-yet' | 'none' = !verdict
     ? 'none'
@@ -1050,10 +1053,10 @@ function CellPanel({
       ? 'caution'
       : verdict.tone === 'accent'
         ? 'strong'
-        : verdict.label === VERDICT_LABELS.notYet
+        : verdictKindOfLabel(verdict.label) === 'notYet'
           ? 'not-yet'
           : 'none'
-  const notSignificant = values ? notSignificantSentence(values, unit) : null
+  const notSignificant = values ? notSignificantSentence(values, unit, s) : null
   const mapClass = values ? verdictClass(values.trend, values.quality, values.witness) : null
   const evaluated = values != null && values.trend !== INSUFFICIENT_DATA && values.trend !== OUTSIDE_DOMAIN
   const significant = values != null && (values.trend === TREND_INCREASE || values.trend === TREND_DECREASE)
@@ -1066,20 +1069,18 @@ function CellPanel({
         : values.trend === TREND_DECREASE
           ? 'decrease'
           : 'default'
-  const glitch = values ? glitchAnswer(values.quality, values.breakYear) : null
-  const second = values ? witnessAnswer(values.witness) : null
+  const glitch = values ? glitchAnswer(values.quality, values.breakYear, s) : null
+  const second = values ? witnessAnswer(values.witness, s) : null
   return (
-    <aside className="discovery-cell" aria-label="Selected cell">
+    <aside className="discovery-cell" aria-label={s.cellAria}>
       <div className="discovery-cell-head">
         <div>
           <h2 className="discovery-cell-title">
-            {formatLatitude(rowToLat(cell.row))}, {formatLongitude(colToLon(cell.col))}
+            {formatLatitude(rowToLat(cell.row), s)}, {formatLongitude(colToLon(cell.col), s)}
           </h2>
-          <p className="discovery-muted">
-            1° grid cell centre · row {cell.row}, column {cell.col}
-          </p>
+          <p className="discovery-muted">{s.cellCentre(String(cell.row), String(cell.col))}</p>
         </div>
-        <button type="button" className="discovery-cell-close" onClick={onClose} aria-label="Close cell panel">
+        <button type="button" className="discovery-cell-close" onClick={onClose} aria-label={s.closeCellAria}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
             <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
           </svg>
@@ -1092,92 +1093,88 @@ function CellPanel({
           {notSignificant ? <p className="discovery-verdict-note">{notSignificant}</p> : null}
         </div>
       ) : (
-        <p className="discovery-muted">{loadState === 'error' ? 'Unavailable' : 'Loading…'}</p>
+        <p className="discovery-muted">{loadState === 'error' ? s.unavailable : s.loading}</p>
       )}
 
       {values && evaluated ? (
         <Exhibit
-          label="Exhibit A · Rate of change"
+          label={s.exhibitA}
           value={formatStat(values.slope)}
-          unit={`${unit} per decade`}
+          unit={s.perDecadeUnit(unit)}
           tone={exhibitTone}
         >
           <p>
-            {trendWords(values.trend, variable.increase_means)}
+            {trendWords(values.trend, increaseMeans, s)}
             {Number.isFinite(values.q) ? `. q = ${formatStat(values.q)}` : ''}
-            {Number.isFinite(values.q)
-              ? values.q < qThreshold
-                ? ' (below the FDR threshold).'
-                : ' (not below the FDR threshold).'
-              : '.'}
+            {Number.isFinite(values.q) ? (values.q < qThreshold ? s.belowThreshold : s.notBelowThreshold) : '.'}
           </p>
         </Exhibit>
       ) : null}
 
       {values && evaluated ? (
-        <ul className="discovery-cross" aria-label="Cross-examination">
+        <ul className="discovery-cross" aria-label={s.crossAria}>
           <li>
-            <span className="label-caps">1 Is it significant?</span>
-            <strong>{!evaluated ? 'Not enough data' : significant ? 'Yes' : 'Not yet'}</strong>
+            <span className="label-caps">{s.crossQ1}</span>
+            <strong>{!evaluated ? s.notEnoughData : significant ? s.yes : s.notYet}</strong>
           </li>
           <li className={glitch?.warn ? 'is-warn' : undefined}>
-            <span className="label-caps">2 Could it be a data glitch?</span>
+            <span className="label-caps">{s.crossQ2}</span>
             <strong>{glitch?.text}</strong>
           </li>
           <li className={second?.warn ? 'is-warn' : undefined}>
-            <span className="label-caps">3 Second dataset agree?</span>
+            <span className="label-caps">{s.crossQ3}</span>
             <strong>{second?.text}</strong>
           </li>
         </ul>
       ) : null}
 
-      {mapClass != null ? <p className="discovery-muted">On the Verdict map: {verdictClassWords(mapClass)}.</p> : null}
+      {mapClass != null ? <p className="discovery-muted">{s.onVerdictMap(verdictClassWords(mapClass, lang))}</p> : null}
 
       <button type="button" className="discovery-primary discovery-open" onClick={onInspect}>
-        Open the evidence
+        {s.openTheEvidence}
       </button>
 
-      <Disclosure summary="Full cell details">
+      <Disclosure summary={s.fullDetails}>
         <dl className="discovery-facts">
-          <dt>Trend class</dt>
-          <dd>{values ? trendWords(values.trend, variable.increase_means) : loadState === 'error' ? 'Unavailable' : 'Loading…'}</dd>
+          <dt>{s.dtTrendClass}</dt>
+          <dd>{values ? trendWords(values.trend, increaseMeans, s) : loadState === 'error' ? s.unavailable : s.loading}</dd>
           <dt>p</dt>
           <dd>{values ? formatStat(values.p) : '—'}</dd>
           <dt>q</dt>
           <dd>{values ? formatStat(values.q) : '—'}</dd>
           <dt>τ</dt>
           <dd>{values ? formatStat(values.tau) : '—'}</dd>
-          <dt>Valid months</dt>
+          <dt>{s.dtValidMonths}</dt>
           <dd>
             {values ? formatCount(values.nValid) : '—'}
-            {monthCount != null ? ` of ${monthCount}` : ''}
+            {monthCount != null ? s.ofMonths(String(monthCount)) : ''}
           </dd>
-          <dt>Coverage</dt>
+          <dt>{s.dtCoverage}</dt>
           <dd>{values ? formatStat(values.coverage) : '—'}</dd>
-          <dt>Product</dt>
+          <dt>{s.dtProduct}</dt>
           <dd>{variable.product}</dd>
-          <dt>Source variable</dt>
+          <dt>{s.dtSourceVariable}</dt>
           <dd>{variable.source_variable}</dd>
           {values ? (
             <>
-              <dt>Pattern class</dt>
-              <dd>{patternWords(values.pattern, temperatureLabel, moistureLabel)}</dd>
+              <dt>{s.dtPatternClass}</dt>
+              <dd>{patternWords(values.pattern, temperatureLabel, moistureLabel, s)}</dd>
             </>
           ) : null}
           {values && values.quality != null ? (
             <>
-              <dt>Data quality</dt>
-              <dd>{qualityNote(values.quality, values.breakYear, variable.product)}</dd>
+              <dt>{s.dtDataQuality}</dt>
+              <dd>{qualityNote(values.quality, values.breakYear, variable.product, s)}</dd>
             </>
           ) : null}
           {values && values.witness != null ? (
             <>
-              <dt>Second witness</dt>
-              <dd>{witnessLine(values.witness, values.witnessStd, witnessLabel)}</dd>
-              {combinedQualityWitness(values.quality, values.witness, witnessLabel) ? (
+              <dt>{s.dtSecondWitness}</dt>
+              <dd>{witnessLine(values.witness, values.witnessStd, witnessLabel, s, lang)}</dd>
+              {combinedQualityWitness(values.quality, values.witness, witnessLabel, lang) ? (
                 <>
-                  <dt>Combined reading</dt>
-                  <dd>{combinedQualityWitness(values.quality, values.witness, witnessLabel)}</dd>
+                  <dt>{s.dtCombined}</dt>
+                  <dd>{combinedQualityWitness(values.quality, values.witness, witnessLabel, lang)}</dd>
                 </>
               ) : null}
             </>
@@ -1188,24 +1185,28 @@ function CellPanel({
   )
 }
 
-function glitchAnswer(quality: number | null, breakYear: number | null): { text: string; warn: boolean } {
-  if (quality == null) return { text: 'Not checked for this variable', warn: false }
+function glitchAnswer(
+  quality: number | null,
+  breakYear: number | null,
+  s: DiscoveryText,
+): { text: string; warn: boolean } {
+  if (quality == null) return { text: s.glitchNotChecked, warn: false }
   if (quality >= QUALITY_STEP) {
-    const year = breakYear != null && Number.isFinite(breakYear) ? ` around ${Math.round(breakYear)}` : ''
-    return { text: `Possibly: sudden shift${year}`, warn: true }
+    const year = breakYear != null && Number.isFinite(breakYear) ? s.aroundYear(String(Math.round(breakYear))) : ''
+    return { text: s.glitchPossibly(year), warn: true }
   }
-  if (quality === INSUFFICIENT_DATA || quality === OUTSIDE_DOMAIN) return { text: 'Not evaluated', warn: false }
-  return { text: 'No sudden shift detected', warn: false }
+  if (quality === INSUFFICIENT_DATA || quality === OUTSIDE_DOMAIN) return { text: s.notEvaluated, warn: false }
+  return { text: s.qualityNone, warn: false }
 }
 
-function witnessAnswer(code: number | null): { text: string; warn: boolean } {
-  if (code == null) return { text: 'No second dataset for this variable', warn: false }
-  if (code === WITNESS_CORROBORATED) return { text: 'Yes, it agrees', warn: false }
-  if (code === WITNESS_SAME_SIGN) return { text: 'On direction only', warn: false }
-  if (code === WITNESS_OPPOSITE_SIGN) return { text: 'Opposite direction, not significant', warn: true }
-  if (code === WITNESS_CONTRADICTED) return { text: 'No, it disagrees', warn: true }
-  if (code === WITNESS_MAIN_NOT_SIGNIFICANT) return { text: 'Not tested: main trend not significant', warn: false }
-  return { text: 'Not evaluated', warn: false }
+function witnessAnswer(code: number | null, s: DiscoveryText): { text: string; warn: boolean } {
+  if (code == null) return { text: s.answerNoSecond, warn: false }
+  if (code === WITNESS_CORROBORATED) return { text: s.answerYesAgrees, warn: false }
+  if (code === WITNESS_SAME_SIGN) return { text: s.answerDirectionOnly, warn: false }
+  if (code === WITNESS_OPPOSITE_SIGN) return { text: s.answerOppositeNotSignificant, warn: true }
+  if (code === WITNESS_CONTRADICTED) return { text: s.answerNoDisagrees, warn: true }
+  if (code === WITNESS_MAIN_NOT_SIGNIFICANT) return { text: s.answerNotTested, warn: false }
+  return { text: s.notEvaluated, warn: false }
 }
 
 function InfoPanel({
@@ -1221,34 +1222,33 @@ function InfoPanel({
   moistureLabel: string
   patternLayer: boolean
 }) {
+  const s = useStrings(DISCOVERY_STRINGS)
+  const { lang } = useLang()
   return (
     <section className="discovery-card">
-      <h2>Dataset</h2>
+      <h2>{s.datasetTitle}</h2>
       <dl className="discovery-facts">
-        <dt>Dataset</dt>
+        <dt>{s.dtDataset}</dt>
         <dd>{variable.product}</dd>
-        <dt>Product version</dt>
+        <dt>{s.dtProductVersion}</dt>
         <dd>{variable.product_version}</dd>
-        <dt>DOI</dt>
+        <dt>{s.dtDoi}</dt>
         <dd>
           {variable.doi ? (
             <a href={doiHref(variable.doi)} target="_blank" rel="noreferrer">
               {variable.doi}
             </a>
           ) : (
-            'None listed'
+            s.noneListed
           )}
         </dd>
       </dl>
-      <Disclosure summary="Technical details">
-        <p>{METHOD_ONE_LINER}</p>
-        <p>{COVERAGE_NOTE}</p>
-        <p>
-          Registry slope unit: {formatUnit(variable.slope_unit)}. The rate layer is labelled{' '}
-          {formatUnit(variable.display_unit)} per decade.
-        </p>
+      <Disclosure summary={s.technicalDetails}>
+        <p>{s.methodOneLiner}</p>
+        <p>{s.coverageRule}</p>
+        <p>{s.registryUnit(formatUnitIn(variable.slope_unit, lang), formatUnitIn(variable.display_unit, lang))}</p>
       </Disclosure>
-      <h3>Caveats</h3>
+      <h3>{s.caveats}</h3>
       {variable.caveats.length > 0 ? (
         <ul>
           {variable.caveats.map((caveat) => (
@@ -1256,25 +1256,17 @@ function InfoPanel({
           ))}
         </ul>
       ) : (
-        <p>No caveats are listed for this variable.</p>
+        <p>{s.noCaveats}</p>
       )}
-      {patternLayer ? (
-        <p>
-          The pattern layer follows {temperatureLabel} and {moistureLabel} for this window. It does not follow the
-          variable selected in the header.
-        </p>
-      ) : null}
-      <p>
-        Coastlines, country borders and graticule come from Natural Earth 50m, bundled offline with the app. The globe
-        uses the full 90° to −90° grid; the flat map uses Web Mercator and therefore clips beyond about ±85°.
-      </p>
+      {patternLayer ? <p>{s.patternLayerNote(temperatureLabel, moistureLabel)}</p> : null}
+      <p>{s.basemapSources}</p>
       <p className="discovery-muted">
-        Basemap: Natural Earth (offline).{' '}
+        {s.basemapLabel}{' '}
         {basemapState === 'ready'
-          ? 'Land and border data loaded locally.'
+          ? s.basemapReady
           : basemapState === 'error'
-            ? 'The local basemap failed to load.'
-            : 'Loading the local basemap.'}
+            ? s.basemapError
+            : s.basemapLoading}
       </p>
     </section>
   )
@@ -1432,30 +1424,36 @@ function readCell(grids: GridBundle, cell: CellPick) {
   }
 }
 
-function notSignificantSentence(values: ReturnType<typeof readCell>, unit: string): string | null {
+function notSignificantSentence(values: ReturnType<typeof readCell>, unit: string, s: DiscoveryText): string | null {
   if (values.trend !== TREND_NOT_SIGNIFICANT) return null
   if (!Number.isFinite(values.slope) || values.slope === 0) return null
-  const direction = values.slope > 0 ? 'rise' : 'fall'
-  const q = Number.isFinite(values.q) ? ` (q = ${formatStat(values.q)})` : ''
-  return `A ${direction} of about ${formatStat(Math.abs(values.slope))} ${unit} per decade, not significant yet${q}. A longer record could change this.`
+  const direction = values.slope > 0 ? s.rise : s.fall
+  const q = Number.isFinite(values.q) ? s.qSuffix(formatStat(values.q)) : ''
+  return s.notSignificantSentence(direction, formatStat(Math.abs(values.slope)), unit, q)
 }
 
-function witnessLine(code: number, standardizedChange: number | null, label: string): string {
+function witnessLine(
+  code: number,
+  standardizedChange: number | null,
+  label: string,
+  s: DiscoveryText,
+  lang: Lang,
+): string {
   const change =
     standardizedChange != null && Number.isFinite(standardizedChange)
-      ? `, standardized change ${formatStat(standardizedChange)}/decade`
+      ? s.witnessChange(formatStat(standardizedChange))
       : ''
   const result =
     code === WITNESS_CORROBORATED
-      ? 'agrees'
+      ? s.witnessAgrees
       : code === WITNESS_CONTRADICTED
-        ? 'disagrees'
+        ? s.witnessDisagrees
         : code === WITNESS_SAME_SIGN
-          ? 'same direction, not significant'
+          ? s.witnessSameSign
           : code === WITNESS_OPPOSITE_SIGN
-            ? 'opposite direction, not significant'
-            : witnessWords(code).toLowerCase()
-  return `Second witness (${label}): ${result}${change}`
+            ? s.witnessOppositeSign
+            : witnessWords(code, lang).toLowerCase()
+  return s.witnessLine(label, result, change)
 }
 
 function hoverDetail(
@@ -1463,80 +1461,80 @@ function hoverDetail(
   grids: GridBundle,
   index: number,
   variable: DataIndex['variables'][number],
+  lang: Lang,
 ): string {
-  const unit = formatUnit(variable.display_unit)
+  const s = pick(DISCOVERY_STRINGS, lang)
+  // formatUnit needs a `lang` argument here once lib/format is bilingual.
+  const unit = formatUnitIn(variable.display_unit, lang)
+  const increaseMeans = increaseMeansLabel(variable.increase_means, lang)
+  const withSlope = (words: string) => `${words} · ${formatStat(grids.slope[index])} ${unit}${s.perDecadeShort}`
   if (layer === 'verdict') {
     const code = verdictClass(
       grids.trend[index],
       grids.quality ? grids.quality[index] : null,
       grids.witness ? grids.witness[index] : null,
     )
-    return `${verdictClassWords(code)} · ${formatStat(grids.slope[index])} ${unit}/decade`
+    return withSlope(verdictClassWords(code, lang))
   }
-  if (layer === 'trend') return `${trendWords(grids.trend[index], variable.increase_means)} · ${formatStat(grids.slope[index])} ${unit}/decade`
+  if (layer === 'trend') return withSlope(trendWords(grids.trend[index], increaseMeans, s))
   if (layer === 'pattern') {
-    return `${patternWords(grids.pattern[index], 'Temperature', 'Moisture')} · ${formatStat(grids.slope[index])} ${unit}/decade`
+    return withSlope(patternWords(grids.pattern[index], s.temperatureWord, s.moistureWord, s))
   }
-  if (layer === 'quality') return `${qualityWords(grids.quality ? grids.quality[index] : null)} · ${formatStat(grids.slope[index])} ${unit}/decade`
+  if (layer === 'quality') return withSlope(qualityWords(grids.quality ? grids.quality[index] : null, s))
   if (layer === 'witness') {
     const std = grids.witnessStd ? grids.witnessStd[index] : Number.NaN
-    return `${witnessWords(grids.witness ? grids.witness[index] : OUTSIDE_DOMAIN)} · ${formatStat(std)}/decade`
+    return `${witnessWords(grids.witness ? grids.witness[index] : OUTSIDE_DOMAIN, lang)} · ${formatStat(std)}${s.perDecadeShort}`
   }
-  if (layer === 'rate') return `Sen slope ${formatStat(grids.slope[index])} ${unit}/decade`
-  if (layer === 'std') return `Standardized change ${formatStat(grids.stdChange[index])} per decade`
-  if (layer === 'significance') return `q ${formatStat(grids.qValue[index])}`
-  return `Coverage ${formatStat(grids.coverage[index])}`
+  if (layer === 'rate') return s.hoverRate(formatStat(grids.slope[index]), unit)
+  if (layer === 'std') return s.hoverStd(formatStat(grids.stdChange[index]))
+  if (layer === 'significance') return s.hoverQ(formatStat(grids.qValue[index]))
+  return s.hoverCoverage(formatStat(grids.coverage[index]))
 }
 
-function qualityWords(code: number | null): string {
-  if (code === QUALITY_STEP) return 'Sudden shift: could be a real climate jump or a data artefact'
-  if (code === QUALITY_STEP_KNOWN_FORCING) {
-    return 'Sudden shift during a documented GLDAS input change (2008–2012): possible data discontinuity'
-  }
-  if (code === INSUFFICIENT_DATA) return 'Data quality not evaluated'
-  if (code === OUTSIDE_DOMAIN) return 'Outside domain'
-  return 'No sudden shift detected'
+function qualityWords(code: number | null, s: DiscoveryText): string {
+  if (code === QUALITY_STEP) return s.qualityShift
+  if (code === QUALITY_STEP_KNOWN_FORCING) return s.qualityKnown
+  if (code === INSUFFICIENT_DATA) return s.qualityNotEvaluated
+  if (code === OUTSIDE_DOMAIN) return s.outsideDomain
+  return s.qualityNone
 }
 
-function documentedInputChange(product: string): string {
-  const family = product.startsWith('GLDAS') ? 'GLDAS' : product
-  return `documented ${family} input change (2008–2012)`
-}
-
-function qualityNote(code: number, breakYear: number | null, product: string): string {
+function qualityNote(code: number, breakYear: number | null, product: string, s: DiscoveryText): string {
   const year = breakYear != null && Number.isFinite(breakYear) ? Math.round(breakYear) : null
   if (code === QUALITY_STEP_KNOWN_FORCING) {
-    return `Sudden shift during a ${documentedInputChange(product)}: possible data discontinuity. Read the trend with caution.`
+    const family = product.startsWith('GLDAS') ? 'GLDAS' : product
+    return s.qualityKnownNote(family)
   }
   if (code === QUALITY_STEP) {
-    const around = year == null ? '' : ` around ${year}`
-    return `Sudden shift${around}: this could be a real jump in the climate or a data artefact. The trend is still significant; a step fits slightly better than a straight line.`
+    const around = year == null ? '' : s.aroundYear(String(year))
+    return s.qualityStepNote(around)
   }
-  return qualityWords(code)
+  return qualityWords(code, s)
 }
 
-function trendWords(code: number, increaseMeans: string): string {
-  if (code === TREND_INCREASE) return `Significant increase (${increaseMeans})`
-  if (code === TREND_DECREASE) return 'Significant decrease'
-  if (code === TREND_NOT_SIGNIFICANT) return 'Not significant'
-  if (code === INSUFFICIENT_DATA) return 'Insufficient data'
-  if (code === OUTSIDE_DOMAIN) return 'Outside domain'
-  return `Unknown class (${code})`
+function trendWords(code: number, increaseMeans: string, s: DiscoveryText): string {
+  if (code === TREND_INCREASE) return s.significantIncrease(increaseMeans)
+  if (code === TREND_DECREASE) return s.significantDecrease
+  if (code === TREND_NOT_SIGNIFICANT) return s.notSignificant
+  if (code === INSUFFICIENT_DATA) return s.insufficientData
+  if (code === OUTSIDE_DOMAIN) return s.outsideDomain
+  return s.trendUnknown(String(code))
 }
 
-function patternWords(code: number, temperature: string, moisture: string): string {
-  if (code === PATTERN_WARMING_DRYING) return `${temperature} increase, ${moisture} decrease`
-  if (code === PATTERN_WARMING_WETTING) return `${temperature} increase, ${moisture} increase`
-  if (code === PATTERN_COOLING_DRYING) return `${temperature} decrease, ${moisture} decrease`
-  if (code === PATTERN_COOLING_WETTING) return `${temperature} decrease, ${moisture} increase`
-  if (code === PATTERN_MIXED) return 'Mixed or inconclusive'
-  if (code === INSUFFICIENT_DATA) return 'Insufficient data'
-  if (code === OUTSIDE_DOMAIN) return 'Outside domain'
-  return `Unknown pattern (${code})`
+function patternWords(code: number, temperature: string, moisture: string, s: DiscoveryText): string {
+  if (code === PATTERN_WARMING_DRYING) return s.patternIncDec(temperature, moisture)
+  if (code === PATTERN_WARMING_WETTING) return s.patternIncInc(temperature, moisture)
+  if (code === PATTERN_COOLING_DRYING) return s.patternDecDec(temperature, moisture)
+  if (code === PATTERN_COOLING_WETTING) return s.patternDecInc(temperature, moisture)
+  if (code === PATTERN_MIXED) return s.patternMixed
+  if (code === INSUFFICIENT_DATA) return s.insufficientData
+  if (code === OUTSIDE_DOMAIN) return s.outsideDomain
+  return s.patternUnknown(String(code))
 }
 
-function variableLabel(index: DataIndex, id: string): string {
-  return index.variables.find((item) => item.id === id)?.label ?? id
+function variableName(index: DataIndex, id: string, lang: Lang): string {
+  const found = index.variables.find((item) => item.id === id)
+  return found ? translateVariableLabel(found, lang) : id
 }
 
 function monthsInWindow(months: string[], start: string, end: string): number {
@@ -1555,13 +1553,13 @@ function formatCount(value: number): string {
   return String(Math.round(value))
 }
 
-function formatLatitude(value: number): string {
-  const hemisphere = value > 0 ? 'N' : value < 0 ? 'S' : ''
+function formatLatitude(value: number, s: DiscoveryText): string {
+  const hemisphere = value > 0 ? s.hemiNorth : value < 0 ? s.hemiSouth : ''
   return `${Math.abs(value).toFixed(1)}°${hemisphere}`
 }
 
-function formatLongitude(value: number): string {
-  const hemisphere = value > 0 ? 'E' : value < 0 ? 'W' : ''
+function formatLongitude(value: number, s: DiscoveryText): string {
+  const hemisphere = value > 0 ? s.hemiEast : value < 0 ? s.hemiWest : ''
   return `${Math.abs(value).toFixed(1)}°${hemisphere}`
 }
 
