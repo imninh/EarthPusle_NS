@@ -640,6 +640,11 @@
   .discovery-layer .ui-help {
     position: static;
   }
+  /* The enlarged touch target would now be positioned against the whole
+     layer list and block its buttons; desktop does not need it here. */
+  .discovery-layer .ui-help::after {
+    content: none;
+  }
   .discovery-layer .ui-help-panel {
     left: 0;
     right: 0;
