@@ -14,7 +14,22 @@
 /* ---------- Night hero ---------- */
 
 .home-hero {
-  background: var(--night);
+  background-color: var(--night);
+  /* Starfield: small white dots, pure CSS, tiled at different sizes so the
+     pattern does not repeat visibly. Faint enough to keep text contrast. */
+  background-image:
+    radial-gradient(2px 2px at 12% 18%, rgb(255 255 255 / 85%), transparent 60%),
+    radial-gradient(1.7px 1.7px at 37% 72%, rgb(255 255 255 / 90%), transparent 60%),
+    radial-gradient(2.4px 2.4px at 63% 28%, rgb(255 255 255 / 90%), transparent 60%),
+    radial-gradient(1.7px 1.7px at 81% 61%, rgb(255 255 255 / 85%), transparent 60%),
+    radial-gradient(1.7px 1.7px at 92% 12%, rgb(255 255 255 / 75%), transparent 60%),
+    radial-gradient(2px 2px at 24% 88%, rgb(255 255 255 / 90%), transparent 60%),
+    radial-gradient(1.7px 1.7px at 50% 45%, rgb(255 255 255 / 75%), transparent 60%),
+    radial-gradient(1.7px 1.7px at 8% 52%, rgb(255 255 255 / 80%), transparent 60%),
+    radial-gradient(2.2px 2.2px at 71% 92%, rgb(255 255 255 / 80%), transparent 60%),
+    radial-gradient(1.7px 1.7px at 44% 8%, rgb(255 255 255 / 85%), transparent 60%);
+  background-size: 230px 230px, 310px 310px, 410px 410px, 170px 170px, 520px 520px,
+    270px 270px, 190px 190px, 360px 360px, 450px 450px, 290px 290px;
   color: var(--on-night);
   padding: var(--space-7) 24px calc(var(--space-8) + 28px);
 }
