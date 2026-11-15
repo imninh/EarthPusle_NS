@@ -189,8 +189,9 @@ export function nightBasemapColours(dark: boolean): BasemapColours {
   return {
     ocean: dark ? '#070f1d' : '#0b1b33',
     land: dark ? '#14243b' : '#1a3153',
-    coastline: '#5a77a3',
-    border: '#3a5480',
+    // Light lines so coastlines and borders stay readable on top of the data colours.
+    coastline: 'rgba(234,241,251,0.75)',
+    border: 'rgba(234,241,251,0.6)',
     graticule: 'rgba(234,241,251,0.10)',
   }
 }

@@ -1,7 +1,8 @@
 import { useApp } from '../data/AppState'
 import { sourceLabel } from '../lib/format'
 import { defineStrings, useLang, useStrings } from '../i18n'
-import { variableLabel } from '../i18n/terms'
+import { variableDescription, variableLabel } from '../i18n/terms'
+import { categoryLabel, sourceTypeLabel } from '../pages/Region/strings.place'
 
 export const STRINGS = defineStrings(
   { variable: 'Variable', period: 'Period', to: 'to' },
@@ -27,12 +28,12 @@ export function VariableSelect() {
         aria-describedby="variable-description"
       >
         {categories.map((cat) => (
-          <optgroup key={cat} label={cat}>
+          <optgroup key={cat} label={categoryLabel(cat, lang)}>
             {index.variables
               .filter((v) => v.category === cat)
               .map((v) => (
-                <option key={v.id} value={v.id} title={v.description}>
-                  {variableLabel(v, lang)} ({sourceLabel(v.source_type)})
+                <option key={v.id} value={v.id} title={variableDescription(v, lang)}>
+                  {variableLabel(v, lang)} ({sourceTypeLabel(sourceLabel(v.source_type), lang)})
                 </option>
               ))}
           </optgroup>
@@ -40,7 +41,7 @@ export function VariableSelect() {
       </select>
       {variable?.description ? (
         <span className="control-note" id="variable-description">
-          {variable.description}
+          {variableDescription(variable, lang)}
         </span>
       ) : null}
     </div>

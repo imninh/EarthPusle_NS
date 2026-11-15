@@ -6,6 +6,7 @@ import {
   GeoJSONSource,
   ImageSource,
   Map as MapLibreMap,
+  Marker,
   NavigationControl,
   type MapMouseEvent,
   setWorkerUrl,
@@ -83,6 +84,7 @@ import {
   loadNaturalEarth,
   type BasemapData,
 } from '../../maps/basemap'
+import { countryLabels } from '../../components/globe/globeLabels'
 import {
   VERDICT_MARKER,
   VERDICT_NOT_YET,
@@ -536,6 +538,39 @@ export default function DiscoveryPage() {
     if (!map || !map.isStyleLoaded()) return
     applyNightBasemapTheme(map, dark)
   }, [dark])
+
+  // Country names as HTML markers: the offline style has no glyph server, so
+  // MapLibre symbol layers cannot draw text. Labels on the far side of the
+  // globe are hidden by their angular distance from the map centre.
+  const labels = useMemo(
+    () => (basemapData?.countries ? countryLabels(basemapData.countries) : []),
+    [basemapData],
+  )
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || mapEpoch === 0 || labels.length === 0) return
+    const markers = labels.map((label) => {
+      const element = document.createElement('div')
+      element.className = 'discovery-country-label'
+      element.textContent = label.name
+      element.setAttribute('aria-hidden', 'true')
+      const marker = new Marker({ element, anchor: 'center' }).setLngLat([label.lon, label.lat]).addTo(map)
+      return { label, marker, element }
+    })
+    const update = () => {
+      const centre = map.getCenter()
+      for (const { label, element } of markers) {
+        const visible = projection !== 'globe' || angularDistance(centre.lng, centre.lat, label.lon, label.lat) < 72
+        element.style.visibility = visible ? 'visible' : 'hidden'
+      }
+    }
+    update()
+    map.on('move', update)
+    return () => {
+      map.off('move', update)
+      for (const { marker } of markers) marker.remove()
+    }
+  }, [labels, mapEpoch, projection])
 
   useLayoutEffect(() => {
     const map = mapRef.current
@@ -1701,6 +1736,18 @@ function ensureGrid(map: MapLibreMap) {
     layout: { visibility: 'none' },
     paint: { 'raster-resampling': 'linear', 'raster-fade-duration': 0, 'raster-opacity': 1 },
   })
+  // Keep coastlines and country borders on top of the data colours.
+  if (map.getLayer('coastline')) map.moveLayer('coastline')
+  if (map.getLayer('country-borders')) map.moveLayer('country-borders')
+}
+
+/** Great-circle distance in degrees between two lon/lat points. */
+function angularDistance(lon1: number, lat1: number, lon2: number, lat2: number): number {
+  const rad = Math.PI / 180
+  const cos =
+    Math.sin(lat1 * rad) * Math.sin(lat2 * rad) +
+    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.cos((lon2 - lon1) * rad)
+  return Math.acos(Math.max(-1, Math.min(1, cos))) / rad
 }
 
 function ensureRegions(map: MapLibreMap, regions: Region[], showRegions: boolean) {

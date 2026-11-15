@@ -631,10 +631,20 @@
   text-align: left;
 }
 
-/* The help tip sits at the left edge of the panel; keep it inside the panel. */
+/* Layer help tips span the width of the layer list, so they stay inside the
+   panel and never widen it (no horizontal scrollbar). */
 @media (min-width: 761px) {
+  .discovery-layers {
+    position: relative;
+  }
+  .discovery-layer .ui-help {
+    position: static;
+  }
   .discovery-layer .ui-help-panel {
     left: 0;
+    right: 0;
+    width: auto;
+    max-width: none;
     transform: none;
   }
 }
@@ -746,4 +756,18 @@
   .discovery-cell {
     animation: none;
   }
+}
+
+/* Country names on the map (HTML markers; the offline style has no glyphs). */
+.discovery-country-label {
+  pointer-events: none;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #ffffff;
+  text-shadow:
+    0 0 3px rgba(7, 15, 29, 0.95),
+    0 0 6px rgba(7, 15, 29, 0.8),
+    0 1px 1px rgba(7, 15, 29, 0.9);
 }
